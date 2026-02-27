@@ -112,6 +112,9 @@ type RouterConfig struct {
 	// RateLimit configures the rate limiting chain.
 	// If omitted, no rate limiting is applied.
 	RateLimit RateLimitConfig `yaml:"ratelimit,omitempty"`
+
+	// MyModel-specific extensions for HTTP proxy mode
+	MyModelExtension `yaml:",inline"`
 }
 
 // AuthzConfig configures how the router resolves per-user LLM API keys.

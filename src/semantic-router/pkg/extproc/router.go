@@ -56,8 +56,9 @@ type OpenAIRouter struct {
 	RateLimiter *ratelimit.RateLimitResolver
 }
 
-// Ensure OpenAIRouter implements the ext_proc calls
-var _ ext_proc.ExternalProcessorServer = (*OpenAIRouter)(nil)
+// OpenAIRouter implements the routing pipeline.
+// Previously implemented ext_proc.ExternalProcessorServer for Envoy;
+// now used directly by the HTTP proxy.
 
 // NewOpenAIRouter creates a new OpenAI API router instance
 func NewOpenAIRouter(configPath string) (*OpenAIRouter, error) {

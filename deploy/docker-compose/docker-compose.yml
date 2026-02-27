@@ -1,0 +1,42 @@
+# MyModel Docker Compose — Single HTTP proxy service (no Envoy)
+# Usage:
+#   docker compose -f deploy/docker-compose/docker-compose.yml up
+#
+# Build first:
+#   make docker-build-mymodel
+
+services:
+  mymodel:
+    image: ghcr.io/vllm-project/semantic-router/mymodel:latest
+    ports:
+      - "8000:8000"   # HTTP proxy (OpenAI-compatible API)
+      - "9190:9190"   # Prometheus metrics
+      - "8080:8080"   # API server (dashboard, batch classification)
+    volumes:
+      - ../../config.yaml:/app/config/config.yaml:ro
+      - model-cache:/app/models
+    environment:
+      - REGOLO_API_KEY=${REGOLO_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Jaeger for distributed tracing
+  # Uncomment to enable tracing (matches observability config in config.yaml)
+  # jaeger:
+  #   image: jaegertracing/all-in-one:1.55
+  #   ports:
+  #     - "16686:16686"  # Jaeger UI
+  #     - "4317:4317"    # OTLP gRPC
+  #   environment:
+  #     - COLLECTOR_OTLP_ENABLED=true
+
+volumes:
+  model-cache:

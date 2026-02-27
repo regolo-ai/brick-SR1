@@ -1,14 +1,5 @@
 # ======== envoy.mk ========
-# = Everything For envoy   =
+# = Envoy (removed)        =
 # ======== envoy.mk ========
-
-##@ Envoy
-
-prepare-envoy: $(FUNC_E) ## Install func-e for managing Envoy versions
-	@$(LOG_TARGET)
-	@$(FUNC_E) --version
-
-run-envoy: $(FUNC_E) ## Run Envoy proxy with the configured settings
-	@$(LOG_TARGET)
-	@echo "Starting Envoy..."
-	$(FUNC_E) run --config-path config/envoy.yaml --component-log-level "ext_proc:trace,router:trace,http:trace"
+# Envoy is no longer used — MyModel runs as a direct HTTP proxy.
+# This file is kept empty to avoid breaking the root Makefile include.

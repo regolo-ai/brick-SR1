@@ -1,0 +1,64 @@
+# ─── .dockerignore ───
+# Keep Docker build context lean — only what the multi-stage build needs.
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation & planning
+*.md
+paper/
+website/
+reference/
+docs/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node.js (CLI tools not needed in container)
+**/node_modules/
+**/dist/
+src/mymodel-cli/
+src/mymodel-cli-ts/
+
+# Python environments
+.venv/
+__pycache__/
+*.pyc
+
+# Evaluation & benchmarks (not needed at runtime)
+evals/
+bench/
+perf/
+
+# Deployment manifests (not needed inside the image)
+deploy/
+.github/
+
+# Training data & model weights (downloaded at runtime via HF)
+models/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+
+# Build artifacts
+**/target/
+bin/
+tools/bin/
+
+# Dashboard (separate image)
+dashboard/
+
+# Secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,327 @@
+# ─── Brick Configuration ─────────────────────────────────────
+# Virtual multimodal routing model that exposes a single "brick" endpoint.
+# Detects modality (text/audio/image), preprocesses, and routes to 8 models on Regolo API.
+
+# Virtual model identity — what clients see when calling /v1/models
+model:
+  name: "brick"
+  description: "Virtual multimodal routing model"
+
+# MyModel provider (for API key resolution in brick handler)
+providers:
+  regoloai:
+    type: openai-compatible
+    base_url: https://api.regolo.ai/v1
+    api_key: ${REGOLO_API_KEY}
+
+# Brick multimodal gateway configuration
+brick:
+  enabled: true
+  stt_model: "faster-whisper-large-v3"
+  stt_endpoint: "https://api.regolo.ai/v1/audio/transcriptions"
+  ocr_model: "deepseek-ocr"
+  ocr_endpoint: "https://api.regolo.ai/v1/chat/completions"
+  vision_model: "qwen3-vl-32b"
+  vision_endpoint: "https://api.regolo.ai/v1/chat/completions"
+  ocr_min_text_length: 10
+
+# Server configuration
+server_port: 8000
+
+# Auto model name — used internally when brick rewrites "brick" for the pipeline
+auto_model_name: "MoM"
+
+# ─── Backend Models ─────────────────────────────────────────
+# 8 models, all served by Regolo API via a single provider profile
+
+provider_profiles:
+  regolo:
+    type: openai
+    base_url: https://api.regolo.ai/v1
+
+vllm_endpoints:
+  - name: "regolo"
+    provider_profile: "regolo"
+    weight: 1
+
+default_model: "gpt-oss-120b"
+
+model_config:
+  Qwen3-8B:
+    preferred_endpoints: ["regolo"]
+    param_size: "8b"
+  gpt-oss-20b:
+    preferred_endpoints: ["regolo"]
+    param_size: "20b"
+  gpt-oss-120b:
+    preferred_endpoints: ["regolo"]
+    param_size: "120b"
+    reasoning_family: "qwen3"
+  deepseek-r1-70b:
+    preferred_endpoints: ["regolo"]
+    param_size: "70b"
+    reasoning_family: "deepseek"
+  qwen3-coder-next:
+    preferred_endpoints: ["regolo"]
+    param_size: "32b"
+  Llama-3.3-70B-Instruct:
+    preferred_endpoints: ["regolo"]
+    param_size: "70b"
+  mistral-small-3.2:
+    preferred_endpoints: ["regolo"]
+    param_size: "24b"
+  gemma-3-27b-it:
+    preferred_endpoints: ["regolo"]
+    param_size: "27b"
+
+# ─── Reasoning Families ──────────────────────────────────────
+reasoning_families:
+  deepseek:
+    type: "chat_template_kwargs"
+    parameter: "thinking"
+  qwen3:
+    type: "chat_template_kwargs"
+    parameter: "enable_thinking"
+
+default_reasoning_effort: "medium"
+
+# ─── Signals (Keyword Rules) ─────────────────────────────────
+keyword_rules:
+  - name: "greeting_keywords"
+    operator: "OR"
+    keywords:
+      - "ciao"
+      - "come stai"
+      - "grazie"
+      - "ok"
+      - "va bene"
+    case_sensitive: false
+
+  - name: "easy_keywords"
+    operator: "OR"
+    keywords:
+      - "quanto è"
+      - "cos'è"
+      - "chi è"
+      - "dove è"
+      - "quando è"
+      - "cosa è"
+      - "come si fa"
+      - "spiega"
+      - "racconta"
+    case_sensitive: false
+
+  - name: "creative_keywords"
+    operator: "OR"
+    keywords:
+      - "racconta"
+      - "storia"
+      - "scrivi un racconto"
+      - "narrativa"
+      - "personaggio"
+      - "trama"
+      - "creative writing"
+      - "poesia"
+      - "dialogo"
+      - "sceneggiatura"
+      - "fanta"
+    case_sensitive: false
+
+  - name: "code_keywords"
+    operator: "OR"
+    keywords:
+      - "codice"
+      - "programma"
+      - "funzione"
+      - "script"
+      - "debug"
+      - "implementa"
+      - "python"
+      - "javascript"
+      - "java"
+      - "c++"
+      - "refactor"
+      - "API"
+      - "algoritmo"
+      - "class"
+      - "metodo"
+      - "reag"
+      - "vue"
+      - "svelte"
+    case_sensitive: false
+
+  - name: "medium_keywords"
+    operator: "OR"
+    keywords:
+      - "analizza"
+      - "confronta"
+      - "valuta"
+      - "differenza tra"
+      - "spiega"
+      - "opinione"
+      - "consiglio"
+      - "aiuto"
+    case_sensitive: false
+
+  - name: "complex_keywords"
+    operator: "OR"
+    keywords:
+      - "dimostra"
+      - "prova che"
+      - "deduzione"
+      - "ragiona"
+      - "calcola"
+      - "risolvi"
+      - "derivata"
+      - "integrale"
+      - "equazione"
+      - "sistema"
+      - "dimostri"
+      - "teorema"
+      - "lemm"
+    case_sensitive: false
+
+  - name: "expert_keywords"
+    operator: "OR"
+    keywords:
+      - "dimostra"
+      - "prova che"
+      - "deduzione"
+      - "reasoning"
+      - "chain of thought"
+      - "step by step"
+      - "pensa profondamente"
+      - "teoria"
+      - "ipotesi"
+      - "congettura"
+      - "demo"
+    case_sensitive: false
+
+# ─── Categories ──────────────────────────────────────────────
+categories:
+  - name: "business"
+    description: "Business and management"
+  - name: "computer_science"
+    description: "Computer science and programming"
+  - name: "math"
+    description: "Mathematics"
+  - name: "humanities"
+    description: "Humanities and arts"
+  - name: "other"
+    description: "General knowledge"
+
+# ─── Decisions (8 routing rules) ─────────────────────────────
+strategy: "priority"
+
+decisions:
+  - name: "simple-chat"
+    description: "Query semplici"
+    priority: 100
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "keyword"
+          name: "greeting_keywords"
+        - type: "keyword"
+          name: "easy_keywords"
+    modelRefs:
+      - model: "Qwen3-8B"
+        use_reasoning: false
+
+  - name: "easy-questions"
+    description: "Domande semplici"
+    priority: 90
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "keyword"
+          name: "easy_keywords"
+        - type: "domain"
+          name: "other"
+    modelRefs:
+      - model: "Qwen3-8B"
+        use_reasoning: false
+
+  - name: "storytelling-creative"
+    description: "Creative writing"
+    priority: 85
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "humanities"
+        - type: "keyword"
+          name: "creative_keywords"
+    modelRefs:
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
+
+  - name: "coding-tasks"
+    description: "Programming"
+    priority: 80
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "computer_science"
+        - type: "keyword"
+          name: "code_keywords"
+    modelRefs:
+      - model: "qwen3-coder-next"
+        use_reasoning: false
+
+  - name: "medium-complexity"
+    description: "Query medie"
+    priority: 70
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "business"
+        - type: "keyword"
+          name: "medium_keywords"
+    modelRefs:
+      - model: "gpt-oss-20b"
+        use_reasoning: false
+
+  - name: "complex-reasoning"
+    description: "Query complesse"
+    priority: 50
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "math"
+        - type: "domain"
+          name: "computer_science"
+        - type: "keyword"
+          name: "complex_keywords"
+    modelRefs:
+      - model: "gpt-oss-120b"
+        use_reasoning: true
+
+  - name: "expert-reasoning"
+    description: "Reasoning profondo"
+    priority: 40
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "math"
+        - type: "keyword"
+          name: "expert_keywords"
+    modelRefs:
+      - model: "deepseek-r1-70b"
+        use_reasoning: true
+
+  - name: "default-fallback"
+    description: "Fallback"
+    priority: 1
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "other"
+    modelRefs:
+      - model: "gpt-oss-20b"
+        use_reasoning: false

@@ -10,14 +10,14 @@ DOCKER_TAG ?= latest
 
 # Build all Docker images
 docker-build-all: ## Build all Docker images
-docker-build-all: docker-build-extproc docker-build-llm-katan docker-build-dashboard docker-build-precommit
+docker-build-all: docker-build-mymodel docker-build-llm-katan docker-build-dashboard docker-build-precommit
 
-# Build extproc Docker image
-docker-build-extproc: ## Build extproc Docker image
-docker-build-extproc:
+# Build MyModel proxy Docker image (replaces extproc + Envoy)
+docker-build-mymodel: ## Build MyModel HTTP proxy Docker image
+docker-build-mymodel:
 	@$(LOG_TARGET)
-	@echo "Building extproc Docker image..."
-	@$(CONTAINER_RUNTIME) build -f tools/docker/Dockerfile.extproc -t $(DOCKER_REGISTRY)/extproc:$(DOCKER_TAG) .
+	@echo "Building MyModel proxy Docker image..."
+	@$(CONTAINER_RUNTIME) build --build-arg BUILDPLATFORM=linux/amd64 -t $(DOCKER_REGISTRY)/mymodel:$(DOCKER_TAG) .
 
 # Build llm-katan Docker image
 docker-build-llm-katan: ## Build llm-katan Docker image
@@ -80,16 +80,16 @@ docker-clean:
 	@echo "Docker cleanup completed"
 
 # Push Docker images (for CI/CD)
-docker-push-all: ## Build all Docker images
-docker-push-all: docker-push-extproc docker-push-llm-katan
+docker-push-all: ## Push all Docker images
+docker-push-all: docker-push-mymodel docker-push-llm-katan
 	@$(LOG_TARGET)
 	@echo "All Docker images pushed successfully"
 
-docker-push-extproc: ## Push extproc Docker image
-docker-push-extproc:
+docker-push-mymodel: ## Push MyModel Docker image
+docker-push-mymodel:
 	@$(LOG_TARGET)
-	@echo "Pushing extproc Docker image..."
-	@$(CONTAINER_RUNTIME) push $(DOCKER_REGISTRY)/extproc:$(DOCKER_TAG)
+	@echo "Pushing MyModel Docker image..."
+	@$(CONTAINER_RUNTIME) push $(DOCKER_REGISTRY)/mymodel:$(DOCKER_TAG)
 
 docker-push-llm-katan: ## Push llm-katan Docker image
 docker-push-llm-katan:

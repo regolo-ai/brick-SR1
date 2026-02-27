@@ -1,0 +1,70 @@
+{
+  "name": "mymodel",
+  "version": "0.1.0",
+  "description": "Create your personal AI model from multiple LLMs",
+  "type": "module",
+  "bin": {
+    "mymodel": "./bin/run.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "/bin",
+    "/dist",
+    "/templates",
+    "/oclif.manifest.json"
+  ],
+  "oclif": {
+    "bin": "mymodel",
+    "dirname": "mymodel",
+    "commands": "./dist/commands",
+    "topicSeparator": " ",
+    "hooks": {
+      "init": "./dist/hooks/init"
+    },
+    "topics": {
+      "add": {
+        "description": "Add a provider, route, or modality to your config"
+      },
+      "remove": {
+        "description": "Remove a provider or route from your config"
+      },
+      "config": {
+        "description": "View and validate your configuration"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node --loader ts-node/esm bin/dev.js",
+    "lint": "eslint . --ext .ts",
+    "postpack": "shx rm -f oclif.manifest.json",
+    "prepack": "oclif manifest && oclif readme",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.10.0",
+    "@oclif/core": "^4.0.0",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "execa": "^9.0.0",
+    "handlebars": "^4.7.8",
+    "js-yaml": "^4.1.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@oclif/test": "^4.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
+    "oclif": "^4.0.0",
+    "shx": "^0.3.4",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

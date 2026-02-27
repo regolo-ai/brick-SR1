@@ -1,3 +1,43 @@
+# ─── MyModel Configuration ─────────────────────────────────────
+# These sections configure the MyModel HTTP proxy layer.
+# They work alongside the vLLM SR routing pipeline below.
+
+# Virtual model identity — what clients see when calling /v1/models
+model:
+  name: "mymodel"
+  description: "MyModel intelligent router — routes requests to optimal LLM backends"
+
+# LLM provider backends
+# API keys support ${ENV_VAR} syntax, resolved at startup
+providers:
+  openai:
+    type: "openai"
+    base_url: "https://api.openai.com"
+    api_key: "${OPENAI_API_KEY}"
+  # anthropic:
+  #   type: "anthropic"
+  #   base_url: "https://api.anthropic.com"
+  #   api_key: "${ANTHROPIC_API_KEY}"
+  ollama:
+    type: "openai"
+    base_url: "http://127.0.0.1:11434"
+    api_key: ""
+
+# Modality-based routing (non-text content)
+# Routes image/audio/video requests to capable models
+modality_routes:
+  image:
+    provider: "openai"
+    model: "gpt-4o"
+  # audio:
+  #   provider: "openai"
+  #   model: "gpt-4o-audio-preview"
+
+# HTTP proxy port (default: 8000)
+server_port: 8000
+
+# ─── End MyModel Configuration ─────────────────────────────────
+
 # You can override by specifying your own mappings below:
 # Uncomment and customize if you need different model mappings:
 # mom_registry:

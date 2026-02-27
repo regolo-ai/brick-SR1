@@ -1,0 +1,26 @@
+model:
+  name: MyModel
+  description: ''
+providers:
+  regoloai:
+    type: openai-compatible
+    base_url: https://api.regolo.ai/v1
+    api_key: ${REGOLO_API_KEY}
+modality_routes: {}
+text_routes:
+  - name: default
+    priority: 0
+    operator: OR
+    provider: regoloai
+    model: Llama-3.1-8B-Instruct
+plugins:
+  pii_detection:
+    enabled: false
+    action: ''
+  jailbreak_guard:
+    enabled: false
+    action: ''
+  semantic_cache:
+    enabled: false
+    action: ''
+server_port: 8000

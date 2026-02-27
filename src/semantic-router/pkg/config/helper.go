@@ -39,13 +39,25 @@ func (c *RouterConfig) GetEffectiveAutoModelName() string {
 	return "MoM" // Default value
 }
 
-// IsAutoModelName checks if the given model name should trigger automatic model selection
-// Returns true if the model name is either the configured AutoModelName or "auto" (for backward compatibility)
+// IsAutoModelName checks if the given model name should trigger automatic model selection.
+// Returns true for "auto" (backward compat), the configured AutoModelName, or "brick" when brick is enabled.
 func (c *RouterConfig) IsAutoModelName(modelName string) bool {
 	if modelName == "auto" {
 		return true // Always support "auto" for backward compatibility
 	}
+	if c.Brick.Enabled && modelName == "brick" {
+		return true
+	}
 	return modelName == c.GetEffectiveAutoModelName()
+}
+
+// GetAutoModelNames returns the list of virtual model names that trigger automatic routing.
+func (c *RouterConfig) GetAutoModelNames() []string {
+	names := []string{c.GetEffectiveAutoModelName()}
+	if c.Brick.Enabled {
+		names = append(names, "brick")
+	}
+	return names
 }
 
 // GetCategoryDescriptions returns all category descriptions for similarity matching

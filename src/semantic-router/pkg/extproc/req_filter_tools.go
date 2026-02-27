@@ -102,7 +102,7 @@ func (r *OpenAIRouter) handleToolSelection(openAIRequest *openai.ChatCompletionN
 			openAIRequest.Tools = nil
 			return r.updateRequestWithTools(openAIRequest, response, ctx)
 		}
-		metrics.RecordRequestError(getModelFromCtx(ctx), "classification_failed")
+		metrics.RecordRequestError(ctx.RequestModel, "classification_failed")
 		return err
 	}
 
@@ -121,7 +121,7 @@ func (r *OpenAIRouter) handleToolSelection(openAIRequest *openai.ChatCompletionN
 			// Convert the tool to OpenAI SDK format
 			toolBytes, err := json.Marshal(tool)
 			if err != nil {
-				metrics.RecordRequestError(getModelFromCtx(ctx), "serialization_error")
+				metrics.RecordRequestError(ctx.RequestModel, "serialization_error")
 				return err
 			}
 			var sdkTool openai.ChatCompletionToolParam
