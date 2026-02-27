@@ -11,7 +11,7 @@
 #
 # Prerequisites:
 #   - lm-eval installed at .venv path below
-#   - Brick Docker container running on port 8080
+#   - Brick Docker container running on the eval server
 #   - REGOLO_API_KEY env var set
 #
 set -eo pipefail
@@ -25,21 +25,20 @@ EVALS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS_DIR="${EVALS_DIR}/logs"
 DATE=$(date +%Y-%m-%d)
 
-# Brick (local proxy) — full endpoint URL required (lm-eval POSTs directly)
-BRICK_URL="http://localhost:8080/v1/chat/completions"
+# Brick gateway (running on dedicated eval server)
+BRICK_URL="http://213.171.186.210:8000/v1/chat/completions"
 
-# Regolo API — full endpoint URL required
+# Regolo API — for individual model baselines
 REGOLO_URL="https://api.regolo.ai/v1/chat/completions"
 
 # Parallel arrays: index 0 = brick, 1-8 = individual models
-SHORT_NAMES=(brick llama70b gptoss120b gptoss20b deepseek70b mistral32 qwen3coder qwen3_8b gemma27b)
-MODELS=(brick Llama-3.3-70B-Instruct gpt-oss-120b gpt-oss-20b deepseek-r1-70b mistral-small3.2 qwen3-coder-next Qwen3-8B gemma-3-27b-it)
+SHORT_NAMES=(brick llama70b gptoss120b gptoss20b mistral32 qwen3coder qwen3_8b gemma27b)
+MODELS=(brick Llama-3.3-70B-Instruct gpt-oss-120b gpt-oss-20b mistral-small3.2 qwen3-coder-next Qwen3-8B gemma-3-27b-it)
 TOKENIZERS=(
-    none
+    meta-llama/Llama-3.3-70B-Instruct
     meta-llama/Llama-3.3-70B-Instruct
     Qwen/QwQ-32B
     Qwen/Qwen3-32B
-    deepseek-ai/DeepSeek-R1-Distill-Llama-70B
     mistralai/Mistral-Small-3.1-24B-Instruct-2503
     Qwen/Qwen3-235B-A22B
     Qwen/Qwen3-8B
@@ -60,22 +59,22 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --only)    ONLY_MODEL="$2"; shift 2 ;;
         -h|--help)
-            head -14 "${BASH_SOURCE[0]}" | tail -12
+            head -16 "${BASH_SOURCE[0]}" | tail -14
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# Validate REGOLO_API_KEY (needed for individual models, not for brick-only)
-if [[ -z "${REGOLO_API_KEY:-}" && "${ONLY_MODEL}" != "brick" ]]; then
+# REGOLO_API_KEY is always required (brick gateway forwards it to Regolo API)
+if [[ -z "${REGOLO_API_KEY:-}" ]]; then
     echo "ERROR: REGOLO_API_KEY is not set."
     echo "Export it before running: export REGOLO_API_KEY=sk-..."
     exit 1
 fi
 
 # lm-eval's openai-chat-completions reads API key from OPENAI_API_KEY env var
-export OPENAI_API_KEY="${REGOLO_API_KEY:-none}"
+export OPENAI_API_KEY="${REGOLO_API_KEY}"
 
 mkdir -p "${LOGS_DIR}"
 
@@ -111,7 +110,6 @@ run_eval() {
     fi
 
     # Idempotency: skip if results already exist
-    # lm-eval creates a subdirectory: out_dir/MODEL_NAME/results_*.json
     if find "${out_dir}" -name "results*.json" -print -quit 2>/dev/null | grep -q .; then
         echo "[SKIP] ${short} / ${task} — results exist in ${out_dir}"
         (( TOTAL_SKIP++ )) || true
@@ -121,17 +119,16 @@ run_eval() {
     mkdir -p "${out_dir}"
 
     # Build model type and model_args
-    local model_type model_args
+    local model_type model_args base_url
     if [[ $idx -eq 0 ]]; then
-        # Brick (local proxy) — tokenizer needed for HF fallback (no /tokenize endpoint)
-        model_type="local-chat-completions"
-        model_args="model=${model},base_url=${BRICK_URL},tokenizer_backend=huggingface,tokenizer=meta-llama/Llama-3.3-70B-Instruct,stream=false,max_tokens=${max_tokens},temperature=0,top_p=1"
+        base_url="${BRICK_URL}"
     else
-        # Regolo API — with tokenizer for accurate token counting
-        # API key is read from OPENAI_API_KEY env var (exported above)
-        model_type="openai-chat-completions"
-        model_args="model=${model},base_url=${REGOLO_URL},tokenizer_backend=huggingface,tokenizer=${tokenizer},stream=false,max_tokens=${max_tokens},temperature=0,top_p=1"
+        base_url="${REGOLO_URL}"
     fi
+
+    # All models use openai-chat-completions (sends Authorization header)
+    model_type="openai-chat-completions"
+    model_args="model=${model},base_url=${base_url},tokenizer_backend=huggingface,tokenizer=${tokenizer},stream=false,max_tokens=${max_tokens},temperature=0,top_p=1"
 
     # Dry run: append --limit 5 (argparse last-value-wins)
     if [[ "${DRY_RUN}" == "true" ]]; then
@@ -142,6 +139,7 @@ run_eval() {
     echo "[RUN] ${short} / ${task}"
     echo "  Model type: ${model_type}"
     echo "  Model: ${model}"
+    echo "  Base URL: ${base_url}"
     echo "  Max tokens: ${max_tokens}"
     echo "  Output: ${out_dir}"
     echo "  Log: ${log_file}"
@@ -176,13 +174,13 @@ run_eval() {
 }
 
 ##############################################################################
-# Phase 1 — New benchmarks: Brick + all 8 models (9 total)
+# Phase 1 — Core benchmarks: Brick + all 8 models
 ##############################################################################
 
 phase1() {
     echo ""
     echo "################################################################"
-    echo "# PHASE 1 — New benchmarks (Brick + 8 individual models)"
+    echo "# PHASE 1 — Core benchmarks (Brick + 8 individual models)"
     echo "################################################################"
 
     # 1. MMLU-Pro (5-shot, 500 samples, max_tokens=2048)
@@ -211,49 +209,34 @@ phase1() {
 }
 
 ##############################################################################
-# Phase 2 — Extend existing benchmarks to individual models
+# Phase 2 — Extended benchmarks: all models
 ##############################################################################
 
 phase2() {
     echo ""
     echo "################################################################"
-    echo "# PHASE 2 — Extend existing benchmarks to individual models"
+    echo "# PHASE 2 — Extended benchmarks (all models)"
     echo "################################################################"
 
     # 4. IFEval (0-shot, full=541, max_tokens=1280)
-    # Skip: brick (idx=0) and llama70b (idx=1) — already done
     echo ""
-    echo "=== IFEval (0-shot, full) — 7 remaining models ==="
+    echo "=== IFEval (0-shot, full) ==="
     for i in "${!SHORT_NAMES[@]}"; do
-        if [[ $i -eq 0 || $i -eq 1 ]]; then
-            [[ -z "${ONLY_MODEL}" ]] && echo "[SKIP] ${SHORT_NAMES[$i]} / ifeval — already completed previously"
-            continue
-        fi
         run_eval "$i" "ifeval" "ifeval" 1280
     done
 
     # 5. BBH CoT Zeroshot (0-shot, 50/subtask, max_tokens=2048)
-    # Skip: brick (idx=0) — already done
     echo ""
-    echo "=== BBH CoT Zeroshot (0-shot, limit=50/subtask) — 8 models ==="
+    echo "=== BBH CoT Zeroshot (0-shot, limit=50/subtask) ==="
     for i in "${!SHORT_NAMES[@]}"; do
-        if [[ $i -eq 0 ]]; then
-            [[ -z "${ONLY_MODEL}" ]] && echo "[SKIP] ${SHORT_NAMES[$i]} / bbh_cot_zeroshot — already completed previously"
-            continue
-        fi
         run_eval "$i" "bbh_cot_zeroshot" "bbh" 2048 \
             --limit 50
     done
 
     # 6. DROP (3-shot, 200 samples, max_tokens=2048)
-    # Skip: brick (idx=0) — already done
     echo ""
-    echo "=== DROP (3-shot, limit=200) — 8 models ==="
+    echo "=== DROP (3-shot, limit=200) ==="
     for i in "${!SHORT_NAMES[@]}"; do
-        if [[ $i -eq 0 ]]; then
-            [[ -z "${ONLY_MODEL}" ]] && echo "[SKIP] ${SHORT_NAMES[$i]} / drop — already completed previously"
-            continue
-        fi
         run_eval "$i" "drop" "drop" 2048 \
             --num_fewshot 3 \
             --limit 200 \
@@ -261,14 +244,9 @@ phase2() {
     done
 
     # 7. Minerva Math (4-shot, 100/subtask, max_tokens=2048)
-    # Skip: brick (idx=0) — already done
     echo ""
-    echo "=== Minerva Math (4-shot, limit=100/subtask) — 8 models ==="
+    echo "=== Minerva Math (4-shot, limit=100/subtask) ==="
     for i in "${!SHORT_NAMES[@]}"; do
-        if [[ $i -eq 0 ]]; then
-            [[ -z "${ONLY_MODEL}" ]] && echo "[SKIP] ${SHORT_NAMES[$i]} / minerva_math — already completed previously"
-            continue
-        fi
         run_eval "$i" "minerva_math" "minerva_math" 2048 \
             --num_fewshot 4 \
             --limit 100 \
@@ -288,8 +266,8 @@ phase3() {
 
     export HF_ALLOW_CODE_EVAL=1
 
-    # Code eval models: brick (0), llama70b (1), qwen3coder (6)
-    local code_indices=(0 1 6)
+    # Code eval models: brick (0), llama70b (1), qwen3coder (5)
+    local code_indices=(0 1 5)
 
     # 8. HumanEval (0-shot, full=164, max_tokens=1024)
     echo ""
@@ -320,6 +298,7 @@ echo " Date:       ${DATE}"
 echo " Phase:      ${PHASE}"
 echo " Dry run:    ${DRY_RUN}"
 echo " Only model: ${ONLY_MODEL:-all}"
+echo " Brick URL:  ${BRICK_URL}"
 echo " Evals dir:  ${EVALS_DIR}"
 echo "========================================"
 
