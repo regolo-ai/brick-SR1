@@ -7,7 +7,7 @@
 
 services:
   mymodel:
-    image: ghcr.io/vllm-project/semantic-router/mymodel:latest
+    image: mymodel:latest
     ports:
       - "8000:8000"   # HTTP proxy (OpenAI-compatible API)
       - "9190:9190"   # Prometheus metrics
