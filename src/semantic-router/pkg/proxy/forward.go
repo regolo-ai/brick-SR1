@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,8 +13,13 @@ import (
 )
 
 // forwardToBackend forwards the request to the selected backend and streams
-// the response back to the client.
-func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request, result *RoutingResult) {
+// the response back to the client. When maskModel is non-empty, the "model"
+// field in the JSON response body is rewritten to hide the real backend model.
+func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request, result *RoutingResult, maskModel ...string) {
+	modelMask := ""
+	if len(maskModel) > 0 {
+		modelMask = maskModel[0]
+	}
 	// Build the upstream URL
 	endpoint := result.ForwardEndpoint
 	if !strings.HasPrefix(endpoint, "http") {
@@ -93,15 +100,17 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
 	if isSSE {
-		s.streamSSEResponse(w, upstreamResp)
+		s.streamSSEResponse(w, upstreamResp, modelMask)
 	} else {
-		s.forwardNonStreamingResponse(w, upstreamResp)
+		s.forwardNonStreamingResponse(w, upstreamResp, modelMask)
 	}
 }
 
 // streamSSEResponse streams an SSE response from the backend to the client.
 // This is critical for chat completions with stream=true.
-func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response) {
+// When maskModel is non-empty, the "model" field in each SSE data chunk is
+// rewritten to hide the real backend model name.
+func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel string) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -124,40 +133,66 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		return
 	}
 
-	// Stream data from upstream to client
-	buf := make([]byte, 4096)
-	for {
-		n, err := upstreamResp.Body.Read(buf)
-		if n > 0 {
-			_, writeErr := w.Write(buf[:n])
-			if writeErr != nil {
-				logging.Errorf("Error writing SSE chunk to client: %v", writeErr)
-				return
-			}
-			flusher.Flush()
+	// Stream SSE line-by-line so we can rewrite the model field in each chunk
+	scanner := bufio.NewScanner(upstreamResp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // allow up to 1MB lines
+	for scanner.Scan() {
+		line := scanner.Text()
+		if maskModel != "" && strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
+			payload := strings.TrimPrefix(line, "data: ")
+			line = "data: " + string(rewriteModelInResponseBody([]byte(payload), maskModel))
 		}
-		if err != nil {
-			if err != io.EOF {
-				logging.Errorf("Error reading upstream SSE stream: %v", err)
-			}
-			return
-		}
+		fmt.Fprintf(w, "%s\n", line)
+		flusher.Flush()
+	}
+	if err := scanner.Err(); err != nil {
+		logging.Errorf("Error reading upstream SSE stream: %v", err)
 	}
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
-func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response) {
-	// Copy response headers
+// When maskModel is non-empty, the "model" field in the JSON response is rewritten.
+func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel string) {
+	// Copy response headers (except Content-Length, which may change after rewrite)
 	for key, values := range upstreamResp.Header {
+		if maskModel != "" && strings.EqualFold(key, "Content-Length") {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
 	}
 
-	w.WriteHeader(upstreamResp.StatusCode)
-
-	// Copy response body
-	if _, err := io.Copy(w, upstreamResp.Body); err != nil {
-		logging.Errorf("Error copying upstream response body: %v", err)
+	// Read full body so we can optionally rewrite the model field
+	bodyBytes, err := io.ReadAll(upstreamResp.Body)
+	if err != nil {
+		logging.Errorf("Error reading upstream response body: %v", err)
+		w.WriteHeader(upstreamResp.StatusCode)
+		return
 	}
+
+	if maskModel != "" {
+		bodyBytes = rewriteModelInResponseBody(bodyBytes, maskModel)
+	}
+
+	w.WriteHeader(upstreamResp.StatusCode)
+	if _, err := w.Write(bodyBytes); err != nil {
+		logging.Errorf("Error writing response body to client: %v", err)
+	}
+}
+
+// rewriteModelInResponseBody replaces the "model" field in a JSON body with newModel.
+// Returns the original body unchanged if parsing fails or no "model" field exists.
+func rewriteModelInResponseBody(body []byte, newModel string) []byte {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return body
+	}
+	if _, ok := raw["model"]; ok {
+		raw["model"] = newModel
+		if rewritten, err := json.Marshal(raw); err == nil {
+			return rewritten
+		}
+	}
+	return body
 }
