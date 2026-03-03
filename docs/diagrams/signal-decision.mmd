@@ -1,0 +1,85 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4a90d9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3a7bc8', 'lineColor': '#5a6577', 'background': '#ffffff'}}}%%
+graph TD
+    INPUT["<b>User Query</b><br/>+ headers + history"]
+
+    subgraph signals["<b>11 Signal Types</b>"]
+        direction LR
+        S1["Keyword<br/><i>regex/substring</i>"]
+        S2["Embedding<br/><i>Qwen3/Gemma</i>"]
+        S3["Domain<br/><i>MMLU categories</i>"]
+        S4["Language<br/><i>whatlang detect</i>"]
+        S5["Complexity<br/><i>token + pattern</i>"]
+        S6["Context<br/><i>history length</i>"]
+        S7["Modality<br/><i>text/img/audio</i>"]
+        S8["Authz<br/><i>user roles</i>"]
+        S9["Fact Check<br/><i>claim detect</i>"]
+        S10["Preference<br/><i>LLM classify</i>"]
+        S11["Feedback<br/><i>user signals</i>"]
+    end
+
+    MATCHES["<b>Signal Matches</b><br/>name → confidence score"]
+
+    subgraph tree["<b>Decision Tree</b>"]
+        direction TB
+        AND1["AND"]
+        OR1["OR"]
+        NOT1["NOT"]
+        LEAF1["domain:<br/>mathematics"]
+        LEAF2["complexity:<br/>hard"]
+        LEAF3["keyword:<br/>proof"]
+        LEAF4["language:<br/>non-english"]
+
+        AND1 --> LEAF1
+        AND1 --> OR1
+        OR1 --> LEAF2
+        OR1 --> LEAF3
+        AND1 --> NOT1
+        NOT1 --> LEAF4
+    end
+
+    DECISION["<b>Matched Decision</b><br/>math_expert (confidence: 0.87)"]
+
+    subgraph selection["<b>Model Selection</b>"]
+        direction LR
+        M1["GPT-4o"]
+        M2["Claude 3.5"]
+        M3["Llama 70B"]
+    end
+
+    WINNER["<b>Selected Model</b><br/>Claude 3.5 Sonnet"]
+
+    INPUT --> signals
+    signals --> MATCHES
+    MATCHES --> tree
+    tree --> DECISION
+    DECISION --> selection
+    selection --> WINNER
+
+    style INPUT fill:#2196F3,stroke:#1976D2,color:#fff
+    style signals fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style S1 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S2 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S3 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S4 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S5 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S6 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S7 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S8 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S9 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S10 fill:#FF9800,stroke:#F57C00,color:#fff
+    style S11 fill:#FF9800,stroke:#F57C00,color:#fff
+    style MATCHES fill:#FFC107,stroke:#FFA000,color:#333
+    style tree fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
+    style AND1 fill:#4CAF50,stroke:#388E3C,color:#fff
+    style OR1 fill:#66BB6A,stroke:#43A047,color:#fff
+    style NOT1 fill:#f44336,stroke:#d32f2f,color:#fff
+    style LEAF1 fill:#81C784,stroke:#66BB6A,color:#333
+    style LEAF2 fill:#81C784,stroke:#66BB6A,color:#333
+    style LEAF3 fill:#81C784,stroke:#66BB6A,color:#333
+    style LEAF4 fill:#81C784,stroke:#66BB6A,color:#333
+    style DECISION fill:#9C27B0,stroke:#7B1FA2,color:#fff
+    style selection fill:#e3f2fd,stroke:#2196F3,stroke-width:2px
+    style M1 fill:#2196F3,stroke:#1976D2,color:#fff
+    style M2 fill:#2196F3,stroke:#1976D2,color:#fff
+    style M3 fill:#2196F3,stroke:#1976D2,color:#fff
+    style WINNER fill:#1565C0,stroke:#0D47A1,color:#fff

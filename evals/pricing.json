@@ -1,0 +1,13 @@
+{
+  "currency": "EUR",
+  "models": {
+    "llama70b":    { "display_name": "Llama-3.3-70B-Instruct", "input_per_1M": 0.60, "output_per_1M": 2.70 },
+    "gptoss120b":  { "display_name": "GPT-OSS-120B",           "input_per_1M": 1.00, "output_per_1M": 4.20 },
+    "gptoss20b":   { "display_name": "GPT-OSS-20B",            "input_per_1M": 0.10, "output_per_1M": 0.42 },
+    "mistral32":   { "display_name": "Mistral-Small-3.2",      "input_per_1M": 0.50, "output_per_1M": 2.20 },
+    "qwen3coder":  { "display_name": "Qwen3-Coder-Next",       "input_per_1M": 0.50, "output_per_1M": 2.00 },
+    "qwen3_8b":    { "display_name": "Qwen3-8B",               "input_per_1M": 0.07, "output_per_1M": 0.35 },
+    "brick":       { "display_name": "Brick (Router)",          "input_per_1M": null, "output_per_1M": null },
+    "qwen3vl32b":  { "display_name": "Qwen3-VL-32B",           "input_per_1M": 0.50, "output_per_1M": 2.50 }
+  }
+}

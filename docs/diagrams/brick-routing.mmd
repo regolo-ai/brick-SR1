@@ -1,0 +1,64 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4a90d9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3a7bc8', 'lineColor': '#5a6577', 'background': '#ffffff'}}}%%
+graph TD
+    REQ["<b>Client Request</b><br/>model: brick"]
+    HDR{"x-selected-model<br/>header?"}
+    DIRECT_FWD["Direct Forward<br/><i>bypass routing</i>"]
+    DETECT["<b>Modality Detection</b><br/>HasText / HasImage / HasAudio"]
+
+    subgraph preprocess["<b>Preprocessing</b>"]
+        direction TB
+        IMG_TXT["Image + Text"]
+        IMG_ONLY["Image Only"]
+        AUD_ONLY["Audio Only"]
+        AUD_IMG["Audio + Image"]
+        TXT_ONLY["Text Only"]
+
+        OCR["OCR Extraction<br/><i>vision model</i>"]
+        STT["Audio Transcription<br/><i>Whisper API</i>"]
+        OCR_STT["OCR + STT<br/><i>parallel</i>"]
+    end
+
+    VISION["Vision Model<br/><i>direct forward</i>"]
+    PIPELINE["Semantic Router<br/><i>full pipeline</i>"]
+
+    REQ --> HDR
+    HDR -->|"yes"| DIRECT_FWD
+    HDR -->|"no"| DETECT
+
+    DETECT --> IMG_TXT
+    DETECT --> IMG_ONLY
+    DETECT --> AUD_ONLY
+    DETECT --> AUD_IMG
+    DETECT --> TXT_ONLY
+
+    IMG_TXT -->|"preserve original body"| VISION
+    IMG_ONLY --> OCR
+    AUD_ONLY --> STT
+    AUD_IMG --> OCR_STT
+
+    OCR -->|"text ≥ min_len"| PIPELINE
+    OCR -->|"text < min_len"| VISION
+    STT --> PIPELINE
+    OCR_STT --> PIPELINE
+    TXT_ONLY --> PIPELINE
+
+    PIPELINE --> BACKEND["Selected Backend<br/><i>via Regolo API</i>"]
+    VISION --> BACKEND
+    DIRECT_FWD --> BACKEND
+
+    style REQ fill:#2196F3,stroke:#1976D2,color:#fff
+    style HDR fill:#FFC107,stroke:#FFA000,color:#333
+    style DIRECT_FWD fill:#607D8B,stroke:#455A64,color:#fff
+    style DETECT fill:#FF9800,stroke:#F57C00,color:#fff
+    style preprocess fill:#f0f4f8,stroke:#d0d8e0,stroke-width:2px
+    style IMG_TXT fill:#4CAF50,stroke:#388E3C,color:#fff
+    style IMG_ONLY fill:#8BC34A,stroke:#689F38,color:#fff
+    style AUD_ONLY fill:#00BCD4,stroke:#0097A7,color:#fff
+    style AUD_IMG fill:#009688,stroke:#00796B,color:#fff
+    style TXT_ONLY fill:#78909C,stroke:#546E7A,color:#fff
+    style OCR fill:#AB47BC,stroke:#8E24AA,color:#fff
+    style STT fill:#AB47BC,stroke:#8E24AA,color:#fff
+    style OCR_STT fill:#AB47BC,stroke:#8E24AA,color:#fff
+    style VISION fill:#E91E63,stroke:#C2185B,color:#fff
+    style PIPELINE fill:#FF9800,stroke:#F57C00,color:#fff
+    style BACKEND fill:#2196F3,stroke:#1976D2,color:#fff

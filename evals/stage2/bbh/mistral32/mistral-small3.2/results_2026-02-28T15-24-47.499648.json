@@ -1,0 +1,3073 @@
+{
+  "results": {
+    "bbh_cot_zeroshot": {
+      "exact_match,flexible-extract": 0.47185185185185186,
+      "exact_match_stderr,flexible-extract": 0.010486873928361092,
+      "alias": "bbh_cot_zeroshot"
+    },
+    "bbh_cot_zeroshot_boolean_expressions": {
+      "alias": " - bbh_cot_zeroshot_boolean_expressions",
+      "exact_match,flexible-extract": 0.98,
+      "exact_match_stderr,flexible-extract": 0.019999999999999993,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_causal_judgement": {
+      "alias": " - bbh_cot_zeroshot_causal_judgement",
+      "exact_match,flexible-extract": 0.16,
+      "exact_match_stderr,flexible-extract": 0.052372293656638154,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_date_understanding": {
+      "alias": " - bbh_cot_zeroshot_date_understanding",
+      "exact_match,flexible-extract": 0.66,
+      "exact_match_stderr,flexible-extract": 0.06767268161329723,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_disambiguation_qa": {
+      "alias": " - bbh_cot_zeroshot_disambiguation_qa",
+      "exact_match,flexible-extract": 0.08,
+      "exact_match_stderr,flexible-extract": 0.038756171332144394,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_dyck_languages": {
+      "alias": " - bbh_cot_zeroshot_dyck_languages",
+      "exact_match,flexible-extract": 0.0,
+      "exact_match_stderr,flexible-extract": 0.0,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_formal_fallacies": {
+      "alias": " - bbh_cot_zeroshot_formal_fallacies",
+      "exact_match,flexible-extract": 0.56,
+      "exact_match_stderr,flexible-extract": 0.07091242083423345,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_geometric_shapes": {
+      "alias": " - bbh_cot_zeroshot_geometric_shapes",
+      "exact_match,flexible-extract": 0.12,
+      "exact_match_stderr,flexible-extract": 0.046423076597919784,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_hyperbaton": {
+      "alias": " - bbh_cot_zeroshot_hyperbaton",
+      "exact_match,flexible-extract": 0.42,
+      "exact_match_stderr,flexible-extract": 0.07050835816716035,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_logical_deduction_five_objects": {
+      "alias": " - bbh_cot_zeroshot_logical_deduction_five_objects",
+      "exact_match,flexible-extract": 0.36,
+      "exact_match_stderr,flexible-extract": 0.06857142857142856,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": {
+      "alias": " - bbh_cot_zeroshot_logical_deduction_seven_objects",
+      "exact_match,flexible-extract": 0.38,
+      "exact_match_stderr,flexible-extract": 0.06934092056863767,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_logical_deduction_three_objects": {
+      "alias": " - bbh_cot_zeroshot_logical_deduction_three_objects",
+      "exact_match,flexible-extract": 0.74,
+      "exact_match_stderr,flexible-extract": 0.06266203485560372,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_movie_recommendation": {
+      "alias": " - bbh_cot_zeroshot_movie_recommendation",
+      "exact_match,flexible-extract": 0.12,
+      "exact_match_stderr,flexible-extract": 0.046423076597919784,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_multistep_arithmetic_two": {
+      "alias": " - bbh_cot_zeroshot_multistep_arithmetic_two",
+      "exact_match,flexible-extract": 0.1,
+      "exact_match_stderr,flexible-extract": 0.04285714285714283,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_navigate": {
+      "alias": " - bbh_cot_zeroshot_navigate",
+      "exact_match,flexible-extract": 0.54,
+      "exact_match_stderr,flexible-extract": 0.07119963311072637,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_object_counting": {
+      "alias": " - bbh_cot_zeroshot_object_counting",
+      "exact_match,flexible-extract": 0.98,
+      "exact_match_stderr,flexible-extract": 0.01999999999999999,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_penguins_in_a_table": {
+      "alias": " - bbh_cot_zeroshot_penguins_in_a_table",
+      "exact_match,flexible-extract": 0.88,
+      "exact_match_stderr,flexible-extract": 0.0464230765979198,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": {
+      "alias": " - bbh_cot_zeroshot_reasoning_about_colored_objects",
+      "exact_match,flexible-extract": 0.94,
+      "exact_match_stderr,flexible-extract": 0.0339266916772512,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_ruin_names": {
+      "alias": " - bbh_cot_zeroshot_ruin_names",
+      "exact_match,flexible-extract": 0.52,
+      "exact_match_stderr,flexible-extract": 0.07137140569598172,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_salient_translation_error_detection": {
+      "alias": " - bbh_cot_zeroshot_salient_translation_error_detection",
+      "exact_match,flexible-extract": 0.12,
+      "exact_match_stderr,flexible-extract": 0.0464230765979198,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_snarks": {
+      "alias": " - bbh_cot_zeroshot_snarks",
+      "exact_match,flexible-extract": 0.68,
+      "exact_match_stderr,flexible-extract": 0.06663945022680341,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_sports_understanding": {
+      "alias": " - bbh_cot_zeroshot_sports_understanding",
+      "exact_match,flexible-extract": 0.46,
+      "exact_match_stderr,flexible-extract": 0.07119963311072637,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_temporal_sequences": {
+      "alias": " - bbh_cot_zeroshot_temporal_sequences",
+      "exact_match,flexible-extract": 0.12,
+      "exact_match_stderr,flexible-extract": 0.04642307659791979,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": {
+      "alias": " - bbh_cot_zeroshot_tracking_shuffled_objects_five_objects",
+      "exact_match,flexible-extract": 0.22,
+      "exact_match_stderr,flexible-extract": 0.05917804336345136,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": {
+      "alias": " - bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects",
+      "exact_match,flexible-extract": 0.3,
+      "exact_match_stderr,flexible-extract": 0.0654653670707977,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": {
+      "alias": " - bbh_cot_zeroshot_tracking_shuffled_objects_three_objects",
+      "exact_match,flexible-extract": 0.98,
+      "exact_match_stderr,flexible-extract": 0.019999999999999983,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_web_of_lies": {
+      "alias": " - bbh_cot_zeroshot_web_of_lies",
+      "exact_match,flexible-extract": 0.96,
+      "exact_match_stderr,flexible-extract": 0.027994168488950612,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    },
+    "bbh_cot_zeroshot_word_sorting": {
+      "alias": " - bbh_cot_zeroshot_word_sorting",
+      "exact_match,flexible-extract": 0.36,
+      "exact_match_stderr,flexible-extract": 0.06857142857142856,
+      "exact_match,strict-match": 0.0,
+      "exact_match_stderr,strict-match": 0.0
+    }
+  },
+  "groups": {
+    "bbh_cot_zeroshot": {
+      "exact_match,flexible-extract": 0.47185185185185186,
+      "exact_match_stderr,flexible-extract": 0.010486873928361092,
+      "alias": "bbh_cot_zeroshot"
+    }
+  },
+  "group_subtasks": {
+    "bbh_cot_zeroshot": [
+      "bbh_cot_zeroshot_boolean_expressions",
+      "bbh_cot_zeroshot_causal_judgement",
+      "bbh_cot_zeroshot_date_understanding",
+      "bbh_cot_zeroshot_disambiguation_qa",
+      "bbh_cot_zeroshot_dyck_languages",
+      "bbh_cot_zeroshot_formal_fallacies",
+      "bbh_cot_zeroshot_geometric_shapes",
+      "bbh_cot_zeroshot_hyperbaton",
+      "bbh_cot_zeroshot_logical_deduction_five_objects",
+      "bbh_cot_zeroshot_logical_deduction_seven_objects",
+      "bbh_cot_zeroshot_logical_deduction_three_objects",
+      "bbh_cot_zeroshot_movie_recommendation",
+      "bbh_cot_zeroshot_multistep_arithmetic_two",
+      "bbh_cot_zeroshot_navigate",
+      "bbh_cot_zeroshot_object_counting",
+      "bbh_cot_zeroshot_penguins_in_a_table",
+      "bbh_cot_zeroshot_reasoning_about_colored_objects",
+      "bbh_cot_zeroshot_ruin_names",
+      "bbh_cot_zeroshot_salient_translation_error_detection",
+      "bbh_cot_zeroshot_snarks",
+      "bbh_cot_zeroshot_sports_understanding",
+      "bbh_cot_zeroshot_temporal_sequences",
+      "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects",
+      "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects",
+      "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects",
+      "bbh_cot_zeroshot_web_of_lies",
+      "bbh_cot_zeroshot_word_sorting"
+    ]
+  },
+  "configs": {
+    "bbh_cot_zeroshot_boolean_expressions": {
+      "task": "bbh_cot_zeroshot_boolean_expressions",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "boolean_expressions",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Evaluate the result of a random Boolean expression.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "regex",
+              "group_select": -1,
+              "regex_pattern": "\\b(True|False)\\b"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_causal_judgement": {
+      "task": "bbh_cot_zeroshot_causal_judgement",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "causal_judgement",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Answer questions about causal attribution.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "regex",
+              "group_select": -1,
+              "regex_pattern": "\\b(Yes|No|yes|no)\\b"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_date_understanding": {
+      "task": "bbh_cot_zeroshot_date_understanding",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "date_understanding",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Infer the date from context.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_disambiguation_qa": {
+      "task": "bbh_cot_zeroshot_disambiguation_qa",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "disambiguation_qa",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Clarify the meaning of sentences with ambiguous pronouns.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_dyck_languages": {
+      "task": "bbh_cot_zeroshot_dyck_languages",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "dyck_languages",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Correctly close a Dyck-n word.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "regex",
+              "group_select": -1,
+              "regex_pattern": "(?<= )([\" \\[\\(<{}>\\)\\]]+)|([\" \\[\\(<{}>\\)\\]]+)"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_formal_fallacies": {
+      "task": "bbh_cot_zeroshot_formal_fallacies",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "formal_fallacies",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Distinguish deductively valid arguments from formal fallacies.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "regex",
+              "group_select": -1,
+              "regex_pattern": "\\b(valid|invalid)\\b"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_geometric_shapes": {
+      "task": "bbh_cot_zeroshot_geometric_shapes",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "geometric_shapes",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Name geometric shapes from their SVG paths.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_hyperbaton": {
+      "task": "bbh_cot_zeroshot_hyperbaton",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "hyperbaton",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Order adjectives correctly in English sentences.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_logical_deduction_five_objects": {
+      "task": "bbh_cot_zeroshot_logical_deduction_five_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "logical_deduction_five_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A logical deduction task which requires deducing the order of a sequence of objects.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": {
+      "task": "bbh_cot_zeroshot_logical_deduction_seven_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "logical_deduction_seven_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A logical deduction task which requires deducing the order of a sequence of objects.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_logical_deduction_three_objects": {
+      "task": "bbh_cot_zeroshot_logical_deduction_three_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "logical_deduction_three_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A logical deduction task which requires deducing the order of a sequence of objects.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_movie_recommendation": {
+      "task": "bbh_cot_zeroshot_movie_recommendation",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "movie_recommendation",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Recommend movies similar to the given list of movies.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_multistep_arithmetic_two": {
+      "task": "bbh_cot_zeroshot_multistep_arithmetic_two",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "multistep_arithmetic_two",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Solve multi-step arithmetic problems.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.NumberParseRegexFilter'>",
+              "group_select": -1,
+              "regex_pattern": "([-0-9]+)"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_navigate": {
+      "task": "bbh_cot_zeroshot_navigate",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "navigate",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Given a series of navigation instructions, determine whether one would end up back at the starting point.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "regex",
+              "group_select": -1,
+              "regex_pattern": "\\b(Yes|No|yes|no)\\b"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_object_counting": {
+      "task": "bbh_cot_zeroshot_object_counting",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "object_counting",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Questions that involve enumerating objects and asking the model to count them.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.NumberParseRegexFilter'>",
+              "group_select": -1,
+              "regex_pattern": "([-0-9]+)"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_penguins_in_a_table": {
+      "task": "bbh_cot_zeroshot_penguins_in_a_table",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "penguins_in_a_table",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Answer questions about a table of penguins and their attributes.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": {
+      "task": "bbh_cot_zeroshot_reasoning_about_colored_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "reasoning_about_colored_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Answer extremely simple questions about the colors of objects on a surface.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_ruin_names": {
+      "task": "bbh_cot_zeroshot_ruin_names",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "ruin_names",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Select the humorous edit that 'ruins' the input movie or musical artist name.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_salient_translation_error_detection": {
+      "task": "bbh_cot_zeroshot_salient_translation_error_detection",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "salient_translation_error_detection",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Detect the type of error in an English translation of a German source sentence.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_snarks": {
+      "task": "bbh_cot_zeroshot_snarks",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "snarks",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Determine which of two sentences is sarcastic.\n\nAccording to Cambridge University Dictionary, sarcasm is \"the use of remarks that clearly mean the opposite of what they say, made in order to hurt someone's feelings or to criticize something in a humorous way.\" Sarcastic sentences often contain satirical or ironic utterances, hyperboles, ambivalent or witty remarks.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_sports_understanding": {
+      "task": "bbh_cot_zeroshot_sports_understanding",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "sports_understanding",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Determine whether an artificially constructed sentence relating to sports is plausible or not.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MapRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "regex_pattern_to_value": {
+                "\\b(no|not plausible)\\b": "no",
+                "\\b(yes|plausible)\\b": "yes"
+              }
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_temporal_sequences": {
+      "task": "bbh_cot_zeroshot_temporal_sequences",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "temporal_sequences",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Task description: Answer questions about which times certain events could have occurred.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": {
+      "task": "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "tracking_shuffled_objects_five_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A task requiring determining the final positions of a set of objects given their initial positions and a description of a sequence of swaps.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": {
+      "task": "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "tracking_shuffled_objects_seven_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A task requiring determining the final positions of a set of objects given their initial positions and a description of a sequence of swaps.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": {
+      "task": "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "tracking_shuffled_objects_three_objects",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "A task requiring determining the final positions of a set of objects given their initial positions and a description of a sequence of swaps.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MultiChoiceRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "ignore_punctuation": true,
+              "regex_pattern": "(\\([A-Z]\\))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_web_of_lies": {
+      "task": "bbh_cot_zeroshot_web_of_lies",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "web_of_lies",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Evaluate a random boolean function expressed as a word problem.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.MapRegexFilter'>",
+              "group_select": -1,
+              "ignore_case": true,
+              "regex_pattern_to_value": {
+                "\\b(no|does not tell the truth|is not telling the truth)\\b": "no",
+                "\\b(yes|tells the truth|is telling the truth)\\b": "yes"
+              }
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    },
+    "bbh_cot_zeroshot_word_sorting": {
+      "task": "bbh_cot_zeroshot_word_sorting",
+      "dataset_path": "SaylorTwift/bbh",
+      "dataset_name": "word_sorting",
+      "test_split": "test",
+      "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+      "doc_to_target": "{{target}}",
+      "unsafe_code": false,
+      "description": "Sort a list of words.\n\n",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "Q: {{input}}\nA: Let's think step by step.",
+        "doc_to_choice": null,
+        "doc_to_target": "{{target}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "regexes_to_ignore": [
+            "\\.$",
+            ",",
+            "\\\\",
+            "\n",
+            "\""
+          ]
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "until": [
+          "</s>",
+          "Q:",
+          "<|im_end|>"
+        ],
+        "do_sample": false,
+        "temperature": 0.0
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "flexible-extract",
+          "filter": [
+            {
+              "function": "<class 'utils.WordSortFilter'>"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        },
+        {
+          "name": "strict-match",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "((?<=The answer is )(.*)(?=.)|(?<=the answer is )(.*)(?=.)|(?<=The answer: )(.*)(?=.)|(?<=The final answer: )(.*)(?=.))"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 3.0,
+        "model": "mistral-small3.2",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    }
+  },
+  "versions": {
+    "bbh_cot_zeroshot": 3.0,
+    "bbh_cot_zeroshot_boolean_expressions": 3.0,
+    "bbh_cot_zeroshot_causal_judgement": 3.0,
+    "bbh_cot_zeroshot_date_understanding": 3.0,
+    "bbh_cot_zeroshot_disambiguation_qa": 3.0,
+    "bbh_cot_zeroshot_dyck_languages": 3.0,
+    "bbh_cot_zeroshot_formal_fallacies": 3.0,
+    "bbh_cot_zeroshot_geometric_shapes": 3.0,
+    "bbh_cot_zeroshot_hyperbaton": 3.0,
+    "bbh_cot_zeroshot_logical_deduction_five_objects": 3.0,
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": 3.0,
+    "bbh_cot_zeroshot_logical_deduction_three_objects": 3.0,
+    "bbh_cot_zeroshot_movie_recommendation": 3.0,
+    "bbh_cot_zeroshot_multistep_arithmetic_two": 3.0,
+    "bbh_cot_zeroshot_navigate": 3.0,
+    "bbh_cot_zeroshot_object_counting": 3.0,
+    "bbh_cot_zeroshot_penguins_in_a_table": 3.0,
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": 3.0,
+    "bbh_cot_zeroshot_ruin_names": 3.0,
+    "bbh_cot_zeroshot_salient_translation_error_detection": 3.0,
+    "bbh_cot_zeroshot_snarks": 3.0,
+    "bbh_cot_zeroshot_sports_understanding": 3.0,
+    "bbh_cot_zeroshot_temporal_sequences": 3.0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": 3.0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": 3.0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": 3.0,
+    "bbh_cot_zeroshot_web_of_lies": 3.0,
+    "bbh_cot_zeroshot_word_sorting": 3.0
+  },
+  "n-shot": {
+    "bbh_cot_zeroshot_boolean_expressions": 0,
+    "bbh_cot_zeroshot_causal_judgement": 0,
+    "bbh_cot_zeroshot_date_understanding": 0,
+    "bbh_cot_zeroshot_disambiguation_qa": 0,
+    "bbh_cot_zeroshot_dyck_languages": 0,
+    "bbh_cot_zeroshot_formal_fallacies": 0,
+    "bbh_cot_zeroshot_geometric_shapes": 0,
+    "bbh_cot_zeroshot_hyperbaton": 0,
+    "bbh_cot_zeroshot_logical_deduction_five_objects": 0,
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": 0,
+    "bbh_cot_zeroshot_logical_deduction_three_objects": 0,
+    "bbh_cot_zeroshot_movie_recommendation": 0,
+    "bbh_cot_zeroshot_multistep_arithmetic_two": 0,
+    "bbh_cot_zeroshot_navigate": 0,
+    "bbh_cot_zeroshot_object_counting": 0,
+    "bbh_cot_zeroshot_penguins_in_a_table": 0,
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": 0,
+    "bbh_cot_zeroshot_ruin_names": 0,
+    "bbh_cot_zeroshot_salient_translation_error_detection": 0,
+    "bbh_cot_zeroshot_snarks": 0,
+    "bbh_cot_zeroshot_sports_understanding": 0,
+    "bbh_cot_zeroshot_temporal_sequences": 0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": 0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": 0,
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": 0,
+    "bbh_cot_zeroshot_web_of_lies": 0,
+    "bbh_cot_zeroshot_word_sorting": 0
+  },
+  "higher_is_better": {
+    "bbh_cot_zeroshot": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_boolean_expressions": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_causal_judgement": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_date_understanding": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_disambiguation_qa": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_dyck_languages": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_formal_fallacies": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_geometric_shapes": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_hyperbaton": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_logical_deduction_five_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_logical_deduction_three_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_movie_recommendation": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_multistep_arithmetic_two": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_navigate": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_object_counting": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_penguins_in_a_table": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_ruin_names": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_salient_translation_error_detection": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_snarks": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_sports_understanding": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_temporal_sequences": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_web_of_lies": {
+      "exact_match": true
+    },
+    "bbh_cot_zeroshot_word_sorting": {
+      "exact_match": true
+    }
+  },
+  "n-samples": {
+    "bbh_cot_zeroshot_boolean_expressions": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_causal_judgement": {
+      "original": 187,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_date_understanding": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_disambiguation_qa": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_dyck_languages": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_formal_fallacies": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_geometric_shapes": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_hyperbaton": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_logical_deduction_five_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_logical_deduction_three_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_movie_recommendation": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_multistep_arithmetic_two": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_navigate": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_object_counting": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_penguins_in_a_table": {
+      "original": 146,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_ruin_names": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_salient_translation_error_detection": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_snarks": {
+      "original": 178,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_sports_understanding": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_temporal_sequences": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_web_of_lies": {
+      "original": 250,
+      "effective": 50
+    },
+    "bbh_cot_zeroshot_word_sorting": {
+      "original": 250,
+      "effective": 50
+    }
+  },
+  "config": {
+    "model": "openai-chat-completions",
+    "model_args": {
+      "model": "mistral-small3.2",
+      "base_url": "https://api.regolo.ai/v1/chat/completions",
+      "tokenizer_backend": "huggingface",
+      "tokenizer": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "stream": false,
+      "max_tokens": 2048,
+      "temperature": 0,
+      "top_p": 1,
+      "trust_remote_code": true
+    },
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": "cuda:0",
+    "use_cache": null,
+    "limit": 50.0,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {},
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "git_hash": null,
+  "date": 1772275055.563355,
+  "pretty_env_info": "PyTorch version: 2.10.0+cu128\nIs debug build: False\nCUDA used to build PyTorch: 12.8\nROCM used to build PyTorch: N/A\n\nOS: Ubuntu 24.04.3 LTS (x86_64)\nGCC version: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nClang version: Could not collect\nCMake version: Could not collect\nLibc version: glibc-2.39\n\nPython version: 3.12.3 (main, Jan 22 2026, 20:57:42) [GCC 13.3.0] (64-bit runtime)\nPython platform: Linux-6.8.0-94-generic-x86_64-with-glibc2.39\nIs CUDA available: False\nCUDA runtime version: No CUDA\nCUDA_MODULE_LOADING set to: N/A\nGPU models and configuration: No CUDA\nNvidia driver version: No CUDA\ncuDNN version: No CUDA\nIs XPU available: False\nHIP runtime version: N/A\nMIOpen runtime version: N/A\nIs XNNPACK available: True\nCaching allocator config: N/A\n\nCPU:\nArchitecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               8\nOn-line CPU(s) list:                  0-7\nVendor ID:                            GenuineIntel\nModel name:                           Intel Xeon Processor (Icelake)\nCPU family:                           6\nModel:                                134\nThread(s) per core:                   1\nCore(s) per socket:                   1\nSocket(s):                            8\nStepping:                             0\nBogoMIPS:                             5599.99\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts mmx fxsr sse sse2 ss syscall nx pdpe1gb rdtscp lm constant_tsc pebs bts rep_good nopl xtopology cpuid tsc_known_freq pni pclmulqdq dtes64 vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves wbnoinvd arat vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid fsrm md_clear flush_l1d arch_capabilities\nVirtualization:                       VT-x\nHypervisor vendor:                    KVM\nVirtualization type:                  full\nL1d cache:                            256 KiB (8 instances)\nL1i cache:                            256 KiB (8 instances)\nL2 cache:                             32 MiB (8 instances)\nL3 cache:                             128 MiB (8 instances)\nNUMA node(s):                         1\nNUMA node0 CPU(s):                    0-7\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Mitigation; Clear CPU buffers; SMT Host state unknown\nVulnerability Reg file data sampling: Vulnerable: No microcode\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS Not affected; BHI SW loop, KVM SW loop\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Mitigation; TSX disabled\nVulnerability Vmscape:                Not affected\n\nVersions of relevant libraries:\n[pip3] mypy_extensions==1.1.0\n[pip3] numpy==2.4.2\n[pip3] nvidia-cublas-cu12==12.8.4.1\n[pip3] nvidia-cuda-cupti-cu12==12.8.90\n[pip3] nvidia-cuda-nvrtc-cu12==12.8.93\n[pip3] nvidia-cuda-runtime-cu12==12.8.90\n[pip3] nvidia-cudnn-cu12==9.10.2.21\n[pip3] nvidia-cufft-cu12==11.3.3.83\n[pip3] nvidia-curand-cu12==10.3.9.90\n[pip3] nvidia-cusolver-cu12==11.7.3.90\n[pip3] nvidia-cusparse-cu12==12.5.8.93\n[pip3] nvidia-cusparselt-cu12==0.7.1\n[pip3] nvidia-nccl-cu12==2.27.5\n[pip3] nvidia-nvjitlink-cu12==12.8.93\n[pip3] nvidia-nvtx-cu12==12.8.90\n[pip3] torch==2.10.0\n[pip3] triton==3.6.0\n[conda] Could not collect",
+  "transformers_version": "5.0.0",
+  "lm_eval_version": "0.4.11",
+  "upper_git_hash": null,
+  "tokenizer_pad_token": [
+    "<pad>",
+    "11"
+  ],
+  "tokenizer_eos_token": [
+    "</s>",
+    "2"
+  ],
+  "tokenizer_bos_token": [
+    "<s>",
+    "1"
+  ],
+  "eot_token_id": 2,
+  "max_length": 2047,
+  "task_hashes": {
+    "bbh_cot_zeroshot_boolean_expressions": "5fe045a1ac17bfeeb38b929fcccf5ecb8197aed04746bb67e5a716948cf68ce3",
+    "bbh_cot_zeroshot_causal_judgement": "e48c95d0a90820b0c7fb345bc0c1ba86e379b0371f847f23de9e7c93a68dc387",
+    "bbh_cot_zeroshot_date_understanding": "c297e40bf3a5ab61897f4ae6826a272fb96157589a0f539db807bcd621466fa3",
+    "bbh_cot_zeroshot_disambiguation_qa": "47157973cc264d8848fa0824e4210981194e1f42f0e965cc72eae8bf1d579705",
+    "bbh_cot_zeroshot_dyck_languages": "546e689e15113730b3892b602fa6d2689afe885adf888f949bbd2ccdfb610dae",
+    "bbh_cot_zeroshot_formal_fallacies": "46b95d63041e6f197cf880ebefea3525a03d93f5c6b68379bd8e959759a8aef7",
+    "bbh_cot_zeroshot_geometric_shapes": "709bcc9f96daec0f85ac9f4e925d7bb37fe2de6b330fca2b9b9837a2ed1bffeb",
+    "bbh_cot_zeroshot_hyperbaton": "4e6238eaea0c345febc2850b5ba2bb0c794f62c3070e433c6d7c7a7d2b7d9c56",
+    "bbh_cot_zeroshot_logical_deduction_five_objects": "83288d22e6c101ec1ca71baa9de20d17f70f8b0b8735e0873edddbbec7297bc3",
+    "bbh_cot_zeroshot_logical_deduction_seven_objects": "39de2f3e4ce1bcb9fe64cbc25180e1c5cb061a1657975719d8690b211fd207a6",
+    "bbh_cot_zeroshot_logical_deduction_three_objects": "e0c8b2d4192d34171b5e39f62cf3eab908c9c33d431835b8c61c3cfba7008cfd",
+    "bbh_cot_zeroshot_movie_recommendation": "a1e76ce065295c2bebfbe3728ae29e8a974e553ddfba4687bdb771ea0ad73422",
+    "bbh_cot_zeroshot_multistep_arithmetic_two": "66bdcbc6a371d82b831b27b9139cc956f14d5100b45fd7fde83047f181460e6e",
+    "bbh_cot_zeroshot_navigate": "859c418fcf4b08ac58791fa91f838005fb3fadabb3bc1a9876df87535e3e3f11",
+    "bbh_cot_zeroshot_object_counting": "21cab8a777dc98c750330676ef7f7f6d56d1bfb6ea25459e0400b95335bb32ee",
+    "bbh_cot_zeroshot_penguins_in_a_table": "092f092dbcf4ac803414dd30c10e58fa6ae2b47b9e6c6524bf40e23c103768c9",
+    "bbh_cot_zeroshot_reasoning_about_colored_objects": "2b5e1bdfd26b490e4e3a6dd41083ade1c9c2a06766d379a91c531573afbbb9b6",
+    "bbh_cot_zeroshot_ruin_names": "67629ad9745a8cec67ada8f718303236add8e5e707a3bd4543e56ed90cbb7b8d",
+    "bbh_cot_zeroshot_salient_translation_error_detection": "26e4fa5e0a9c8da95dd826ab181bf6499a726470d36cd94b4be433cf052f085d",
+    "bbh_cot_zeroshot_snarks": "2974305a04d698509eea1e054a2d1ad0cb2c630e148859b951347901badd76ac",
+    "bbh_cot_zeroshot_sports_understanding": "6caed4b169c4d9a49e5018eff49ae0745f3b497251865fc616856f4aac2e774d",
+    "bbh_cot_zeroshot_temporal_sequences": "a6f47ad546a68dd51896bb32f6ebac2f023b00337eece76dfb6ab52411481249",
+    "bbh_cot_zeroshot_tracking_shuffled_objects_five_objects": "6acc6f705a0d4e4172f85ddae20ce3916aac4a5b6f843a4cba1f80dcefd90fab",
+    "bbh_cot_zeroshot_tracking_shuffled_objects_seven_objects": "32fd9edd34ae25b3dcaf0d43af23822f721c8afb65334fadae8bc9580261c839",
+    "bbh_cot_zeroshot_tracking_shuffled_objects_three_objects": "b7b59228beadab6fe531cf072ce980c08d33179c4eb6e0bc2c82b558fd1d5f5d",
+    "bbh_cot_zeroshot_web_of_lies": "27337d1d0d5141ec539f7ba9368013ec8bcb5d6c19fba8133464fc258e43cd0c",
+    "bbh_cot_zeroshot_word_sorting": "03b47da57da7fc875e55131b262b6d4ba2c0f4ba8bece8cd84d6a6dda823b20e"
+  },
+  "model_source": "openai-chat-completions",
+  "model_name": "mistral-small3.2",
+  "model_name_sanitized": "mistral-small3.2",
+  "system_instruction": null,
+  "system_instruction_sha": null,
+  "fewshot_as_multiturn": true,
+  "chat_template": null,
+  "chat_template_sha": null,
+  "total_evaluation_time_seconds": "17234.888921078993"
+}

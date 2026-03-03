@@ -1,0 +1,335 @@
+{
+  "note": "Brick is a semantic router. It has no intrinsic per-token cost. Its actual cost equals the cost of the backend model it routes each request to. Since per-request routing decisions are not logged in the eval samples, we estimate cost as-if all requests were routed to each possible backend model.",
+  "currency": "EUR",
+  "backend_models_pricing": {
+    "gptoss120b": {
+      "display_name": "GPT-OSS-120B",
+      "input_per_1M": 1.0,
+      "output_per_1M": 4.2
+    },
+    "gptoss20b": {
+      "display_name": "GPT-OSS-20B",
+      "input_per_1M": 0.1,
+      "output_per_1M": 0.42
+    },
+    "llama70b": {
+      "display_name": "Llama-3.3-70B-Instruct",
+      "input_per_1M": 0.6,
+      "output_per_1M": 2.7
+    },
+    "mistral32": {
+      "display_name": "Mistral-Small-3.2",
+      "input_per_1M": 0.5,
+      "output_per_1M": 2.2
+    },
+    "qwen3_8b": {
+      "display_name": "Qwen3-8B",
+      "input_per_1M": 0.07,
+      "output_per_1M": 0.35
+    },
+    "qwen3coder": {
+      "display_name": "Qwen3-Coder-Next",
+      "input_per_1M": 0.5,
+      "output_per_1M": 2.0
+    }
+  },
+  "benchmarks": {
+    "arc_challenge": {
+      "brick_score": 0.0025597269624573,
+      "num_samples": 1172,
+      "input_tokens": 193728,
+      "output_tokens": 8657,
+      "total_tokens": 202385,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.230087
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.023009
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.139611
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.115909
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.016591
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.114178
+        }
+      }
+    },
+    "bbh": {
+      "brick_score": 0.3437037037037037,
+      "num_samples": 2700,
+      "input_tokens": 432682,
+      "output_tokens": 120692,
+      "total_tokens": 553374,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.939588
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.093959
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.585478
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.481863
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.07253
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.457725
+        }
+      }
+    },
+    "drop": {
+      "brick_score": 0.1773499999999999,
+      "num_samples": 200,
+      "input_tokens": 254131,
+      "output_tokens": 2839,
+      "total_tokens": 256970,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.266055
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.026605
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.160144
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.133311
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.018783
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.132743
+        }
+      }
+    },
+    "humaneval": {
+      "brick_score": 0.0,
+      "num_samples": 164,
+      "input_tokens": 54096,
+      "output_tokens": 17669,
+      "total_tokens": 71765,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.128306
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.012831
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.080164
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.06592
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.009971
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.062386
+        }
+      }
+    },
+    "ifeval": {
+      "brick_score": 0.7855822550831792,
+      "num_samples": 541,
+      "input_tokens": 43780,
+      "output_tokens": 213732,
+      "total_tokens": 257512,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.941454
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.094145
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.603344
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.4921
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.077871
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.449354
+        }
+      }
+    },
+    "mbpp": {
+      "brick_score": 0.752,
+      "num_samples": 500,
+      "input_tokens": 346534,
+      "output_tokens": 36201,
+      "total_tokens": 382735,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.498578
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.049858
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.305663
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.252909
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.036928
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.245669
+        }
+      }
+    },
+    "minerva_math": {
+      "brick_score": 0.1242857142857142,
+      "num_samples": 700,
+      "input_tokens": 534545,
+      "output_tokens": 34661,
+      "total_tokens": 569206,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.680121
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.068012
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.414312
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.343527
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.04955
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.336595
+        }
+      }
+    },
+    "mmlu_pro": {
+      "brick_score": 0.637260677466863,
+      "num_samples": 6790,
+      "input_tokens": 9403213,
+      "output_tokens": 821790,
+      "total_tokens": 10225003,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 12.854731
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 1.285473
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 7.860761
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 6.509544
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.945851
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 6.345186
+        }
+      }
+    },
+    "truthfulqa": {
+      "brick_score": 0.4700122399020808,
+      "num_samples": 817,
+      "input_tokens": 157523,
+      "output_tokens": 31971,
+      "total_tokens": 189494,
+      "cost_by_target_model": {
+        "gptoss120b": {
+          "display_name": "GPT-OSS-120B",
+          "estimated_cost_eur": 0.291801
+        },
+        "gptoss20b": {
+          "display_name": "GPT-OSS-20B",
+          "estimated_cost_eur": 0.02918
+        },
+        "llama70b": {
+          "display_name": "Llama-3.3-70B-Instruct",
+          "estimated_cost_eur": 0.180836
+        },
+        "mistral32": {
+          "display_name": "Mistral-Small-3.2",
+          "estimated_cost_eur": 0.149098
+        },
+        "qwen3_8b": {
+          "display_name": "Qwen3-8B",
+          "estimated_cost_eur": 0.022216
+        },
+        "qwen3coder": {
+          "display_name": "Qwen3-Coder-Next",
+          "estimated_cost_eur": 0.142703
+        }
+      }
+    }
+  }
+}

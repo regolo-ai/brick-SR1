@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/config"
+	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/headers"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/multimodal"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/observability/logging"
 )
@@ -72,7 +73,8 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			clientKey = resolveRegoloAPIKey(cfg)
 		}
 		result := s.buildRegoloForwardResultWithKey(rewrittenBody, cfg, req.Stream, clientKey)
-		s.forwardToBackend(w, r, result)
+		w.Header().Set(headers.VSRSelectedModel, selectedModel)
+		s.forwardToBackend(w, r, result, "brick")
 		return
 	}
 
@@ -129,7 +131,8 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			},
 			IsStreaming: req.Stream,
 		}
-		s.forwardToBackend(w, r, result)
+		w.Header().Set(headers.VSRSelectedModel, preprocessResult.DirectModel)
+		s.forwardToBackend(w, r, result, "brick")
 		return
 	}
 
@@ -144,11 +147,20 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	r.ContentLength = int64(len(pipelineBody))
 
 	// Run the standard routing pipeline
-	result, _, err := s.runPipeline(r)
+	result, reqCtx, err := s.runPipeline(r)
 	if err != nil {
 		logging.Errorf("Brick pipeline error: %v", err)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
 		return
+	}
+
+	// Expose selected model via response header and server log
+	if reqCtx != nil && reqCtx.VSRSelectedModel != "" {
+		w.Header().Set(headers.VSRSelectedModel, reqCtx.VSRSelectedModel)
+		logging.Infof("Brick: routed to model=%s decision=%s confidence=%.3f",
+			reqCtx.VSRSelectedModel,
+			reqCtx.VSRSelectedDecisionName,
+			reqCtx.VSRSelectedDecisionConfidence)
 	}
 
 	// Adapt vLLM-specific reasoning parameters (chat_template_kwargs) to
@@ -176,7 +188,16 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	// Always use buildRegoloForwardResult to get correct schema and auth header.
 	regoloResult := s.buildRegoloForwardResultWithKey(result.ForwardBody, cfg, req.Stream, apiKey)
 	regoloResult.ForwardHeaders = mergeMaps(regoloResult.ForwardHeaders, result.ForwardHeaders)
-	s.forwardToBackend(w, r, regoloResult)
+
+	// Log brick auth injection (the pipeline's authz warnings above are expected —
+	// brick injects the credential here, after the pipeline runs)
+	keyPrefix := apiKey
+	if len(keyPrefix) > 8 {
+		keyPrefix = keyPrefix[:8] + "..."
+	}
+	logging.Infof("Brick: injected auth for upstream forward (key: %s)", keyPrefix)
+
+	s.forwardToBackend(w, r, regoloResult, "brick")
 }
 
 // buildRegoloForwardResult creates a RoutingResult for forwarding to Regolo API.
