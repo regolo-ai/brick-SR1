@@ -1,0 +1,60 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4a90d9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3a7bc8', 'lineColor': '#5a6577', 'secondaryColor': '#f0f4f8', 'tertiaryColor': '#e8f0fe', 'background': '#ffffff', 'mainBkg': '#4a90d9', 'nodeBorder': '#3a7bc8', 'clusterBkg': '#f0f4f8', 'clusterBorder': '#d0d8e0'}}}%%
+graph TB
+    subgraph mode1["<b>Mode A: Envoy + ExtProc</b>"]
+        direction TB
+        C1["Client"]
+        E1["Envoy Proxy<br/><i>L7 load balancer</i>"]
+        EP1["ExtProc gRPC Filter<br/><i>external processing</i>"]
+        R1["OpenAIRouter<br/><i>shared core</i>"]
+        B1A["Backend A<br/><i>vLLM / TGI</i>"]
+        B1B["Backend B<br/><i>vLLM / TGI</i>"]
+        C1 --> E1
+        E1 <-->|"gRPC"| EP1
+        EP1 --> R1
+        E1 --> B1A
+        E1 --> B1B
+    end
+
+    subgraph mode2["<b>Mode B: Standalone MyModel Proxy</b>"]
+        direction TB
+        C2["Client"]
+        P2["HTTP Proxy Server<br/><i>:8000</i>"]
+        R2["OpenAIRouter<br/><i>shared core</i>"]
+        API2["API Server<br/><i>:8080</i>"]
+        REG["Regolo API<br/><i>api.regolo.ai</i>"]
+        C2 --> P2
+        P2 --> R2
+        R2 --> REG
+        C2 -.->|"config / admin"| API2
+    end
+
+    subgraph shared["<b>Shared OpenAIRouter Core</b>"]
+        direction LR
+        SIG["Signal<br/>Extraction"]
+        DEC["Decision<br/>Engine"]
+        PLG["Plugin<br/>Chain"]
+        SEL["Model<br/>Selection"]
+        SIG --> DEC --> PLG --> SEL
+    end
+
+    R1 -.->|"same engine"| shared
+    R2 -.->|"same engine"| shared
+
+    style mode1 fill:#f0f7ff,stroke:#4a90d9,stroke-width:2px
+    style mode2 fill:#f0fff0,stroke:#4CAF50,stroke-width:2px
+    style shared fill:#fff8f0,stroke:#FF9800,stroke-width:2px
+    style C1 fill:#6c757d,stroke:#495057,color:#fff
+    style C2 fill:#6c757d,stroke:#495057,color:#fff
+    style E1 fill:#7c4dff,stroke:#6200ea,color:#fff
+    style EP1 fill:#7c4dff,stroke:#6200ea,color:#fff
+    style P2 fill:#4CAF50,stroke:#388E3C,color:#fff
+    style API2 fill:#4CAF50,stroke:#388E3C,color:#fff
+    style R1 fill:#FF9800,stroke:#F57C00,color:#fff
+    style R2 fill:#FF9800,stroke:#F57C00,color:#fff
+    style REG fill:#2196F3,stroke:#1976D2,color:#fff
+    style B1A fill:#2196F3,stroke:#1976D2,color:#fff
+    style B1B fill:#2196F3,stroke:#1976D2,color:#fff
+    style SIG fill:#FF9800,stroke:#F57C00,color:#fff
+    style DEC fill:#FF9800,stroke:#F57C00,color:#fff
+    style PLG fill:#FF9800,stroke:#F57C00,color:#fff
+    style SEL fill:#FF9800,stroke:#F57C00,color:#fff

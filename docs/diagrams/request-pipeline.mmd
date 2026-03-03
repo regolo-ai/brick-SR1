@@ -1,0 +1,56 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4a90d9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3a7bc8', 'lineColor': '#5a6577', 'secondaryColor': '#f8f9fa', 'background': '#ffffff'}}}%%
+graph TD
+    REQ["<b>1. Incoming Request</b><br/>/v1/chat/completions"]
+    HDR["<b>2. Header Extraction</b><br/>Build RequestContext"]
+    RESP_API["<b>3. Response API Translation</b><br/>/v1/responses → /v1/chat/completions"]
+    PARSE["<b>4. Parse OpenAI Request</b><br/>model, messages, stream"]
+    SIG["<b>5. Signal Extraction</b><br/>11 signals evaluated"]
+    DEC["<b>6. Decision Evaluation</b><br/>AND/OR/NOT rule trees"]
+    JAIL["<b>7. Jailbreak Detection</b><br/>PromptGuard classifier"]
+    PII["<b>8. PII Detection</b><br/>email, SSN, phone, etc."]
+    RATE["<b>9. Rate Limiting</b><br/>per-user RPM/TPM"]
+    CACHE["<b>10. Semantic Cache</b><br/>embedding similarity lookup"]
+    RAG["<b>11. RAG Retrieval</b><br/>Milvus / MCP / external"]
+    MOD["<b>12. Modality Routing</b><br/>text / image / audio"]
+    MEM["<b>13. Memory Retrieval</b><br/>conversation history"]
+    SEL["<b>14. Model Selection</b><br/>12 algorithms"]
+    FWD["<b>15. Forward to Backend</b><br/>selected LLM endpoint"]
+    RES["<b>16. Response Processing</b><br/>hallucination / cache write / memory store"]
+
+    BLOCK_J["403 Blocked"]
+    BLOCK_P["403 PII Denied"]
+    BLOCK_R["429 Rate Limited"]
+    CACHE_HIT["Cache Hit Response"]
+
+    REQ --> HDR --> RESP_API --> PARSE --> SIG --> DEC
+    DEC --> JAIL
+    JAIL -->|"safe"| PII
+    JAIL -->|"detected"| BLOCK_J
+    PII -->|"clean"| RATE
+    PII -->|"violates policy"| BLOCK_P
+    RATE -->|"within limits"| CACHE
+    RATE -->|"exceeded"| BLOCK_R
+    CACHE -->|"miss"| RAG
+    CACHE -->|"hit"| CACHE_HIT
+    RAG --> MOD --> MEM --> SEL --> FWD --> RES
+
+    style REQ fill:#2196F3,stroke:#1976D2,color:#fff
+    style HDR fill:#42A5F5,stroke:#1E88E5,color:#fff
+    style RESP_API fill:#42A5F5,stroke:#1E88E5,color:#fff
+    style PARSE fill:#42A5F5,stroke:#1E88E5,color:#fff
+    style SIG fill:#FF9800,stroke:#F57C00,color:#fff
+    style DEC fill:#FF9800,stroke:#F57C00,color:#fff
+    style JAIL fill:#f44336,stroke:#d32f2f,color:#fff
+    style PII fill:#f44336,stroke:#d32f2f,color:#fff
+    style RATE fill:#f44336,stroke:#d32f2f,color:#fff
+    style CACHE fill:#9C27B0,stroke:#7B1FA2,color:#fff
+    style RAG fill:#4CAF50,stroke:#388E3C,color:#fff
+    style MOD fill:#4CAF50,stroke:#388E3C,color:#fff
+    style MEM fill:#4CAF50,stroke:#388E3C,color:#fff
+    style SEL fill:#FF9800,stroke:#F57C00,color:#fff
+    style FWD fill:#2196F3,stroke:#1976D2,color:#fff
+    style RES fill:#607D8B,stroke:#455A64,color:#fff
+    style BLOCK_J fill:#b71c1c,stroke:#7f0000,color:#fff
+    style BLOCK_P fill:#b71c1c,stroke:#7f0000,color:#fff
+    style BLOCK_R fill:#b71c1c,stroke:#7f0000,color:#fff
+    style CACHE_HIT fill:#7B1FA2,stroke:#4A148C,color:#fff
