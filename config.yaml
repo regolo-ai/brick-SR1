@@ -1,6 +1,10 @@
 # ─── Brick Configuration ─────────────────────────────────────
 # Virtual multimodal routing model that exposes a single "brick" endpoint.
 # Detects modality (text/audio/image), preprocesses, and routes to 8 models on Regolo API.
+#
+# Routing pipeline: Keyword (high pri) > Domain classifier (low pri) > default_model fallback
+# Keywords are bilingual EN+IT; domain classification via ModernBERT (MMLU 14-cat).
+# No embedding rules — Brick uses keyword + domain only for fast startup.
 
 # Virtual model identity — what clients see when calling /v1/models
 model:
@@ -29,7 +33,7 @@ brick:
 server_port: 8000
 
 # Auto model name — used internally when brick rewrites "brick" for the pipeline
-auto_model_name: "MoM"
+auto_model_name: "brick"
 
 # ─── Backend Models ─────────────────────────────────────────
 # 8 models, all served by Regolo API via a single provider profile
@@ -78,208 +82,341 @@ reasoning_families:
 
 default_reasoning_effort: "medium"
 
-# ─── Signals (Keyword Rules) ─────────────────────────────────
+# ─── Domain Classifier (ModernBERT) ─────────────────────────
+# Runs locally in the container via Rust/Candle. Model (~400MB) is downloaded
+# automatically from HuggingFace on first startup. Produces domain signals
+# consumed by type: "domain" conditions in decisions.
+classifier:
+  category_model:
+    model_id: "models/mom-domain-classifier"
+    use_modernbert: true
+    threshold: 0.6
+    use_cpu: true
+    category_mapping_path: "models/mom-domain-classifier/category_mapping.json"
+
+# ─── Signals: Keyword Rules (EN + IT) ───────────────────────
+# 8 bilingual rule groups. The router does case-insensitive substring matching.
+# English keywords ensure benchmarks (MMLU, IFEval, GPQA) trigger the right decision.
 keyword_rules:
-  - name: "greeting_keywords"
+  - name: "greeting_simple"
     operator: "OR"
     keywords:
-      - "ciao"
-      - "come stai"
-      - "grazie"
+      - "hello"
+      - "hi"
+      - "thanks"
+      - "thank you"
       - "ok"
+      - "sure"
+      - "yes"
+      - "no"
+      - "ciao"
+      - "grazie"
       - "va bene"
     case_sensitive: false
 
-  - name: "easy_keywords"
+  - name: "easy_questions"
     operator: "OR"
     keywords:
-      - "quanto è"
+      - "what is"
+      - "who is"
+      - "where is"
+      - "when"
+      - "how to"
+      - "explain"
+      - "tell me"
+      - "define"
       - "cos'è"
       - "chi è"
       - "dove è"
-      - "quando è"
-      - "cosa è"
-      - "come si fa"
       - "spiega"
       - "racconta"
-    case_sensitive: false
-
-  - name: "creative_keywords"
-    operator: "OR"
-    keywords:
-      - "racconta"
-      - "storia"
-      - "scrivi un racconto"
-      - "narrativa"
-      - "personaggio"
-      - "trama"
-      - "creative writing"
-      - "poesia"
-      - "dialogo"
-      - "sceneggiatura"
-      - "fanta"
     case_sensitive: false
 
   - name: "code_keywords"
     operator: "OR"
     keywords:
+      - "code"
+      - "function"
+      - "implement"
+      - "debug"
+      - "algorithm"
+      - "python"
+      - "javascript"
+      - "class"
+      - "refactor"
+      - "compile"
+      - "API"
+      - "script"
       - "codice"
       - "programma"
       - "funzione"
-      - "script"
-      - "debug"
       - "implementa"
-      - "python"
-      - "javascript"
-      - "java"
-      - "c++"
-      - "refactor"
-      - "API"
-      - "algoritmo"
-      - "class"
-      - "metodo"
-      - "reag"
-      - "vue"
-      - "svelte"
     case_sensitive: false
 
-  - name: "medium_keywords"
+  - name: "math_keywords"
     operator: "OR"
     keywords:
+      - "calculate"
+      - "equation"
+      - "solve"
+      - "proof"
+      - "theorem"
+      - "integral"
+      - "derivative"
+      - "matrix"
+      - "calculus"
+      - "calcola"
+      - "equazione"
+      - "risolvi"
+      - "dimostra"
+      - "derivata"
+      - "integrale"
+      - "teorema"
+    case_sensitive: false
+
+  - name: "creative_keywords"
+    operator: "OR"
+    keywords:
+      - "story"
+      - "poem"
+      - "write a"
+      - "creative"
+      - "narrative"
+      - "character"
+      - "dialogue"
+      - "fiction"
+      - "racconta"
+      - "storia"
+      - "poesia"
+      - "narrativa"
+      - "personaggio"
+    case_sensitive: false
+
+  - name: "analysis_keywords"
+    operator: "OR"
+    keywords:
+      - "analyze"
+      - "compare"
+      - "evaluate"
+      - "difference between"
+      - "opinion"
+      - "advice"
+      - "summarize"
       - "analizza"
       - "confronta"
       - "valuta"
       - "differenza tra"
-      - "spiega"
-      - "opinione"
       - "consiglio"
-      - "aiuto"
     case_sensitive: false
 
-  - name: "complex_keywords"
+  - name: "reasoning_keywords"
     operator: "OR"
     keywords:
-      - "dimostra"
+      - "prove"
+      - "deduce"
+      - "reason"
+      - "chain of thought"
+      - "think deeply"
+      - "hypothesis"
       - "prova che"
       - "deduzione"
       - "ragiona"
-      - "calcola"
-      - "risolvi"
-      - "derivata"
-      - "integrale"
-      - "equazione"
-      - "sistema"
-      - "dimostri"
-      - "teorema"
-      - "lemm"
-    case_sensitive: false
-
-  - name: "expert_keywords"
-    operator: "OR"
-    keywords:
-      - "dimostra"
-      - "prova che"
-      - "deduzione"
-      - "reasoning"
-      - "chain of thought"
-      - "step by step"
-      - "pensa profondamente"
       - "teoria"
       - "ipotesi"
-      - "congettura"
-      - "demo"
     case_sensitive: false
 
-# ─── Categories ──────────────────────────────────────────────
-categories:
-  - name: "business"
-    description: "Business and management"
-  - name: "computer_science"
-    description: "Computer science and programming"
-  - name: "math"
-    description: "Mathematics"
-  - name: "humanities"
-    description: "Humanities and arts"
-  - name: "other"
-    description: "General knowledge"
+  - name: "formatting_keywords"
+    operator: "OR"
+    keywords:
+      - "format"
+      - "capitalize"
+      - "lowercase"
+      - "paragraph"
+      - "bullet"
+      - "markdown"
+      - "postscript"
+      - "P.S."
+    case_sensitive: false
 
-# ─── Decisions (8 routing rules) ─────────────────────────────
+# ─── Language Rules ──────────────────────────────────────────
+language_rules:
+  - name: "en"
+    description: "English"
+  - name: "it"
+    description: "Italian"
+  - name: "zh"
+    description: "Chinese (Simplified or Traditional)"
+
+# ─── Context Rules ───────────────────────────────────────────
+context_rules:
+  - name: "short_context"
+    min_tokens: "0"
+    max_tokens: "1K"
+    description: "Brief queries (0-1000 tokens)"
+  - name: "long_context"
+    min_tokens: "4K"
+    max_tokens: "128K"
+    description: "Long documents (4000-128000 tokens)"
+
+# ─── Categories (MMLU 14-class) ─────────────────────────────
+# Maps domain classifier output to named categories used in decisions.
+categories:
+  - name: computer_science
+    description: "Computer science and programming"
+    mmlu_categories: ["computer_science"]
+  - name: math
+    description: "Mathematics"
+    mmlu_categories: ["math"]
+  - name: physics
+    description: "Physics"
+    mmlu_categories: ["physics"]
+  - name: engineering
+    description: "Engineering"
+    mmlu_categories: ["engineering"]
+  - name: chemistry
+    description: "Chemistry"
+    mmlu_categories: ["chemistry"]
+  - name: biology
+    description: "Biology and life sciences"
+    mmlu_categories: ["biology"]
+  - name: health
+    description: "Health and medicine"
+    mmlu_categories: ["health"]
+  - name: economics
+    description: "Economics and finance"
+    mmlu_categories: ["economics"]
+  - name: business
+    description: "Business and management"
+    mmlu_categories: ["business"]
+  - name: law
+    description: "Law and legal topics"
+    mmlu_categories: ["law"]
+  - name: psychology
+    description: "Psychology"
+    mmlu_categories: ["psychology"]
+  - name: history
+    description: "History and culture"
+    mmlu_categories: ["history"]
+  - name: philosophy
+    description: "Philosophy and ethics"
+    mmlu_categories: ["philosophy"]
+  - name: other
+    description: "General / miscellaneous"
+    mmlu_categories: ["other"]
+
+# ─── Decisions ───────────────────────────────────────────────
+# Priority cascade: Keyword (200-130) > Domain (100-50) > default_model (1)
+#
+# Keyword decisions fire on explicit intent words in the query.
+# Domain decisions fire on ModernBERT classification when no keyword matched.
+# default_model is the hardcoded safety net if nothing fires.
 strategy: "priority"
 
 decisions:
-  - name: "simple-chat"
-    description: "Query semplici"
-    priority: 100
+  # ═══ KEYWORD-BASED DECISIONS (high priority) ═══════════════
+
+  - name: "simple_chat"
+    description: "Greetings and simple acknowledgments"
+    priority: 200
     rules:
       operator: "OR"
       conditions:
         - type: "keyword"
-          name: "greeting_keywords"
-        - type: "keyword"
-          name: "easy_keywords"
+          name: "greeting_simple"
     modelRefs:
       - model: "Qwen3-8B"
         use_reasoning: false
 
-  - name: "easy-questions"
-    description: "Domande semplici"
-    priority: 90
+  - name: "easy_questions"
+    description: "Simple factual questions"
+    priority: 190
     rules:
       operator: "OR"
       conditions:
         - type: "keyword"
-          name: "easy_keywords"
-        - type: "domain"
-          name: "other"
+          name: "easy_questions"
     modelRefs:
       - model: "Qwen3-8B"
         use_reasoning: false
 
-  - name: "storytelling-creative"
-    description: "Creative writing"
-    priority: 85
+  - name: "formatting_tasks"
+    description: "Text formatting and structural edits"
+    priority: 180
     rules:
       operator: "OR"
       conditions:
-        - type: "domain"
-          name: "humanities"
         - type: "keyword"
-          name: "creative_keywords"
+          name: "formatting_keywords"
     modelRefs:
-      - model: "Llama-3.3-70B-Instruct"
+      - model: "gpt-oss-120b"
         use_reasoning: false
 
-  - name: "coding-tasks"
-    description: "Programming"
-    priority: 80
+  - name: "coding_tasks"
+    description: "Programming and code generation"
+    priority: 170
     rules:
       operator: "OR"
       conditions:
-        - type: "domain"
-          name: "computer_science"
         - type: "keyword"
           name: "code_keywords"
     modelRefs:
       - model: "qwen3-coder-next"
         use_reasoning: false
 
-  - name: "medium-complexity"
-    description: "Query medie"
-    priority: 70
+  - name: "math_reasoning"
+    description: "Math problems requiring step-by-step reasoning"
+    priority: 160
     rules:
       operator: "OR"
       conditions:
-        - type: "domain"
-          name: "business"
         - type: "keyword"
-          name: "medium_keywords"
+          name: "math_keywords"
     modelRefs:
-      - model: "gpt-oss-20b"
+      - model: "gpt-oss-120b"
+        use_reasoning: true
+
+  - name: "creative_writing"
+    description: "Stories, poems, and creative content"
+    priority: 150
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "keyword"
+          name: "creative_keywords"
+    modelRefs:
+      - model: "Llama-3.3-70B-Instruct"
         use_reasoning: false
 
-  - name: "complex-reasoning"
-    description: "Query complesse"
-    priority: 50
+  - name: "deep_reasoning"
+    description: "Complex reasoning and logical deduction"
+    priority: 140
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "keyword"
+          name: "reasoning_keywords"
+    modelRefs:
+      - model: "gpt-oss-120b"
+        use_reasoning: true
+
+  - name: "analysis_medium"
+    description: "Analysis, comparison, and evaluation tasks"
+    priority: 130
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "keyword"
+          name: "analysis_keywords"
+    modelRefs:
+      - model: "mistral-small-3.2"
+        use_reasoning: false
+
+  # ═══ DOMAIN-BASED DECISIONS (lower priority) ═══════════════
+  # Fire when no keyword matched but ModernBERT classifies the domain.
+
+  - name: "domain_stem"
+    description: "STEM domains — math, CS, physics, engineering, chemistry"
+    priority: 100
     rules:
       operator: "OR"
       conditions:
@@ -287,29 +424,65 @@ decisions:
           name: "math"
         - type: "domain"
           name: "computer_science"
-        - type: "keyword"
-          name: "complex_keywords"
+        - type: "domain"
+          name: "physics"
+        - type: "domain"
+          name: "engineering"
+        - type: "domain"
+          name: "chemistry"
     modelRefs:
       - model: "gpt-oss-120b"
         use_reasoning: true
 
-  - name: "expert-reasoning"
-    description: "Reasoning profondo"
-    priority: 40
+  - name: "domain_humanities"
+    description: "Humanities — history, philosophy, law"
+    priority: 90
     rules:
       operator: "OR"
       conditions:
         - type: "domain"
-          name: "math"
-        - type: "keyword"
-          name: "expert_keywords"
+          name: "history"
+        - type: "domain"
+          name: "philosophy"
+        - type: "domain"
+          name: "law"
     modelRefs:
-      - model: "gpt-oss-120b"
-        use_reasoning: true
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
 
-  - name: "default-fallback"
-    description: "Fallback"
-    priority: 1
+  - name: "domain_business"
+    description: "Business and economics"
+    priority: 80
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "business"
+        - type: "domain"
+          name: "economics"
+    modelRefs:
+      - model: "mistral-small-3.2"
+        use_reasoning: false
+
+  - name: "domain_science"
+    description: "Life sciences — biology, health, psychology"
+    priority: 70
+    rules:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "biology"
+        - type: "domain"
+          name: "health"
+        - type: "domain"
+          name: "psychology"
+    modelRefs:
+      - model: "mistral-small-3.2"
+        use_reasoning: false
+
+  - name: "domain_general"
+    description: "General/miscellaneous domain"
+    priority: 50
     rules:
       operator: "OR"
       conditions:
