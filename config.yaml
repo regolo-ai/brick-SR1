@@ -2,9 +2,9 @@
 # Virtual multimodal routing model that exposes a single "brick" endpoint.
 # Detects modality (text/audio/image), preprocesses, and routes to 8 models on Regolo API.
 #
-# Routing pipeline: Keyword (high pri) > Domain classifier (low pri) > default_model fallback
+# Routing pipeline: Keyword (high pri) > Complexity signal (mid) > Domain classifier (low) > default_model
 # Keywords are bilingual EN+IT; domain classification via ModernBERT (MMLU 14-cat).
-# No embedding rules — Brick uses keyword + domain only for fast startup.
+# Complexity signal via Qwen3-Embedding-0.6B cosine similarity (50-100ms).
 
 # Virtual model identity — what clients see when calling /v1/models
 model:
@@ -82,6 +82,16 @@ reasoning_families:
 
 default_reasoning_effort: "medium"
 
+# ─── Embedding Models (Qwen3-Embedding for Complexity Signal) ─
+embedding_models:
+  qwen3_model_path: "models/mom-embedding-pro"
+  use_cpu: true
+  hnsw_config:
+    model_type: "qwen3"
+    preload_embeddings: true
+    enable_soft_matching: true
+    min_score_threshold: "0.5"
+
 # ─── Domain Classifier (ModernBERT) ─────────────────────────
 # Runs locally in the container via Rust/Candle. Model (~400MB) is downloaded
 # automatically from HuggingFace on first startup. Produces domain signals
@@ -95,8 +105,8 @@ classifier:
     category_mapping_path: "models/mom-domain-classifier/category_mapping.json"
 
 # ─── Signals: Keyword Rules (EN + IT) ───────────────────────
-# 8 bilingual rule groups. The router does case-insensitive substring matching.
-# English keywords ensure benchmarks (MMLU, IFEval, GPQA) trigger the right decision.
+# 7 bilingual rule groups. The router does case-insensitive word-boundary matching.
+# No "easy_questions" rule — generic words (what, how, when) misroute hard queries to small models.
 keyword_rules:
   - name: "greeting_simple"
     operator: "OR"
@@ -114,29 +124,10 @@ keyword_rules:
       - "va bene"
     case_sensitive: false
 
-  - name: "easy_questions"
-    operator: "OR"
-    keywords:
-      - "what is"
-      - "who is"
-      - "where is"
-      - "when"
-      - "how to"
-      - "explain"
-      - "tell me"
-      - "define"
-      - "cos'è"
-      - "chi è"
-      - "dove è"
-      - "spiega"
-      - "racconta"
-    case_sensitive: false
-
   - name: "code_keywords"
     operator: "OR"
     keywords:
       - "code"
-      - "function"
       - "implement"
       - "debug"
       - "algorithm"
@@ -165,6 +156,7 @@ keyword_rules:
       - "derivative"
       - "matrix"
       - "calculus"
+      - "function"
       - "calcola"
       - "equazione"
       - "risolvi"
@@ -212,7 +204,6 @@ keyword_rules:
   - name: "reasoning_keywords"
     operator: "OR"
     keywords:
-      - "prove"
       - "deduce"
       - "reason"
       - "chain of thought"
@@ -237,6 +228,87 @@ keyword_rules:
       - "postscript"
       - "P.S."
     case_sensitive: false
+
+# ─── Complexity Rules (Embedding-based) ──────────────────────
+# Uses cosine similarity between query embedding and exemplar embeddings.
+# signal = max_hard_sim - max_easy_sim; threshold determines classification.
+complexity_rules:
+  - name: "reasoning-complexity"
+    description: "Classify reasoning and problem-solving tasks"
+    threshold: 0.3
+    hard:
+      candidates:
+        # Analytical reasoning
+        - "Analyze the geopolitical implications of renewable energy adoption"
+        - "Evaluate the ethical considerations of AI in healthcare decision-making"
+        - "Compare and contrast the philosophical frameworks of Kant and Hegel"
+        - "Propose solutions for traffic congestion in urban environments"
+        # Science & math reasoning
+        - "Explain quantum entanglement and its applications in cryptography"
+        - "Derive the Navier-Stokes equations from first principles"
+        - "Prove that there are infinitely many prime numbers"
+        - "Explain the thermodynamic basis of entropy in information theory"
+        # Multi-step logic
+        - "Design a multi-stage marketing strategy for a new product launch"
+        - "Evaluate the long-term economic impact of universal basic income"
+        - "Analyze the trade-offs between microservices and monolithic architecture"
+        - "Discuss how game theory applies to international climate negotiations"
+    easy:
+      candidates:
+        # Factual recall
+        - "What is the capital of France?"
+        - "How many days are in a week?"
+        - "What color is the sky on a clear day?"
+        - "Name three common pets"
+        - "What is 5 + 3?"
+        # Simple definitions
+        - "What does HTML stand for?"
+        - "Who painted the Mona Lisa?"
+        - "What is the largest planet in our solar system?"
+        - "How many continents are there?"
+        - "What language is spoken in Brazil?"
+        # Simple tasks
+        - "Say hello in Spanish"
+        - "List the days of the week"
+
+  - name: "code-complexity"
+    description: "Classify coding tasks by complexity"
+    threshold: 0.3
+    hard:
+      candidates:
+        # Systems programming
+        - "Implement a distributed lock manager with leader election"
+        - "Design a database migration system with rollback support"
+        - "Create a compiler optimization pass for loop unrolling"
+        - "Build a graph algorithm for strongly connected components"
+        - "Develop a custom memory allocator with fragmentation handling"
+        # Architecture & design
+        - "Implement a concurrent garbage collector"
+        - "Build a consensus algorithm for a distributed system"
+        - "Design an event-driven architecture with CQRS and event sourcing"
+        - "Implement a B-tree with concurrent read-write support"
+        - "Create a rate limiter with sliding window and distributed state"
+    easy:
+      candidates:
+        # Basic tasks
+        - "Write a function to reverse a string"
+        - "Create a class to represent a rectangle"
+        - "Implement a simple counter with increment/decrement"
+        - "Write a function to check if a number is even"
+        - "Create a basic TODO list with add/remove operations"
+        # Trivial snippets
+        - "Write a for loop that prints numbers 1 to 10"
+        - "Create a hello world program"
+        - "Sort a list of numbers"
+        - "Write a function that returns the maximum of two numbers"
+        - "Convert a string to uppercase"
+    composer:
+      operator: "OR"
+      conditions:
+        - type: "domain"
+          name: "computer_science"
+        - type: "keyword"
+          name: "code_keywords"
 
 # ─── Language Rules ──────────────────────────────────────────
 language_rules:
@@ -327,18 +399,6 @@ decisions:
       - model: "qwen3-8b"
         use_reasoning: false
 
-  - name: "easy_questions"
-    description: "Simple factual questions"
-    priority: 190
-    rules:
-      operator: "OR"
-      conditions:
-        - type: "keyword"
-          name: "easy_questions"
-    modelRefs:
-      - model: "qwen3-8b"
-        use_reasoning: false
-
   - name: "formatting_tasks"
     description: "Text formatting and structural edits"
     priority: 180
@@ -411,6 +471,21 @@ decisions:
       - model: "mistral-small3.2"
         use_reasoning: false
 
+  # ═══ COMPLEXITY-BASED DECISIONS ════════════════════════════
+  # Fire on embedding-based complexity signal from Qwen3-Embedding.
+
+  - name: "easy_code"
+    description: "Simple coding tasks detected by complexity signal"
+    priority: 115
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "code-complexity:easy"
+    modelRefs:
+      - model: "qwen3-8b"
+        use_reasoning: false
+
   # ═══ DOMAIN-BASED DECISIONS (lower priority) ═══════════════
   # Fire when no keyword matched but ModernBERT classifies the domain.
 
@@ -480,6 +555,20 @@ decisions:
       - model: "mistral-small3.2"
         use_reasoning: false
 
+  - name: "easy_general"
+    description: "Easy general queries detected by complexity signal"
+    priority: 55
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "reasoning-complexity:easy"
+        - type: "domain"
+          name: "other"
+    modelRefs:
+      - model: "qwen3-8b"
+        use_reasoning: false
+
   - name: "domain_general"
     description: "General/miscellaneous domain"
     priority: 50
@@ -489,5 +578,5 @@ decisions:
         - type: "domain"
           name: "other"
     modelRefs:
-      - model: "gpt-oss-20b"
-        use_reasoning: false
+      - model: "gpt-oss-120b"
+        use_reasoning: true
