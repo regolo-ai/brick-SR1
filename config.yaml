@@ -48,7 +48,7 @@ vllm_endpoints:
     provider_profile: "regolo"
     weight: 1
 
-default_model: "gpt-oss-120b"
+default_model: "mistral-small3.2"
 
 model_config:
   qwen3-8b:
@@ -408,8 +408,15 @@ decisions:
         - type: "keyword"
           name: "formatting_keywords"
     modelRefs:
-      - model: "gpt-oss-120b"
+      - model: "mistral-small3.2"
         use_reasoning: false
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   - name: "coding_tasks"
     description: "Programming and code generation"
@@ -434,6 +441,13 @@ decisions:
     modelRefs:
       - model: "gpt-oss-120b"
         use_reasoning: true
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: true
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   - name: "creative_writing"
     description: "Stories, poems, and creative content"
@@ -458,6 +472,14 @@ decisions:
     modelRefs:
       - model: "gpt-oss-120b"
         use_reasoning: true
+        reasoning_effort: "high"
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: true
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   - name: "analysis_medium"
     description: "Analysis, comparison, and evaluation tasks"
@@ -470,6 +492,13 @@ decisions:
     modelRefs:
       - model: "mistral-small3.2"
         use_reasoning: false
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   # ═══ COMPLEXITY-BASED DECISIONS ════════════════════════════
   # Fire on embedding-based complexity signal from Qwen3-Embedding.
@@ -508,6 +537,13 @@ decisions:
     modelRefs:
       - model: "gpt-oss-120b"
         use_reasoning: true
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: true
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   - name: "domain_humanities"
     description: "Humanities — history, philosophy, law"
@@ -554,6 +590,13 @@ decisions:
     modelRefs:
       - model: "mistral-small3.2"
         use_reasoning: false
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
 
   - name: "easy_general"
     description: "Easy general queries detected by complexity signal"
@@ -578,5 +621,14 @@ decisions:
         - type: "domain"
           name: "other"
     modelRefs:
+      - model: "mistral-small3.2"
+        use_reasoning: false
+      - model: "Llama-3.3-70B-Instruct"
+        use_reasoning: false
       - model: "gpt-oss-120b"
-        use_reasoning: true
+        use_reasoning: false
+    algorithm:
+      type: "confidence"
+      confidence:
+        confidence_method: "margin"
+        threshold: 0.5
