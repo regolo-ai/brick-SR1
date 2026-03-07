@@ -397,6 +397,21 @@ phase3() {
 }
 
 ##############################################################################
+# Phase 4 — Custom brick_general test (200 questions, full)
+##############################################################################
+
+phase4() {
+    echo ""
+    echo "################################################################"
+    echo "# PHASE 4 — Custom brick_general test (200 questions, full)"
+    echo "################################################################"
+
+    echo ""
+    echo "=== Brick General (0-shot, 200 questions, 5 categories) ==="
+    run_eval "brick_general" "brick_general" 256
+}
+
+##############################################################################
 # Main
 ##############################################################################
 
@@ -415,10 +430,12 @@ case "${PHASE}" in
     1)   phase1 ;;
     2)   phase2 ;;
     3)   phase3 ;;
+    4)   phase4 ;;
     all)
         phase1
         phase2
         phase3
+        phase4
         ;;
     *)
         echo "ERROR: Invalid phase '${PHASE}'. Use 1, 2, 3, or all."

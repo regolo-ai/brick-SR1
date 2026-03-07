@@ -23,11 +23,12 @@ declare -A TASK_TO_DIR=(
     [minerva_math]="minerva_math"
     [humaneval]="humaneval"
     [mbpp]="mbpp"
+    [brick_general]="brick_general"
 )
 
 # Ordered list (bash associative arrays don't preserve order)
-BENCHMARKS=(mmlu_pro arc_challenge_chat_nopfx truthfulqa_gen ifeval bbh_cot_zeroshot drop minerva_math humaneval mbpp)
-DISPLAY_NAMES=(mmlu_pro arc_challenge truthfulqa ifeval bbh drop minerva_math humaneval mbpp)
+BENCHMARKS=(mmlu_pro arc_challenge_chat_nopfx truthfulqa_gen ifeval bbh_cot_zeroshot drop minerva_math humaneval mbpp brick_general)
+DISPLAY_NAMES=(mmlu_pro arc_challenge truthfulqa ifeval bbh drop minerva_math humaneval mbpp brick_general)
 
 # Colors
 GREEN='\033[0;32m'
