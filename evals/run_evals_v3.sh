@@ -131,7 +131,7 @@ TOTAL_FAIL=0
 get_system_instruction() {
     local task=$1
     case "${task}" in
-        arc_challenge*|mmlu_pro*)
+        arc_challenge*|mmlu_pro*|brick_general*)
             echo "For multiple choice questions, end your response with \"the answer is (X)\" where X is the letter."
             ;;
         bbh_cot_zeroshot*)
@@ -316,10 +316,10 @@ phase1() {
     echo "################################################################"
 
     echo ""
-    echo "=== MMLU-Pro (5-shot, limit=125) ==="
+    echo "=== MMLU-Pro (5-shot, limit=29/subtask ~406 total) ==="
     run_eval "mmlu_pro" "mmlu_pro" 2048 \
         --num_fewshot 5 \
-        --limit 125 \
+        --limit 29 \
         --fewshot_as_multiturn True
 
     echo ""
@@ -397,6 +397,21 @@ phase3() {
 }
 
 ##############################################################################
+# Phase 4 — Custom brick_general test (200 questions, full)
+##############################################################################
+
+phase4() {
+    echo ""
+    echo "################################################################"
+    echo "# PHASE 4 — Custom brick_general test (200 questions, full)"
+    echo "################################################################"
+
+    echo ""
+    echo "=== Brick General (0-shot, 200 questions, 5 categories) ==="
+    run_eval "brick_general" "brick_general" 1024
+}
+
+##############################################################################
 # Main
 ##############################################################################
 
@@ -415,10 +430,12 @@ case "${PHASE}" in
     1)   phase1 ;;
     2)   phase2 ;;
     3)   phase3 ;;
+    4)   phase4 ;;
     all)
         phase1
         phase2
         phase3
+        phase4
         ;;
     *)
         echo "ERROR: Invalid phase '${PHASE}'. Use 1, 2, 3, or all."

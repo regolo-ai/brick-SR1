@@ -25,7 +25,7 @@ brick:
   stt_endpoint: "https://api.regolo.ai/v1/audio/transcriptions"
   ocr_model: "deepseek-ocr"
   ocr_endpoint: "https://api.regolo.ai/v1/chat/completions"
-  vision_model: "qwen3-vl-32b"
+  vision_model: "qwen3.5-122b"
   vision_endpoint: "https://api.regolo.ai/v1/chat/completions"
   ocr_min_text_length: 10
 
@@ -138,6 +138,7 @@ keyword_rules:
       - "compile"
       - "API"
       - "script"
+      - "def"
       - "codice"
       - "programma"
       - "funzione"
@@ -156,7 +157,6 @@ keyword_rules:
       - "derivative"
       - "matrix"
       - "calculus"
-      - "function"
       - "calcola"
       - "equazione"
       - "risolvi"
@@ -232,76 +232,357 @@ keyword_rules:
 # ─── Complexity Rules (Embedding-based) ──────────────────────
 # Uses cosine similarity between query embedding and exemplar embeddings.
 # signal = max_hard_sim - max_easy_sim; threshold determines classification.
+# EXPANDED CANDIDATES: 100+ examples per rule for better semantic coverage.
 complexity_rules:
   - name: "reasoning-complexity"
     description: "Classify reasoning and problem-solving tasks"
-    threshold: 0.3
+    threshold: 0.10
     hard:
       candidates:
-        # Analytical reasoning
+        # Analytical & Strategic Reasoning (15)
         - "Analyze the geopolitical implications of renewable energy adoption"
         - "Evaluate the ethical considerations of AI in healthcare decision-making"
         - "Compare and contrast the philosophical frameworks of Kant and Hegel"
         - "Propose solutions for traffic congestion in urban environments"
-        # Science & math reasoning
+        - "Assess the long-term economic impact of universal basic income"
+        - "Evaluate trade-offs between privacy and national security in data collection"
+        - "Design a multi-stage marketing strategy for a new product launch"
+        - "Analyze systemic risks in the global financial system"
+        - "Compare different approaches to artificial general intelligence safety"
+        - "Evaluate the societal impact of remote work on urban development"
+        - "Assess the ethical implications of genetic engineering in humans"
+        - "Design a framework for international climate change negotiations"
+        - "Analyze the relationship between inflation and employment policy"
+        - "Evaluate how misinformation affects democratic processes"
+        - "Design a comprehensive strategy for pandemic preparedness"
+        # Mathematical & Scientific Reasoning (15)
         - "Explain quantum entanglement and its applications in cryptography"
         - "Derive the Navier-Stokes equations from first principles"
         - "Prove that there are infinitely many prime numbers"
         - "Explain the thermodynamic basis of entropy in information theory"
-        # Multi-step logic
-        - "Design a multi-stage marketing strategy for a new product launch"
-        - "Evaluate the long-term economic impact of universal basic income"
+        - "Derive the wave equation from Maxwell's equations"
+        - "Explain Gödel's incompleteness theorems and their implications"
+        - "Prove the fundamental theorem of calculus from basic principles"
+        - "Explain the relationship between quantum mechanics and general relativity"
+        - "Derive Black-Scholes equation for option pricing"
+        - "Prove Fermat's Last Theorem outline and mathematical significance"
+        - "Explain protein folding and its computational complexity"
+        - "Derive the Heisenberg uncertainty principle from operator algebra"
+        - "Explain the P vs NP problem and its implications"
+        - "Prove Bayes theorem and derive posterior distributions"
+        - "Explain the mathematical foundations of deep learning optimization"
+        # Multi-step Logic & Systems Thinking (15)
         - "Analyze the trade-offs between microservices and monolithic architecture"
         - "Discuss how game theory applies to international climate negotiations"
+        - "Design a resilient supply chain that handles multiple failure modes"
+        - "Evaluate different consensus mechanisms for distributed systems"
+        - "Analyze how feedback loops create economic cycles"
+        - "Design a fair electoral system that minimizes gerrymandering"
+        - "Evaluate competing theories of consciousness and their empirical tests"
+        - "Design an organizational structure for managing innovation at scale"
+        - "Analyze how network effects shape winner-take-all markets"
+        - "Evaluate different approaches to resolving the trolley problem"
+        - "Design a framework for aligning AI objectives with human values"
+        - "Analyze how power dynamics shape policy outcomes in different domains"
+        - "Evaluate the effectiveness of different monetary policy interventions"
+        - "Design a system for resource allocation in scarcity conditions"
+        - "Analyze how information asymmetry affects market efficiency"
+        # Synthesis & Creative Problem-Solving (10)
+        - "Synthesize insights from neuroscience, psychology, and philosophy to understand consciousness"
+        - "Design a novel approach to sustainable energy that integrates multiple technologies"
+        - "Create a theory that explains anomalies in existing models across disciplines"
+        - "Propose a solution to a multi-faceted social problem with competing stakeholders"
+        - "Design a business model for emerging technology with uncertain market conditions"
+        - "Synthesize competing ethical frameworks into a coherent decision-making system"
+    medium:
+      candidates:
+        # Moderate Analysis & Comparison (20)
+        - "Compare the strengths and weaknesses of different programming languages"
+        - "Analyze how climate change affects agricultural productivity in different regions"
+        - "Explain the causes and effects of the Great Depression"
+        - "Compare different forms of government and their tradeoffs"
+        - "Analyze how social media affects mental health in teenagers"
+        - "Compare evolutionary and creationist explanations of human origins"
+        - "Explain the causes of the rise and fall of empires"
+        - "Analyze the relationship between education and income inequality"
+        - "Compare different economic systems and their outcomes"
+        - "Explain how technological disruption affects labor markets"
+        - "Analyze the impact of globalization on local communities"
+        - "Compare different approaches to criminal justice reform"
+        - "Explain the causes of political polarization in democracies"
+        - "Analyze how supply chain disruptions affect prices"
+        - "Compare different theories of personality and behavior"
+        - "Explain the mechanics of how antibiotics work"
+        - "Analyze the impact of social networks on information spread"
+        - "Compare different energy sources by efficiency and environmental impact"
+        - "Explain historical patterns in technological innovation"
+        - "Analyze how organizational culture affects employee performance"
+        # Problem-Solving with Multiple Steps (20)
+        - "Explain how to debug a complex system with interdependent components"
+        - "Design a solution to optimize resource allocation across competing needs"
+        - "Analyze a case study and recommend strategic improvements"
+        - "Explain how to balance competing priorities in project management"
+        - "Design a framework for evaluating the success of an initiative"
+        - "Analyze the root causes of a business problem and propose solutions"
+        - "Explain how to structure a negotiation for mutual benefit"
+        - "Design an experiment to test a complex hypothesis"
+        - "Analyze market trends and forecast future demand"
+        - "Explain how to identify and mitigate risks in a project"
+        - "Design an incentive structure that aligns individual and organizational goals"
+        - "Analyze how to improve process efficiency in an operation"
+        - "Explain how to build consensus among stakeholders with different interests"
+        - "Design a framework for continuous improvement and innovation"
+        - "Analyze how to scale operations while maintaining quality"
+        - "Explain the considerations for entering a new market"
+        - "Design a change management strategy for organizational transformation"
+        - "Analyze how to leverage technology to solve a business problem"
+        - "Explain how to evaluate the cost-benefit of a strategic decision"
+        - "Design a system for measuring and improving team performance"
     easy:
       candidates:
-        # Factual recall
+        # Factual Recall & Simple Definitions (30)
         - "What is the capital of France?"
         - "How many days are in a week?"
         - "What color is the sky on a clear day?"
         - "Name three common pets"
         - "What is 5 + 3?"
-        # Simple definitions
         - "What does HTML stand for?"
         - "Who painted the Mona Lisa?"
         - "What is the largest planet in our solar system?"
         - "How many continents are there?"
         - "What language is spoken in Brazil?"
-        # Simple tasks
+        - "What is the chemical formula for water?"
+        - "How many sides does a triangle have?"
+        - "Who wrote Romeo and Juliet?"
+        - "What is the currency of Japan?"
+        - "How many months are in a year?"
+        - "What is 10 divided by 2?"
+        - "Name a common fruit"
+        - "What is the fastest land animal?"
+        - "Who was the first president of the United States?"
+        - "What is the opposite of hot?"
+        - "How many legs does a spider have?"
+        - "What is 7 times 8?"
+        - "Name a body of water"
+        - "What is the tallest mountain?"
+        - "Who invented the light bulb?"
+        - "What gas do plants need?"
+        - "How many fingers does a human have?"
+        - "What is a synonym for happy?"
+        - "Name a color of the rainbow"
+        - "What year did World War II end?"
+        # Simple Tasks & Basic Understanding (20)
         - "Say hello in Spanish"
         - "List the days of the week"
+        - "Translate 'hello' into French"
+        - "Name the four seasons"
+        - "List the vowels in English"
+        - "What is the opposite of up?"
+        - "Name three types of weather"
+        - "What time is noon?"
+        - "How much is a dozen?"
+        - "Name a shape with four sides"
+        - "What is the first letter of the alphabet?"
+        - "Name three colors"
+        - "What do we call a group of cows?"
+        - "How many hours are in a day?"
+        - "Name a type of music"
+        - "What is the plural of child?"
+        - "Name a sport"
+        - "What is a baby dog called?"
+        - "How many legs does a dog have?"
+        - "Name a country in Europe"
 
   - name: "code-complexity"
     description: "Classify coding tasks by complexity"
-    threshold: 0.3
+    threshold: 0.10
     hard:
       candidates:
-        # Systems programming
-        - "Implement a distributed lock manager with leader election"
-        - "Design a database migration system with rollback support"
-        - "Create a compiler optimization pass for loop unrolling"
-        - "Build a graph algorithm for strongly connected components"
-        - "Develop a custom memory allocator with fragmentation handling"
-        # Architecture & design
-        - "Implement a concurrent garbage collector"
-        - "Build a consensus algorithm for a distributed system"
+        # Distributed Systems & Concurrency (15)
+        - "Implement a distributed lock manager with leader election and failover"
+        - "Design a distributed consensus algorithm that tolerates Byzantine faults"
+        - "Build a sharded database system with automatic rebalancing"
+        - "Implement a distributed transaction coordinator with two-phase commit"
+        - "Design a fault-tolerant message queue with exactly-once semantics"
+        - "Create a distributed cache with cache invalidation and coherency"
+        - "Implement a leader election algorithm using Raft consensus"
+        - "Build a distributed scheduler for load balancing across nodes"
+        - "Design a distributed tracing system for microservices"
+        - "Implement a distributed rate limiter with consistent hashing"
+        - "Design a database replication system with eventual consistency"
+        - "Build a distributed lock-free data structure using atomic operations"
+        - "Implement a gossip protocol for distributed state management"
+        - "Design a distributed pub-sub system with topic subscriptions"
+        - "Create a distributed coordination service similar to Zookeeper"
+        # Advanced Algorithms & Optimization (15)
+        - "Implement a B-tree with concurrent read-write support and lock optimization"
+        - "Design a graph algorithm for computing strongly connected components efficiently"
+        - "Create a compiler optimization pass for loop unrolling and vectorization"
+        - "Implement a machine learning algorithm like gradient boosting from scratch"
+        - "Design a string matching algorithm that handles fuzzy matching"
+        - "Build a data structure for range queries with logarithmic time complexity"
+        - "Implement a dynamic programming solution for traveling salesman problem"
+        - "Design a text compression algorithm with entropy encoding"
+        - "Create a pathfinding algorithm that handles weighted graphs and obstacles"
+        - "Implement a scheduling algorithm that optimizes for multiple objectives"
+        - "Design a machine learning model training pipeline with distributed processing"
+        - "Build a suffix tree or suffix array for efficient string searching"
+        - "Implement a cryptographic algorithm like AES or RSA from first principles"
+        - "Design an optimization algorithm for non-convex problems"
+        - "Create a data structure that supports both fast lookups and range queries"
+        # Systems Programming & Memory Management (15)
+        - "Develop a custom memory allocator with fragmentation handling and garbage collection"
+        - "Implement a concurrent garbage collector with mark-sweep algorithm"
+        - "Design a page replacement algorithm for virtual memory management"
+        - "Build a thread pool with work-stealing queue for load balancing"
+        - "Create a lock-free queue using atomic compare-and-swap operations"
+        - "Implement an event-driven I/O system with select, epoll, or kqueue"
+        - "Design a custom file system with journaling and crash recovery"
+        - "Build a kernel module that manages interrupt handling and context switching"
+        - "Implement a buffer pool manager with clock algorithm for eviction"
+        - "Create a memory-mapped file system with cache coherency"
+        - "Design a signal handling system with masked interrupts and signal queuing"
+        - "Implement context switching between user and kernel mode"
+        - "Build a virtual memory system with demand paging"
+        - "Create a module for inter-process communication using pipes and sockets"
+        - "Implement a deadlock detection and avoidance algorithm"
+        # Architecture & Design Patterns (10)
         - "Design an event-driven architecture with CQRS and event sourcing"
-        - "Implement a B-tree with concurrent read-write support"
-        - "Create a rate limiter with sliding window and distributed state"
+        - "Build a microkernel architecture with plugin system and dynamic loading"
+        - "Implement the actor model for concurrent message passing"
+        - "Design a high-performance web server with connection pooling"
+        - "Create a reactive systems architecture with back-pressure handling"
+    medium:
+      candidates:
+        # Classic Algorithms (20)
+        - "Implement a binary search tree with insertion and deletion"
+        - "Build a quicksort or mergesort algorithm with optimization"
+        - "Implement Dijkstra's shortest path algorithm"
+        - "Create a breadth-first search traversal of a graph"
+        - "Implement a hash table with collision resolution"
+        - "Build a depth-first search with backtracking"
+        - "Implement a dynamic programming solution for the knapsack problem"
+        - "Create a Fibonacci sequence calculator with memoization"
+        - "Implement a linear regression algorithm"
+        - "Build a decision tree classifier"
+        - "Implement topological sorting of a directed acyclic graph"
+        - "Create a LRU (Least Recently Used) cache"
+        - "Implement the A* pathfinding algorithm"
+        - "Build a trie data structure for prefix search"
+        - "Implement a union-find (disjoint set) data structure"
+        - "Create a segmentation tree for range queries"
+        - "Implement a stable sort algorithm"
+        - "Build a graph coloring algorithm"
+        - "Implement a string matching algorithm like KMP"
+        - "Create a heapsort implementation"
+        # Web & Database Operations (15)
+        - "Build a REST API with authentication and authorization"
+        - "Implement database connection pooling and query caching"
+        - "Design a schema migration system with version control"
+        - "Create a GraphQL server with nested query resolution"
+        - "Implement transaction handling with rollback support"
+        - "Build a full-text search system with indexing"
+        - "Design a database query optimizer for execution planning"
+        - "Implement pagination with cursor-based navigation"
+        - "Create a webhook system for event notifications"
+        - "Build an API rate limiter with token bucket algorithm"
+        - "Design a cache invalidation strategy for frequently accessed data"
+        - "Implement database replication with conflict resolution"
+        - "Create a data validation and sanitization pipeline"
+        - "Build a SQL query builder with safe parameterization"
+        - "Implement an ORM with lazy loading and relationship mapping"
+        # Intermediate Data Structures (15)
+        - "Implement a skip list data structure"
+        - "Build an AVL tree with rebalancing"
+        - "Create a red-black tree implementation"
+        - "Implement a deque (double-ended queue)"
+        - "Build a priority queue with heap operations"
+        - "Implement a bloom filter for membership testing"
+        - "Create a linked list with various operations"
+        - "Implement a stack-based expression evaluator"
+        - "Build a queue with enqueue and dequeue operations"
+        - "Implement a circular buffer for streaming data"
+        - "Create a graph adjacency list representation"
+        - "Implement a segment tree for range updates"
+        - "Build a fenwick tree (binary indexed tree)"
+        - "Implement a suffix array for pattern matching"
+        - "Create a weighted graph with edge list representation"
+        # Concurrency & Asynchronous (10)
+        - "Implement a thread-safe counter with synchronization"
+        - "Build a producer-consumer problem solution"
+        - "Design an async/await pattern for non-blocking I/O"
+        - "Implement a semaphore for resource limiting"
+        - "Create a promise-based async flow"
+        - "Build a coroutine system with yield statements"
+        - "Implement a future with callback chaining"
+        - "Design a reactive stream with observable pattern"
+        - "Create a thread pool executor"
+        - "Implement a concurrent dictionary with read-write locks"
     easy:
       candidates:
-        # Basic tasks
+        # Basic String & Number Operations (20)
         - "Write a function to reverse a string"
-        - "Create a class to represent a rectangle"
-        - "Implement a simple counter with increment/decrement"
-        - "Write a function to check if a number is even"
-        - "Create a basic TODO list with add/remove operations"
-        # Trivial snippets
-        - "Write a for loop that prints numbers 1 to 10"
+        - "Implement a function to check if a number is even"
+        - "Create a function that returns the maximum of two numbers"
+        - "Write a function to find the sum of numbers in a list"
+        - "Implement a function to check if a string is a palindrome"
+        - "Create a function to convert a string to uppercase"
+        - "Write a function to count vowels in a string"
+        - "Implement a function to remove duplicates from a list"
+        - "Create a function to concatenate two strings"
+        - "Write a function to find the factorial of a number"
+        - "Implement a function to check if a number is prime"
+        - "Create a function to reverse a list"
+        - "Write a function to find the minimum value in a list"
+        - "Implement a function to check if a list is sorted"
+        - "Create a function to calculate the average of numbers"
+        - "Write a function to find the length of a string"
+        - "Implement a function to split a string by delimiter"
+        - "Create a function to replace a substring in a string"
+        - "Write a function to convert a number to string"
+        - "Implement a function to trim whitespace from a string"
+        # Basic Data Structures & Control Flow (20)
+        - "Create a class to represent a rectangle with area and perimeter"
+        - "Implement a simple counter with increment and decrement methods"
+        - "Write a function that prints numbers 1 to 10 in a loop"
+        - "Create a basic TODO list with add and remove operations"
+        - "Implement a simple temperature converter (Celsius to Fahrenheit)"
+        - "Write a function to sort a list of numbers"
+        - "Create a simple student record with name and grades"
+        - "Implement a function to check if a number is between two values"
+        - "Write a function to get the nth element of a list"
+        - "Create a simple dictionary lookup program"
+        - "Implement a function to multiply all numbers in a list"
+        - "Write a function to check if all items in a list are the same"
+        - "Create a person class with name and age attributes"
+        - "Implement a simple menu system with user input"
+        - "Write a function to generate a list of even numbers"
+        - "Create a bank account class with deposit and withdraw"
+        - "Implement a function to find the index of an element"
+        - "Write a function to combine two lists"
+        - "Create a simple game with win/lose conditions"
+        - "Implement a function to check if a list contains duplicates"
+        # Trivial & Hello World (20)
         - "Create a hello world program"
-        - "Sort a list of numbers"
-        - "Write a function that returns the maximum of two numbers"
-        - "Convert a string to uppercase"
+        - "Write a function that returns the constant value 42"
+        - "Implement a function that returns True always"
+        - "Create a function that takes two parameters and returns the first"
+        - "Write a function that does nothing (empty function)"
+        - "Implement a function that returns the string 'hello'"
+        - "Create a variable and assign it a number"
+        - "Write a print statement that outputs your name"
+        - "Implement a function that returns the sum of two numbers"
+        - "Create a list with three items"
+        - "Write a loop that iterates 5 times"
+        - "Implement a function that returns its parameter unchanged"
+        - "Create a boolean variable and assign it a value"
+        - "Write a comment in your code"
+        - "Implement a function with a return statement"
+        - "Create a conditional statement that checks a value"
+        - "Write a function that calls another function"
+        - "Implement a lambda or anonymous function"
+        - "Create a string variable and print it"
+        - "Write a function that uses recursion to count down"
     composer:
       operator: "OR"
       conditions:
@@ -377,7 +658,7 @@ categories:
     mmlu_categories: ["other"]
 
 # ─── Decisions ───────────────────────────────────────────────
-# Priority cascade: Keyword (200-130) > Domain (100-50) > default_model (1)
+# Priority cascade: Keyword (200-130) > Complexity (120-105) > Domain (100-50) > default_model (1)
 #
 # Keyword decisions fire on explicit intent words in the query.
 # Domain decisions fire on ModernBERT classification when no keyword matched.
@@ -503,6 +784,18 @@ decisions:
   # ═══ COMPLEXITY-BASED DECISIONS ════════════════════════════
   # Fire on embedding-based complexity signal from Qwen3-Embedding.
 
+  - name: "hard_code"
+    description: "Complex coding tasks detected by complexity signal"
+    priority: 120
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "code-complexity:hard"
+    modelRefs:
+      - model: "qwen3-coder-next"
+        use_reasoning: false
+
   - name: "easy_code"
     description: "Simple coding tasks detected by complexity signal"
     priority: 115
@@ -512,8 +805,32 @@ decisions:
         - type: "complexity"
           name: "code-complexity:easy"
     modelRefs:
-      - model: "qwen3-8b"
+      - model: "qwen3-coder-next"
         use_reasoning: false
+
+  - name: "medium_code"
+    description: "Medium coding tasks detected by complexity signal"
+    priority: 110
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "code-complexity:medium"
+    modelRefs:
+      - model: "qwen3-coder-next"
+        use_reasoning: false
+
+  - name: "hard_reasoning"
+    description: "Hard reasoning tasks detected by complexity signal"
+    priority: 105
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "reasoning-complexity:hard"
+    modelRefs:
+      - model: "gpt-oss-120b"
+        use_reasoning: true
 
   # ═══ DOMAIN-BASED DECISIONS (lower priority) ═══════════════
   # Fire when no keyword matched but ModernBERT classifies the domain.
