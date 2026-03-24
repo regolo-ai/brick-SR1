@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +12,11 @@ import (
 	"time"
 
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/observability/logging"
+)
+
+const (
+	upstreamMaxRetries = 3
+	upstreamRetryWait  = 5 * time.Second
 )
 
 // forwardToBackend forwards the request to the selected backend and streams
@@ -80,14 +87,46 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 		}
 	}
 
-	// Send upstream request
+	// Send upstream request with retry on transient failures.
 	client := &http.Client{
 		Timeout: 10 * time.Minute, // LLM reasoning requests can be very slow
 	}
-	upstreamResp, err := client.Do(upstreamReq)
-	if err != nil {
-		logging.Errorf("Upstream request failed: %v", err)
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("upstream request failed: %v", err))
+
+	var upstreamResp *http.Response
+	var lastErr error
+	for attempt := 1; attempt <= upstreamMaxRetries; attempt++ {
+		// Recreate the request body reader for each attempt.
+		upstreamReq.Body = io.NopCloser(strings.NewReader(string(result.ForwardBody)))
+
+		upstreamResp, lastErr = client.Do(upstreamReq)
+		if lastErr == nil {
+			// Got a response — check for retryable HTTP status codes.
+			if upstreamResp.StatusCode == http.StatusServiceUnavailable ||
+				upstreamResp.StatusCode == http.StatusGatewayTimeout ||
+				upstreamResp.StatusCode == http.StatusTooManyRequests {
+				upstreamResp.Body.Close()
+				lastErr = fmt.Errorf("upstream returned status %d", upstreamResp.StatusCode)
+				upstreamResp = nil
+			} else {
+				break // success
+			}
+		} else if errors.Is(lastErr, context.Canceled) {
+			// Client disconnected — no point retrying.
+			logging.Warnf("Client cancelled request, aborting upstream forward")
+			writeError(w, http.StatusBadGateway, "client cancelled request")
+			return
+		}
+
+		if attempt < upstreamMaxRetries {
+			logging.Warnf("Upstream attempt %d/%d failed: %v — retrying in %v",
+				attempt, upstreamMaxRetries, lastErr, upstreamRetryWait)
+			time.Sleep(upstreamRetryWait)
+		}
+	}
+
+	if lastErr != nil {
+		logging.Errorf("Upstream request failed after %d attempts: %v", upstreamMaxRetries, lastErr)
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("upstream request failed after %d attempts: %v", upstreamMaxRetries, lastErr))
 		return
 	}
 	defer upstreamResp.Body.Close()

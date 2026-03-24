@@ -23,7 +23,7 @@ brick:
   enabled: true
   stt_model: "faster-whisper-large-v3"
   stt_endpoint: "https://api.regolo.ai/v1/audio/transcriptions"
-  ocr_model: "deepseek-ocr"
+  ocr_model: "deepseek-ocr-2"
   ocr_endpoint: "https://api.regolo.ai/v1/chat/completions"
   vision_model: "qwen3.5-122b"
   vision_endpoint: "https://api.regolo.ai/v1/chat/completions"
@@ -48,31 +48,25 @@ vllm_endpoints:
     provider_profile: "regolo"
     weight: 1
 
-default_model: "mistral-small3.2"
+default_model: "gpt-oss-20b"
 
 model_config:
-  qwen3-8b:
+  qwen3.5-9b:
     preferred_endpoints: ["regolo"]
-    param_size: "8b"
+    param_size: "9b"
   gpt-oss-20b:
     preferred_endpoints: ["regolo"]
     param_size: "20b"
-  gpt-oss-120b:
-    preferred_endpoints: ["regolo"]
-    param_size: "120b"
-    reasoning_family: "qwen3"
   qwen3-coder-next:
     preferred_endpoints: ["regolo"]
-    param_size: "32b"
-  Llama-3.3-70B-Instruct:
+    param_size: "80b"
+  mistral-small-4-119b:
     preferred_endpoints: ["regolo"]
-    param_size: "70b"
-  mistral-small3.2:
+    param_size: "119b"
+  qwen3.5-122b:
     preferred_endpoints: ["regolo"]
-    param_size: "24b"
-  gemma-3-27b-it:
-    preferred_endpoints: ["regolo"]
-    param_size: "27b"
+    param_size: "122b"
+    reasoning_family: "qwen3"
 
 # ─── Reasoning Families ──────────────────────────────────────
 reasoning_families:
@@ -100,7 +94,7 @@ classifier:
   category_model:
     model_id: "models/mom-domain-classifier"
     use_modernbert: true
-    threshold: 0.6
+    threshold: 0.45
     use_cpu: true
     category_mapping_path: "models/mom-domain-classifier/category_mapping.json"
 
@@ -115,10 +109,6 @@ keyword_rules:
       - "hi"
       - "thanks"
       - "thank you"
-      - "ok"
-      - "sure"
-      - "yes"
-      - "no"
       - "ciao"
       - "grazie"
       - "va bene"
@@ -587,36 +577,16 @@ complexity_rules:
       operator: "OR"
       conditions:
         - type: "domain"
-          name: "computer_science"
+          name: "computer science"
         - type: "keyword"
           name: "code_keywords"
-
-# ─── Language Rules ──────────────────────────────────────────
-language_rules:
-  - name: "en"
-    description: "English"
-  - name: "it"
-    description: "Italian"
-  - name: "zh"
-    description: "Chinese (Simplified or Traditional)"
-
-# ─── Context Rules ───────────────────────────────────────────
-context_rules:
-  - name: "short_context"
-    min_tokens: "0"
-    max_tokens: "1K"
-    description: "Brief queries (0-1000 tokens)"
-  - name: "long_context"
-    min_tokens: "4K"
-    max_tokens: "128K"
-    description: "Long documents (4000-128000 tokens)"
 
 # ─── Categories (MMLU 14-class) ─────────────────────────────
 # Maps domain classifier output to named categories used in decisions.
 categories:
-  - name: computer_science
+  - name: "computer science"
     description: "Computer science and programming"
-    mmlu_categories: ["computer_science"]
+    mmlu_categories: ["computer science"]
   - name: math
     description: "Mathematics"
     mmlu_categories: ["math"]
@@ -677,7 +647,7 @@ decisions:
         - type: "keyword"
           name: "greeting_simple"
     modelRefs:
-      - model: "qwen3-8b"
+      - model: "qwen3.5-9b"
         use_reasoning: false
 
   - name: "formatting_tasks"
@@ -689,15 +659,8 @@ decisions:
         - type: "keyword"
           name: "formatting_keywords"
     modelRefs:
-      - model: "mistral-small3.2"
+      - model: "qwen3.5-9b"
         use_reasoning: false
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: false
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
   - name: "coding_tasks"
     description: "Programming and code generation"
@@ -720,15 +683,8 @@ decisions:
         - type: "keyword"
           name: "math_keywords"
     modelRefs:
-      - model: "gpt-oss-120b"
+      - model: "qwen3.5-122b"
         use_reasoning: true
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: true
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
   - name: "creative_writing"
     description: "Stories, poems, and creative content"
@@ -739,7 +695,7 @@ decisions:
         - type: "keyword"
           name: "creative_keywords"
     modelRefs:
-      - model: "Llama-3.3-70B-Instruct"
+      - model: "mistral-small-4-119b"
         use_reasoning: false
 
   - name: "deep_reasoning"
@@ -751,16 +707,8 @@ decisions:
         - type: "keyword"
           name: "reasoning_keywords"
     modelRefs:
-      - model: "gpt-oss-120b"
+      - model: "qwen3.5-122b"
         use_reasoning: true
-        reasoning_effort: "high"
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: true
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
   - name: "analysis_medium"
     description: "Analysis, comparison, and evaluation tasks"
@@ -771,80 +719,52 @@ decisions:
         - type: "keyword"
           name: "analysis_keywords"
     modelRefs:
-      - model: "mistral-small3.2"
+      - model: "mistral-small-4-119b"
         use_reasoning: false
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: false
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
   # ═══ COMPLEXITY-BASED DECISIONS ════════════════════════════
   # Fire on embedding-based complexity signal from Qwen3-Embedding.
 
-  - name: "hard_code"
-    description: "Complex coding tasks detected by complexity signal"
+  - name: "code_complexity"
+    description: "Coding tasks detected by complexity signal (any level)"
     priority: 120
     rules:
-      operator: "AND"
+      operator: "OR"
       conditions:
         - type: "complexity"
           name: "code-complexity:hard"
-    modelRefs:
-      - model: "qwen3-coder-next"
-        use_reasoning: false
-
-  - name: "easy_code"
-    description: "Simple coding tasks detected by complexity signal"
-    priority: 115
-    rules:
-      operator: "AND"
-      conditions:
+        - type: "complexity"
+          name: "code-complexity:medium"
         - type: "complexity"
           name: "code-complexity:easy"
     modelRefs:
       - model: "qwen3-coder-next"
         use_reasoning: false
 
-  - name: "medium_code"
-    description: "Medium coding tasks detected by complexity signal"
-    priority: 110
+  # ═══ DOMAIN-BASED DECISIONS (lower priority) ═══════════════
+  # Domain rules fire BEFORE reasoning-complexity so that known domains
+  # always land on the right specialist model.
+
+  - name: "domain_cs"
+    description: "Computer science — routed to the coding specialist"
+    priority: 108
     rules:
-      operator: "AND"
+      operator: "OR"
       conditions:
-        - type: "complexity"
-          name: "code-complexity:medium"
+        - type: "domain"
+          name: "computer science"
     modelRefs:
       - model: "qwen3-coder-next"
         use_reasoning: false
 
-  - name: "hard_reasoning"
-    description: "Hard reasoning tasks detected by complexity signal"
-    priority: 105
-    rules:
-      operator: "AND"
-      conditions:
-        - type: "complexity"
-          name: "reasoning-complexity:hard"
-    modelRefs:
-      - model: "gpt-oss-120b"
-        use_reasoning: true
-
-  # ═══ DOMAIN-BASED DECISIONS (lower priority) ═══════════════
-  # Fire when no keyword matched but ModernBERT classifies the domain.
-
   - name: "domain_stem"
-    description: "STEM domains — math, CS, physics, engineering, chemistry"
-    priority: 100
+    description: "Hard STEM — math, physics, engineering, chemistry"
+    priority: 106
     rules:
       operator: "OR"
       conditions:
         - type: "domain"
           name: "math"
-        - type: "domain"
-          name: "computer_science"
         - type: "domain"
           name: "physics"
         - type: "domain"
@@ -852,19 +772,12 @@ decisions:
         - type: "domain"
           name: "chemistry"
     modelRefs:
-      - model: "gpt-oss-120b"
+      - model: "qwen3.5-122b"
         use_reasoning: true
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: true
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
   - name: "domain_humanities"
     description: "Humanities — history, philosophy, law"
-    priority: 90
+    priority: 104
     rules:
       operator: "OR"
       conditions:
@@ -875,12 +788,12 @@ decisions:
         - type: "domain"
           name: "law"
     modelRefs:
-      - model: "Llama-3.3-70B-Instruct"
+      - model: "mistral-small-4-119b"
         use_reasoning: false
 
   - name: "domain_business"
     description: "Business and economics"
-    priority: 80
+    priority: 103
     rules:
       operator: "OR"
       conditions:
@@ -889,12 +802,12 @@ decisions:
         - type: "domain"
           name: "economics"
     modelRefs:
-      - model: "mistral-small3.2"
+      - model: "gpt-oss-20b"
         use_reasoning: false
 
   - name: "domain_science"
     description: "Life sciences — biology, health, psychology"
-    priority: 70
+    priority: 102
     rules:
       operator: "OR"
       conditions:
@@ -905,47 +818,56 @@ decisions:
         - type: "domain"
           name: "psychology"
     modelRefs:
-      - model: "mistral-small3.2"
+      - model: "qwen3.5-122b"
         use_reasoning: false
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: false
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5
 
-  - name: "easy_general"
-    description: "Easy general queries detected by complexity signal"
-    priority: 55
+  # Complexity fallback — fires only for queries the domain classifier left as "other"
+  # or where the domain score was below threshold (0.6).
+
+  - name: "hard_reasoning"
+    description: "Hard reasoning tasks (unclassified domain)"
+    priority: 101
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "reasoning-complexity:hard"
+    modelRefs:
+      - model: "qwen3.5-122b"
+        use_reasoning: true
+
+  - name: "medium_reasoning"
+    description: "Medium reasoning tasks (unclassified domain)"
+    priority: 100
+    rules:
+      operator: "AND"
+      conditions:
+        - type: "complexity"
+          name: "reasoning-complexity:medium"
+    modelRefs:
+      - model: "mistral-small-4-119b"
+        use_reasoning: false
+
+  - name: "easy_reasoning"
+    description: "Easy reasoning/knowledge tasks (unclassified domain)"
+    priority: 99
     rules:
       operator: "AND"
       conditions:
         - type: "complexity"
           name: "reasoning-complexity:easy"
-        - type: "domain"
-          name: "other"
     modelRefs:
-      - model: "qwen3-8b"
+      - model: "qwen3.5-9b"
         use_reasoning: false
 
   - name: "domain_general"
     description: "General/miscellaneous domain"
-    priority: 50
+    priority: 98
     rules:
       operator: "OR"
       conditions:
         - type: "domain"
           name: "other"
     modelRefs:
-      - model: "mistral-small3.2"
+      - model: "gpt-oss-20b"
         use_reasoning: false
-      - model: "Llama-3.3-70B-Instruct"
-        use_reasoning: false
-      - model: "gpt-oss-120b"
-        use_reasoning: false
-    algorithm:
-      type: "confidence"
-      confidence:
-        confidence_method: "margin"
-        threshold: 0.5

@@ -66,7 +66,7 @@ fi
 # Configuration
 ##############################################################################
 
-LM_EVAL="/home/rdseeweb/regolo-semantic-routing/.venv/bin/lm_eval"
+LM_EVAL="/root/forkGO/semantic-routing/.venv/bin/lm_eval"
 EVALS_DIR="${SCRIPT_DIR}"
 STAGE_DIR="${EVALS_DIR}/stage6"
 LOGS_DIR="${STAGE_DIR}/logs"
@@ -78,11 +78,11 @@ BRICK_URL="http://213.171.186.210:8000/v1/chat/completions"
 
 # Brick only — single model
 MODEL="brick"
-TOKENIZER="meta-llama/Llama-3.3-70B-Instruct"
+TOKENIZER="Qwen/Qwen2.5-72B-Instruct"
 
 # Docker container name for log capture
 # Override with DOCKER_CONTAINER env var if needed
-DOCKER_CONTAINER="${DOCKER_CONTAINER:-mymodel}"
+DOCKER_CONTAINER="${DOCKER_CONTAINER:-docker-compose-mymodel-1}"
 
 ##############################################################################
 # CLI arguments
@@ -115,6 +115,9 @@ fi
 export OPENAI_API_KEY="${REGOLO_API_KEY}"
 
 mkdir -p "${LOGS_DIR}" "${DOCKER_LOGS_DIR}"
+
+# Token usage sidecar — saved alongside results for cost analysis
+export USAGE_LOG_PATH="${STAGE_DIR}/brick_usage.jsonl"
 
 ##############################################################################
 # Counters
@@ -273,8 +276,9 @@ run_eval() {
     # We invoke via python3 -c so we can import patch_parse_generations
     # first, which monkey-patches parse_generations to handle reasoning
     # model responses (content absent, only reasoning_content).
+    VENV_PYTHON="/root/forkGO/semantic-routing/.venv/bin/python3"
     (cd /tmp && PYTHONPATH="${EVALS_DIR}:${PYTHONPATH:-}" \
-        python3 -c "import patch_parse_generations; from lm_eval.__main__ import cli_evaluate; cli_evaluate()" \
+        "${VENV_PYTHON}" -c "import patch_parse_generations; from lm_eval.__main__ import cli_evaluate; cli_evaluate()" \
         run \
         --model "${model_type}" \
         --model_args "${model_args}" \
@@ -408,7 +412,7 @@ phase4() {
 
     echo ""
     echo "=== Brick General (0-shot, 200 questions, 5 categories) ==="
-    run_eval "brick_general" "brick_general" 1024
+    run_eval "brick_general" "brick_general" 2048
 }
 
 ##############################################################################
@@ -455,4 +459,16 @@ echo " Fail:   ${TOTAL_FAIL}"
 echo " Results:     ${STAGE_DIR}/"
 echo " Logs:        ${LOGS_DIR}/"
 echo " Docker logs: ${DOCKER_LOGS_DIR}/"
+echo " Token usage: ${USAGE_LOG_PATH}"
 echo "========================================"
+
+# Generate cost summary report
+if [[ -f "${USAGE_LOG_PATH}" ]]; then
+    echo ""
+    echo "[SUMMARY] Generating cost & token summary..."
+    python3 "${EVALS_DIR}/summarize_costs.py" \
+        --usage "${USAGE_LOG_PATH}" \
+        --results-dir "${STAGE_DIR}" \
+        --output "${STAGE_DIR}/cost_summary.json" \
+    || echo "[WARN] Cost summary generation failed"
+fi

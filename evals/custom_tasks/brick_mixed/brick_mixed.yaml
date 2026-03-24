@@ -1,14 +1,14 @@
-dataset_path: /home/rdseeweb/regolo-semantic-routing/forkGO/evals/custom_tasks/brick_general
+task: brick_mixed
+dataset_path: /root/forkGO/semantic-routing/evals/custom_tasks/brick_mixed
 test_split: test
 output_type: generate_until
 doc_to_text: !function utils.doc_to_text
 doc_to_target: "{{answer}}"
 num_fewshot: 0
 generation_kwargs:
-  max_gen_toks: 1024
+  max_gen_toks: 16384
   until:
     - "\n\nQuestion:"
-    - "\n\nGiven"
 metric_list:
   - metric: exact_match
     aggregation: mean
@@ -19,8 +19,8 @@ filter_list:
   - name: get_answer_letter
     filter:
       - function: regex
-        regex_pattern: "(?:the answer is|best answer is)\\s*\\(?([A-Da-d])\\)?"
-        group_select: 0
+        regex_pattern: "(?i)(?:the answer is|best answer is|correct answer is|answer is|answer:\\s*)\\s*\\*{0,2}\\s*\\(?([A-Ja-j])\\)?\\*{0,2}|\\boption\\s+([A-Ja-j])\\b"
+        group_select: -1
         fallback: "Z"
       - function: remove_whitespace
       - function: take_first

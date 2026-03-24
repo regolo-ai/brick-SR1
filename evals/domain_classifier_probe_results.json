@@ -1,0 +1,282 @@
+[
+  {
+    "id": "humanities_001",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "D"
+  },
+  {
+    "id": "humanities_002",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_003",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_004",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_005",
+    "decision": "coding_tasks",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_006",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_007",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_008",
+    "decision": "formatting_tasks",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_009",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "F"
+  },
+  {
+    "id": "humanities_010",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "J"
+  },
+  {
+    "id": "humanities_011",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_012",
+    "decision": "coding_tasks",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "A"
+  },
+  {
+    "id": "humanities_013",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_014",
+    "decision": "deep_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_015",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "F"
+  },
+  {
+    "id": "humanities_016",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "A"
+  },
+  {
+    "id": "humanities_017",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "H"
+  },
+  {
+    "id": "humanities_018",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_019",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "E"
+  },
+  {
+    "id": "humanities_020",
+    "decision": "deep_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "H"
+  },
+  {
+    "id": "humanities_021",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "D"
+  },
+  {
+    "id": "humanities_022",
+    "decision": "analysis_medium",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "D"
+  },
+  {
+    "id": "humanities_023",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_024",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "G"
+  },
+  {
+    "id": "humanities_025",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "C"
+  },
+  {
+    "id": "humanities_026",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "E"
+  },
+  {
+    "id": "humanities_027",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_028",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "E"
+  },
+  {
+    "id": "humanities_029",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "H"
+  },
+  {
+    "id": "humanities_030",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "G"
+  },
+  {
+    "id": "humanities_031",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "C"
+  },
+  {
+    "id": "humanities_032",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "G"
+  },
+  {
+    "id": "humanities_033",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "I"
+  },
+  {
+    "id": "humanities_034",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "C"
+  },
+  {
+    "id": "humanities_035",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "H"
+  },
+  {
+    "id": "humanities_036",
+    "decision": "hard_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "C"
+  },
+  {
+    "id": "humanities_037",
+    "decision": "deep_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "B"
+  },
+  {
+    "id": "humanities_038",
+    "decision": "medium_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "C"
+  },
+  {
+    "id": "humanities_039",
+    "decision": "error",
+    "confidence": 0,
+    "domain_signals": [],
+    "correct_answer": "H"
+  },
+  {
+    "id": "humanities_040",
+    "decision": "deep_reasoning",
+    "confidence": 1,
+    "domain_signals": [],
+    "correct_answer": "F"
+  }
+]

@@ -1275,6 +1275,20 @@ func (c *Classifier) EvaluateAllSignalsWithContext(text string, contextText stri
 					results.MatchedDomainRules = append(results.MatchedDomainRules, categoryName)
 					mu.Unlock()
 				}
+			} else {
+				// Confidence below threshold: log top class + confidence for calibration.
+				// Attempt full probability distribution via ClassifyWithProbabilities (best-effort).
+				logging.Infof("[DomainSignal] BELOW_THRESHOLD top=%s confidence=%.4f threshold=%.4f text_prefix=%.80s",
+					categoryName, result.Confidence, c.Config.CategoryModel.Threshold, text)
+				if probResult, probErr := c.categoryInference.ClassifyWithProbabilities(text); probErr == nil {
+					distParts := make([]string, 0, len(probResult.Probabilities))
+					for i, prob := range probResult.Probabilities {
+						if label, ok := c.CategoryMapping.GetCategoryFromIndex(i); ok {
+							distParts = append(distParts, fmt.Sprintf("%s=%.4f", label, prob))
+						}
+					}
+					logging.Infof("[DomainSignal] DISTRIBUTION [%s]", strings.Join(distParts, " "))
+				}
 			}
 		}()
 	} else if !isSignalTypeUsed(usedSignals, config.SignalTypeDomain) {
