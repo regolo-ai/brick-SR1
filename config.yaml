@@ -16,7 +16,6 @@ providers:
   regoloai:
     type: openai-compatible
     base_url: https://api.regolo.ai/v1
-    api_key: ${REGOLO_API_KEY}
 
 # Brick multimodal gateway configuration
 brick:

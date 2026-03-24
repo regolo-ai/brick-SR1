@@ -70,22 +70,6 @@ func main() {
 		logging.Fatalf("Invalid brick configuration: %v", err)
 	}
 
-	// When brick is enabled, warn if no server-side API key is configured.
-	// The gateway will use the client's Authorization header as primary source.
-	if cfg.Brick.Enabled {
-		hasAPIKey := false
-		if cfg.Providers != nil {
-			if p, ok := cfg.Providers["regoloai"]; ok && p != nil && p.APIKey != "" {
-				if !strings.HasPrefix(p.APIKey, "${") {
-					hasAPIKey = true
-				}
-			}
-		}
-		if !hasAPIKey && os.Getenv("REGOLO_API_KEY") == "" {
-			logging.Warnf("Brick mode: no server-side REGOLO_API_KEY configured. " +
-				"API key must be provided by clients via Authorization header.")
-		}
-	}
 
 	// Override port from config if not set via flag and config has a value
 	if *port == 8000 && cfg.ServerPort > 0 {
