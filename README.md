@@ -30,8 +30,7 @@ cd semantic-routing
 # 2. Build the Docker image (Rust + Go multi-stage, ~5 min first build)
 make docker-build-mymodel
 
-# 3. Set your Regolo API key and start
-export REGOLO_API_KEY="sk-..."
+# 3. Start
 docker compose -f deploy/docker-compose/docker-compose.yml up -d
 
 # 4. Verify
@@ -39,12 +38,12 @@ curl http://localhost:8000/health
 curl http://localhost:8000/v1/models
 ```
 
-Send a request to `model: "brick"`:
+Send a request to `model: "brick"` — pass your Regolo API key in the `Authorization` header:
 
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $REGOLO_API_KEY" \
+  -H "Authorization: Bearer <your-regolo-key>" \
   -d '{"model": "brick", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
