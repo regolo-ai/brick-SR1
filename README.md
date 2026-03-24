@@ -155,11 +155,11 @@ brick:
   enabled: true
 
   # Vision model for image+text forwarding and image-only fallback
-  vision_model: "qwen3-vl-32b"
-  vision_endpoint: "https://api.regolo.ai/v1"
+  vision_model: "qwen3.5-122b"
+  vision_endpoint: "https://api.regolo.ai/v1/chat/completions"
 
   # Dedicated OCR model for image-only inputs
-  ocr_model: "deepseek-ocr"
+  ocr_model: "deepseek-ocr-2"
   ocr_endpoint: "https://api.regolo.ai/v1/chat/completions"
 
   # Speech-to-text for audio inputs
@@ -168,92 +168,14 @@ brick:
 
   # Minimum character count for OCR result to be considered valid text.
   # Below this threshold, image-only inputs fall back to the vision model.
-  ocr_min_text_length: 50
+  ocr_min_text_length: 10
 ```
 
-API keys are resolved from the `providers.regoloai.api_key` field or from the `REGOLO_API_KEY` environment variable. Client-supplied `Authorization: Bearer <key>` headers take precedence if provided.
+The client's `Authorization: Bearer <key>` header is forwarded to the backend as-is.
 
 ---
 
-## 5. Quick Start
-
-### Docker Compose
-
-```bash
-# Clone the repo and set your API key
-export REGOLO_API_KEY="your-key"
-
-# Start the gateway (proxy on :8000, metrics on :9190)
-docker compose -f deploy/docker-compose/docker-compose.yml up
-```
-
-Or via the [MyModel CLI](https://github.com/massaindustries/mymodel):
-
-```bash
-pip install mymodel
-mymodel init       # interactive configuration wizard
-mymodel serve      # starts Go binary → Docker → Python (auto fallback)
-```
-
-### Send a multimodal request
-
-```bash
-# Image + text → direct forward to vision model
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $REGOLO_API_KEY" \
-  -d '{
-    "model": "brick",
-    "messages": [{
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Summarize the key points in this slide"},
-        {"type": "image_url", "image_url": {"url": "data:image/png;base64,<BASE64>"}}
-      ]
-    }]
-  }'
-```
-
-```bash
-# Audio → transcribe via STT, then route through semantic pipeline
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $REGOLO_API_KEY" \
-  -d '{
-    "model": "brick",
-    "messages": [{
-      "role": "user",
-      "content": [
-        {"type": "input_audio", "input_audio": {"data": "<BASE64_WAV>", "format": "wav"}}
-      ]
-    }]
-  }'
-```
-
-```bash
-# Direct bypass — skip routing, forward to a specific backend
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $REGOLO_API_KEY" \
-  -H "x-selected-model: gpt-4o" \
-  -d '{
-    "model": "brick",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-Check the `x-selected-model` response header to see which backend was chosen.
-
-### Health check
-
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/v1/models   # lists "brick" and all configured backends
-```
-
----
-
-## 6. Acknowledgements & Attribution
+## 5. Acknowledgements & Attribution
 
 Brick is built on top of the [vLLM Semantic Router](https://github.com/vllm-project/semantic-router), licensed under the **Apache License 2.0**. The semantic routing pipeline, plugin chain (jailbreak detection, PII filtering, semantic cache, RAG, memory, hallucination detection), and model selection algorithms (including [RouteLLM](https://arxiv.org/abs/2406.18665), [AutoMix](https://arxiv.org/abs/2310.12963), [RouterDC](https://arxiv.org/abs/2409.19886), and [Router-R1](https://arxiv.org/abs/2506.09033)) are documented in the full [MyModel](https://github.com/massaindustries/mymodel) gateway repository.
 
