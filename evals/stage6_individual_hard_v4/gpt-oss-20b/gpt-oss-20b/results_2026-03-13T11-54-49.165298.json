@@ -1,0 +1,161 @@
+{
+  "results": {
+    "brick_hard": {
+      "alias": "brick_hard",
+      "exact_match,get_answer_letter": 0.61,
+      "exact_match_stderr,get_answer_letter": 0.03457567623250012
+    }
+  },
+  "group_subtasks": {
+    "brick_hard": []
+  },
+  "configs": {
+    "brick_hard": {
+      "task": "brick_hard",
+      "dataset_path": "/root/forkGO/semantic-routing/evals/custom_tasks/brick_hard",
+      "test_split": "test",
+      "doc_to_text": "def doc_to_text(doc):\n    \"\"\"Format a brick_hard question for the model.\"\"\"\n    choices = doc[\"choices\"]\n    letters = list(\"ABCDEFGHIJ\")\n    options = \"\\n\".join(f\"{letters[i]}. {c}\" for i, c in enumerate(choices))\n    return f\"Question: {doc['question']}\\n{options}\\nAnswer:\"\n",
+      "doc_to_target": "{{answer}}",
+      "unsafe_code": false,
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "fewshot_config": {
+        "sampler": "default",
+        "split": null,
+        "process_docs": null,
+        "fewshot_indices": null,
+        "samples": null,
+        "doc_to_text": "<function doc_to_text at 0x7085ccf2fd80>",
+        "doc_to_choice": null,
+        "doc_to_target": "{{answer}}",
+        "gen_prefix": null,
+        "fewshot_delimiter": "\n\n",
+        "target_delimiter": " "
+      },
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "ignore_punctuation": true
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "max_gen_toks": 2048,
+        "until": [
+          "\n\nQuestion:"
+        ]
+      },
+      "repeats": 1,
+      "filter_list": [
+        {
+          "name": "get_answer_letter",
+          "filter": [
+            {
+              "function": "regex",
+              "regex_pattern": "(?i)(?:the answer is|best answer is|correct answer is|answer is|answer:\\s*)\\s*\\*{0,2}\\s*\\(?([A-Ja-j])\\)?\\*{0,2}|\\boption\\s+([A-Ja-j])\\b",
+              "group_select": -1,
+              "fallback": "Z"
+            },
+            {
+              "function": "remove_whitespace"
+            },
+            {
+              "function": "take_first"
+            }
+          ]
+        }
+      ],
+      "should_decontaminate": false,
+      "metadata": {
+        "version": 1.0,
+        "model": "gpt-oss-20b",
+        "base_url": "https://api.regolo.ai/v1/chat/completions",
+        "tokenizer_backend": "huggingface",
+        "tokenizer": "Qwen/Qwen2.5-72B-Instruct",
+        "stream": false,
+        "max_tokens": 2048,
+        "temperature": 0,
+        "top_p": 1
+      }
+    }
+  },
+  "versions": {
+    "brick_hard": 1.0
+  },
+  "n-shot": {
+    "brick_hard": 0
+  },
+  "higher_is_better": {
+    "brick_hard": {
+      "exact_match": true
+    }
+  },
+  "n-samples": {
+    "brick_hard": {
+      "original": 200,
+      "effective": 200
+    }
+  },
+  "config": {
+    "model": "openai-chat-completions",
+    "model_args": {
+      "model": "gpt-oss-20b",
+      "base_url": "https://api.regolo.ai/v1/chat/completions",
+      "tokenizer_backend": "huggingface",
+      "tokenizer": "Qwen/Qwen2.5-72B-Instruct",
+      "stream": false,
+      "max_tokens": 2048,
+      "temperature": 0,
+      "top_p": 1,
+      "trust_remote_code": true
+    },
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": "cuda:0",
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {},
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "git_hash": null,
+  "date": 1773402070.1413,
+  "pretty_env_info": "N/A (torch not installed)",
+  "transformers_version": "5.3.0",
+  "lm_eval_version": "0.4.11",
+  "upper_git_hash": null,
+  "tokenizer_pad_token": [
+    "<|endoftext|>",
+    "151643"
+  ],
+  "tokenizer_eos_token": [
+    "<|im_end|>",
+    "151645"
+  ],
+  "tokenizer_bos_token": [
+    null,
+    "None"
+  ],
+  "eot_token_id": 151645,
+  "max_length": 2047,
+  "task_hashes": {
+    "brick_hard": "3140501d0ee5b48eccd14cc350f01f815a46a4f7be42ae0d63eeb56c6204366c"
+  },
+  "model_source": "openai-chat-completions",
+  "model_name": "gpt-oss-20b",
+  "model_name_sanitized": "gpt-oss-20b",
+  "system_instruction": "For multiple choice questions, end your response with \"the answer is (X)\" where X is the letter.",
+  "system_instruction_sha": "c372e29ca4f720dee39590bbad3593f6b76469e435f79b94fdcc02fa7af0482e",
+  "fewshot_as_multiturn": true,
+  "chat_template": "{%- if tools %}\n    {{- '<|im_start|>system\\n' }}\n    {%- if messages[0]['role'] == 'system' %}\n        {{- messages[0]['content'] }}\n    {%- else %}\n        {{- 'You are Qwen, created by Alibaba Cloud. You are a helpful assistant.' }}\n    {%- endif %}\n    {{- \"\\n\\n# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\\"name\\\": <function-name>, \\\"arguments\\\": <args-json-object>}\\n</tool_call><|im_end|>\\n\" }}\n{%- else %}\n    {%- if messages[0]['role'] == 'system' %}\n        {{- '<|im_start|>system\\n' + messages[0]['content'] + '<|im_end|>\\n' }}\n    {%- else %}\n        {{- '<|im_start|>system\\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- for message in messages %}\n    {%- if (message.role == \"user\") or (message.role == \"system\" and not loop.first) or (message.role == \"assistant\" and not message.tool_calls) %}\n        {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {{- '<|im_start|>' + message.role }}\n        {%- if message.content %}\n            {{- '\\n' + message.content }}\n        {%- endif %}\n        {%- for tool_call in message.tool_calls %}\n            {%- if tool_call.function is defined %}\n                {%- set tool_call = tool_call.function %}\n            {%- endif %}\n            {{- '\\n<tool_call>\\n{\"name\": \"' }}\n            {{- tool_call.name }}\n            {{- '\", \"arguments\": ' }}\n            {{- tool_call.arguments | tojson }}\n            {{- '}\\n</tool_call>' }}\n        {%- endfor %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != \"tool\") %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- message.content }}\n        {{- '\\n</tool_response>' }}\n        {%- if loop.last or (messages[loop.index0 + 1].role != \"tool\") %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n{%- endif %}\n",
+  "chat_template_sha": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+  "total_evaluation_time_seconds": "821.1743722916581"
+}

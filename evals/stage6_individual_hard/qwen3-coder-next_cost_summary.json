@@ -1,0 +1,23 @@
+{
+  "total": {
+    "requests": 200,
+    "prompt_tokens": 29918,
+    "completion_tokens": 105370,
+    "total_tokens": 135288,
+    "cost_eur": 0.225699
+  },
+  "per_model": {
+    "qwen3-coder-next-fp8": {
+      "requests": 200,
+      "prompt_tokens": 29918,
+      "completion_tokens": 105370,
+      "total_tokens": 135288,
+      "cost_eur": 0.225699,
+      "pricing_eur_per_1m": {
+        "input": 0.5,
+        "output": 2.0
+      }
+    }
+  },
+  "eval_results": {}
+}

@@ -1,0 +1,13 @@
+{
+  "model": "gpt-oss-20b",
+  "reasoning_effort": "high",
+  "thinking": true,
+  "dataset": "brick_hard MMLU-Pro 200q",
+  "results": {
+    "brick_hard": {
+      "exact_match,get_answer_letter": 0.61,
+      "correct": 122,
+      "total": 200
+    }
+  }
+}

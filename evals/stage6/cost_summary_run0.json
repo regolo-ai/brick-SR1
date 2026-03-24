@@ -1,0 +1,63 @@
+{
+  "total": {
+    "requests": 200,
+    "prompt_tokens": 34413,
+    "completion_tokens": 46449,
+    "total_tokens": 80862,
+    "cost_eur": 0.185493
+  },
+  "per_model": {
+    "gpt-oss-120b": {
+      "requests": 70,
+      "prompt_tokens": 14974,
+      "completion_tokens": 27680,
+      "total_tokens": 42654,
+      "cost_eur": 0.13123,
+      "pricing_eur_per_1m": {
+        "input": 1.0,
+        "output": 4.2
+      }
+    },
+    "llama-3.3-70b-instruct": {
+      "requests": 36,
+      "prompt_tokens": 8264,
+      "completion_tokens": 6111,
+      "total_tokens": 14375,
+      "cost_eur": 0.021458,
+      "pricing_eur_per_1m": {
+        "input": 0.6,
+        "output": 2.7
+      }
+    },
+    "mistral-small": {
+      "requests": 81,
+      "prompt_tokens": 9498,
+      "completion_tokens": 9509,
+      "total_tokens": 19007,
+      "cost_eur": 0.025669,
+      "pricing_eur_per_1m": {
+        "input": 0.5,
+        "output": 2.2
+      }
+    },
+    "qwen3-coder-next-fp8": {
+      "requests": 13,
+      "prompt_tokens": 1677,
+      "completion_tokens": 3149,
+      "total_tokens": 4826,
+      "cost_eur": 0.007137,
+      "pricing_eur_per_1m": {
+        "input": 0.5,
+        "output": 2.0
+      }
+    }
+  },
+  "eval_results": {
+    "brick_general": {
+      "brick_general": {
+        "exact_match,get_answer_letter": 0.67,
+        "exact_match_stderr,get_answer_letter": 0.033332495801873384
+      }
+    }
+  }
+}

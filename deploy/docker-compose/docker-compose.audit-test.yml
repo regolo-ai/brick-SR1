@@ -17,9 +17,6 @@ services:
       - ../../config.yaml:/app/config/config.yaml:ro
       - model-cache:/app/models
     environment:
-      - REGOLO_API_KEY=${REGOLO_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
     restart: unless-stopped
     healthcheck:

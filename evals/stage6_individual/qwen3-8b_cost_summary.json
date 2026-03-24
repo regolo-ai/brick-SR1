@@ -1,0 +1,23 @@
+{
+  "total": {
+    "requests": 200,
+    "prompt_tokens": 34360,
+    "completion_tokens": 65656,
+    "total_tokens": 100016,
+    "cost_eur": 0.197887
+  },
+  "per_model": {
+    "llama-3.3-70b-instruct": {
+      "requests": 200,
+      "prompt_tokens": 34360,
+      "completion_tokens": 65656,
+      "total_tokens": 100016,
+      "cost_eur": 0.197887,
+      "pricing_eur_per_1m": {
+        "input": 0.6,
+        "output": 2.7
+      }
+    }
+  },
+  "eval_results": {}
+}

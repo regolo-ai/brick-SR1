@@ -1,0 +1,23 @@
+{
+  "total": {
+    "requests": 200,
+    "prompt_tokens": 41090,
+    "completion_tokens": 78323,
+    "total_tokens": 119413,
+    "cost_eur": 0.370047
+  },
+  "per_model": {
+    "gpt-oss-120b": {
+      "requests": 200,
+      "prompt_tokens": 41090,
+      "completion_tokens": 78323,
+      "total_tokens": 119413,
+      "cost_eur": 0.370047,
+      "pricing_eur_per_1m": {
+        "input": 1.0,
+        "output": 4.2
+      }
+    }
+  },
+  "eval_results": {}
+}
