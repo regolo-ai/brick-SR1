@@ -28,7 +28,7 @@ git clone https://github.com/massaindustries/semantic-routing.git
 cd semantic-routing
 
 # 2. Build the Docker image (Rust + Go multi-stage, ~5 min first build)
-make docker-build-mymodel
+docker build -t mymodel:latest .
 
 # 3. Start
 docker compose -f deploy/docker-compose/docker-compose.yml up -d
