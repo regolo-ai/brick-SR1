@@ -10,7 +10,6 @@ services:
     image: mymodel:latest
     ports:
       - "8000:8000"   # HTTP proxy (OpenAI-compatible API)
-      - "9190:9190"   # Prometheus metrics
       - "8080:8080"   # API server (dashboard, batch classification)
     volumes:
       - ../../config.yaml:/app/config/config.yaml:ro
