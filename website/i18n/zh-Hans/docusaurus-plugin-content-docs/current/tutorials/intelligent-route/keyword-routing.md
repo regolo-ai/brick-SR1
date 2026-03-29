@@ -2,7 +2,7 @@
 translation:
   source_commit: "bac2743"
   source_file: "docs/tutorials/intelligent-route/keyword-routing.md"
-  outdated: false
+  outdated: true
 ---
 
 # Keyword Based Routing
