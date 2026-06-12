@@ -63,7 +63,7 @@
     "test": "vitest run",
     "test:random": "node --loader ts-node/esm test/random.ts",
     "lint": "tsc --noEmit",
-    "prepack": "npm run build"
+    "prepack": "npm run build && oclif manifest"
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
@@ -84,6 +84,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^19.2.14",
     "ink-testing-library": "^4.0.0",
+    "oclif": "^4",
     "ts-node": "^10.9.0",
     "tsx": "^4.21.0",
     "typescript": "^5.6.0",

@@ -30,58 +30,30 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   const providers: Record<string, any> = {};
   const providerProfiles: Record<string, any> = {};
   const providerEndpoints: any[] = [];
-
-  for (const pid of enabledProviders) {
-    const cat = catalog[pid];
-    let baseUrl = cat.base_url;
-    if (pid === 'local') {
-      const u = await p.text({ message: 'Local endpoint base_url:', placeholder: cat.base_url, defaultValue: cat.base_url });
-      if (p.isCancel(u)) { p.cancel('aborted'); process.exit(0); }
-      baseUrl = String(u || cat.base_url);
-    }
-    const existing = await readEnvKey(cat.env_key, pp.env);
-    let key: string;
-    if (existing) {
-      key = existing;
-    } else {
-      const k = await p.password({ message: `${cat.label} API key (will be saved to ~/.brick/.env, not in YAML):` });
-      if (p.isCancel(k)) { p.cancel('aborted'); process.exit(0); }
-      key = String(k);
-    }
-    apiKeys[cat.env_key] = key;
-    providers[pid] = { type: 'openai_compatible', base_url: baseUrl };
-    providerProfiles[pid] = { type: 'openai_compatible', base_url: baseUrl };
-    providerEndpoints.push({ name: pid, provider_profile: pid, weight: 1 });
-  }
-
-  // model selection per enabled provider
   const modelConfig: Record<string, any> = {};
   let selectedModelIds: string[] = [];
+
+  // initial pass over the providers picked in the multiselect above
   for (const pid of enabledProviders) {
-    const cat = catalog[pid];
-    if (cat.models.length === 0) {
-      const ids = await p.text({ message: `Comma-separated model IDs for ${cat.label}:`, placeholder: 'mistral,llama3' });
-      if (p.isCancel(ids)) { p.cancel('aborted'); process.exit(0); }
-      const list = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
-      for (const id of list) modelConfig[id] = { preferred_endpoints: [pid], param_size: 'unknown' };
-      selectedModelIds.push(...list);
-    } else {
-      const sel = await p.multiselect({
-        message: `Select models for ${cat.label}:`,
-        options: cat.models.map((m) => ({ value: m.id, label: `${m.label} (${m.param_size})`, hint: m.reasoning_family })),
-        required: true,
-      });
-      if (p.isCancel(sel)) { p.cancel('aborted'); process.exit(0); }
-      for (const id of sel as string[]) {
-        const m = cat.models.find((x) => x.id === id)!;
-        modelConfig[id] = {
-          preferred_endpoints: [pid],
-          param_size: m.param_size,
-          ...(m.reasoning_family ? { reasoning_family: m.reasoning_family } : {}),
-        };
-        selectedModelIds.push(id);
-      }
-    }
+    await ensureProviderAuth(pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
+    await selectProviderModels(pid, modelConfig, selectedModelIds);
+  }
+
+  // loop-back: let the user keep adding models, returning to the provider list.
+  // The list shows ALL providers (even already-configured ones) so more models
+  // can be added to a provider that was already set up.
+  for (;;) {
+    const more = await p.confirm({ message: 'Add other models?', initialValue: false });
+    if (p.isCancel(more)) { p.cancel('aborted'); process.exit(0); }
+    if (!more) break;
+    const pick = await p.select({
+      message: 'Provider to configure:',
+      options: Object.keys(catalog).map((id) => ({ value: id, label: catalog[id].label })),
+    });
+    if (p.isCancel(pick)) { p.cancel('aborted'); process.exit(0); }
+    const pid = String(pick);
+    await ensureProviderAuth(pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
+    await selectProviderModels(pid, modelConfig, selectedModelIds);
   }
 
   const defaultModelChoice = await p.select({
@@ -381,6 +353,77 @@ function buildSkillRouter(
 function heuristicSkillVector(index: number, total: number): number[] {
   const base = 0.62 + 0.18 * (index / Math.max(1, total - 1));
   return [base, base, Math.min(0.9, base + 0.05), Math.min(0.92, base + 0.08), base, Math.max(0.35, base - 0.1)];
+}
+
+// Configure a provider's auth/endpoint and register it. Idempotent: if the
+// provider is already in `providers`, it returns early without re-asking the key
+// so the loop-back can re-select an already-configured provider just to add more
+// models.
+async function ensureProviderAuth(
+  pid: string,
+  pp: ReturnType<typeof paths>,
+  apiKeys: Record<string, string>,
+  providers: Record<string, any>,
+  providerProfiles: Record<string, any>,
+  providerEndpoints: any[]
+): Promise<void> {
+  if (providers[pid]) return;
+  const cat = catalog[pid];
+  let baseUrl = cat.base_url;
+  if (pid === 'local') {
+    const u = await p.text({ message: 'Local endpoint base_url:', placeholder: cat.base_url, defaultValue: cat.base_url });
+    if (p.isCancel(u)) { p.cancel('aborted'); process.exit(0); }
+    baseUrl = String(u || cat.base_url);
+  }
+  const existing = await readEnvKey(cat.env_key, pp.env);
+  let key: string;
+  if (existing) {
+    key = existing;
+  } else {
+    const k = await p.password({ message: `${cat.label} API key (will be saved to ~/.brick/.env, not in YAML):` });
+    if (p.isCancel(k)) { p.cancel('aborted'); process.exit(0); }
+    key = String(k);
+  }
+  apiKeys[cat.env_key] = key;
+  providers[pid] = { type: 'openai_compatible', base_url: baseUrl };
+  providerProfiles[pid] = { type: 'openai_compatible', base_url: baseUrl };
+  providerEndpoints.push({ name: pid, provider_profile: pid, weight: 1 });
+}
+
+// Select models for a provider and merge them into modelConfig/selectedModelIds.
+// Additive with dedup: ids already chosen are pre-selected and never duplicated.
+async function selectProviderModels(
+  pid: string,
+  modelConfig: Record<string, any>,
+  selectedModelIds: string[]
+): Promise<void> {
+  const cat = catalog[pid];
+  const add = (id: string, conf: any) => {
+    modelConfig[id] = conf;
+    if (!selectedModelIds.includes(id)) selectedModelIds.push(id);
+  };
+  if (cat.models.length === 0) {
+    const ids = await p.text({ message: `Comma-separated model IDs for ${cat.label}:`, placeholder: 'mistral,llama3' });
+    if (p.isCancel(ids)) { p.cancel('aborted'); process.exit(0); }
+    const list = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
+    for (const id of list) add(id, { preferred_endpoints: [pid], param_size: 'unknown' });
+  } else {
+    const sel = await p.multiselect({
+      message: `Select models for ${cat.label}:`,
+      options: cat.models.map((m) => ({ value: m.id, label: `${m.label} (${m.param_size})`, hint: m.reasoning_family })),
+      initialValues: cat.models.map((m) => m.id).filter((id) => selectedModelIds.includes(id)),
+      required: true,
+    });
+    if (p.isCancel(sel)) { p.cancel('aborted'); process.exit(0); }
+    for (const id of sel as string[]) {
+      const m = cat.models.find((x) => x.id === id)!;
+      add(id, {
+        preferred_endpoints: [pid],
+        param_size: m.param_size,
+        ...(m.reasoning_family ? { reasoning_family: m.reasoning_family } : {}),
+      });
+    }
+  }
 }
 
 async function readEnvKey(envKey: string, envPath?: string): Promise<string | null> {
