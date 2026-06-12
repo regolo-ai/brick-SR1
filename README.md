@@ -1,177 +1,180 @@
 <div align="center">
 
-# Brick: Multimodal LLM Routing Gateway
+# 🧱 Brick
 
-**A spatial-routing gateway that exposes a single virtual model (`model: "brick"`) over OpenAI-compatible APIs, with per-query capability + complexity classifiers selecting the best backend from a pool of open- and closed-weight LLMs.**
+### One OpenAI-compatible endpoint. The right model for every query.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.24-00ADD8.svg)](https://go.dev)
-[![Rust](https://img.shields.io/badge/Rust-1.90-orange.svg)](https://www.rust-lang.org)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg)](https://www.python.org)
-[![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20Compatible-green.svg)](https://platform.openai.com/docs/api-reference)
+Brick is a **Mixture-of-Models (MoM) routing gateway**. It reads each prompt's
+**capability** and **complexity**, then routes it to the best backend in a pool of
+open- and closed-weight LLMs, matching the strongest single model's quality at a
+fraction of its cost. No cascades. No wasted calls. Drop-in `model: "brick"`.
 
-*Reference implementation for the paper [Brick and the Mixture-of-Models (MoM) Paradigm: Bridging Open- and Closed-Weight LLM Pools](docs/paper/paper.pdf).*
-*Author: Francesco Massa ([f.massa@regolo.ai](mailto:f.massa@regolo.ai)) · Built at [Regolo.ai](https://regolo.ai) (Seeweb).*
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Rust](https://img.shields.io/badge/Rust-1.90-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
+[![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
+[![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](#-datasets--models)
+
+**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Models](#-datasets--models) · [Paper](#-paper) · [CLI](#b-cli-self-host-in-one-command)**
 
 </div>
 
 ---
 
-## What this repo contains
-
-A complete monorepo to **run**, **use**, and **reproduce** every result in the Brick paper:
-
-| Component | Path | Purpose |
-|---|---|---|
-| **Router (Go + Rust)** | `apps/router/` | HTTP gateway that accepts OpenAI-format requests, runs capability + complexity classifiers, dispatches to the best backend in the model pool. Multi-stage Docker image. |
-| **CLI (`brick`)** | `apps/cli/` | TypeScript/oclif companion to self-host the gateway with one command. Published as `@regolo-ai/brick` on npm. |
-| **Training scripts** | `packages/training/` | ModernBERT capability classifier sweep + complexity LoRA training. Recipes for the published HF models. |
-| **Evaluation pipeline** | `packages/evals/` | Dataset A grading pipeline (00..140 scripts), 3-judge panel (gpt-5.4-mini + Mistral + GLM majority-vote), per-dimension graders. |
-| **Baselines** | `packages/evals/baselines/` | Zero-shot RouteLLM, FrugalGPT, cascade-routing comparisons reported in the paper. |
-| **Dataset / model recipes** | `packages/datasets/` | HuggingFace download scripts for Dataset A, Dataset B, capability + complexity classifiers. |
-| **Paper** | `docs/paper/` | LaTeX source (`paper.tex`, `dataset_a.tex`, `algorythm.tex`, `routers.tex`) + figures + compiled `paper.pdf`. |
-| **Deploy manifests** | `deploy/` | docker-compose stacks (single, with brick-cc addon, with classifier tunnel), Windows installer. |
-
----
-
-## Quickstart: three entry points
-
-Pick one depending on what you want to do.
-
-### A. Run the gateway (Docker, 1 minute)
+## ⚡ Quickstart (60 seconds)
 
 ```bash
 docker run --rm -p 18000:18000 \
   -e REGOLO_API_KEY=$REGOLO_API_KEY \
   ghcr.io/regolo-ai/brick:latest
-
-# health
-curl http://localhost:18000/health
-
-# OpenAI-compatible chat completion
-curl http://localhost:18000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $REGOLO_API_KEY" \
-  -d '{"model":"brick","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The `x-selected-model` response header reports which backend was chosen. See [docs/quickstart/quick.md](docs/quickstart/quick.md).
+Then call it like any OpenAI endpoint, just set `"model": "brick"`:
 
-### B. Install and use the CLI (`brick`)
+```bash
+curl http://localhost:18000/v1/chat/completions \
+  -H "Authorization: Bearer $REGOLO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"brick","messages":[{"role":"user","content":"Prove that sqrt(2) is irrational"}]}'
+```
 
-> The npm package `@regolo-ai/brick` is not yet published (see [Distribution roadmap](#distribution-roadmap) below). Install from source:
+The `x-selected-model` response header tells you which backend Brick picked.
+That math prompt routes to a reasoning model; `"Hello"` routes to the cheapest one.
+
+---
+
+## 📊 Results (Dataset A, n=5,504)
+
+Brick sits on the **Pareto frontier** of cost vs quality, dominating single-model
+baselines and prior routers (RouteLLM, FrugalGPT, Cascade Routing) and approaching
+the oracle ceiling.
+
+<div align="center">
+  <img src="docs/paper/figures/cost_pareto.png" alt="Cost vs accuracy on Dataset A: Brick traces the Pareto frontier" width="780">
+</div>
+
+| Setting | Accuracy | Cost (× cheapest) | Latency (avg) |
+|---|---:|---:|---:|
+| Always Qwen3.5-9b | 65.4% | 1.0× | 8.1 s |
+| Always DeepSeek-v4-flash | 71.2% | 4.0× | 14.7 s |
+| Always Kimi2.6 | 75.02% | 6.0× | 51.2 s |
+| **Brick (max-quality)** | **76.98%** | **1.5×** | 22.8 s |
+| **Brick (max-saving)** | 72.4% | **1.0×** | 9.4 s |
+| _Oracle bound (3-model pool)_ | _83.25%_ | _n/a_ | _n/a_ |
+
+**Brick beats always-Kimi at ~4× lower cost and roughly half the latency.**
+Inter-rater agreement on the 3-judge eval panel: κ = 0.761. Full per-dimension
+breakdown and baseline reproduction in [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
+
+---
+
+## 🤔 Why Brick
+
+| | Single model | RouteLLM | FrugalGPT / Cascade | **Brick** |
+|---|:---:|:---:|:---:|:---:|
+| One call per query (no cascade waste) | ✅ | ✅ | ❌ | ✅ |
+| Capability-aware (6 dimensions) | n/a | ❌ binary | ❌ | ✅ |
+| Complexity-aware | n/a | partial | ✅ | ✅ |
+| Pool of N open + closed models | n/a | 2 | few | ✅ |
+| Continuous cost ↔ quality knob | ❌ | ❌ | threshold | ✅ `r ∈ [-1, 1]` |
+| Native multimodal (image / audio) | varies | ❌ | ❌ | ✅ |
+| Drop-in OpenAI-compatible | n/a | n/a | n/a | ✅ |
+
+Cascade routers (FrugalGPT, Cascade Routing) call models one after another until a
+confidence check passes, paying for every miss in tokens and latency. Brick makes a
+**single forward decision** per query, so there is nothing to waste.
+
+---
+
+## 🧠 How it works
+
+For every request the router computes a **capability vector** and a **complexity
+score**, then picks the model whose skill profile is closest to what the query needs.
+
+```mermaid
+flowchart LR
+  Q([Query]) --> C[Capability classifier<br/>ModernBERT → p&#40;x&#41; ∈ Δ⁶]
+  Q --> X[Complexity classifier<br/>Qwen3.5-0.8B + LoRA → τ]
+  C --> R{{Skill-distance argmin<br/>Jₘ = Dₘ + β·aₘ}}
+  X --> R
+  R --> M1[qwen3.5-9b]
+  R --> M2[deepseek-v4-flash]
+  R --> M3[kimi2.6]
+```
+
+The query and each model live as vectors in the same capability space. The winner is
+the model whose skill vector is nearest to the query's needs, biased by a cost term:
+
+<div align="center">
+  <img src="docs/paper/figures/mom_capability_3d.png" alt="Spatial routing: the query vector and per-model skill vectors in capability space" width="540">
+</div>
+
+1. **Capability** `p(x) ∈ Δ⁶`: soft assignment over `coding`, `creative_synthesis`, `instruction_following`, `math_reasoning`, `planning_agentic`, `world_knowledge` ([`brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier)).
+2. **Complexity** `τ ∈ {easy, medium, hard}` ([`brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco), Qwen3.5-0.8B + LoRA).
+3. **Objective** per model: `Jₘ = Dₘ + β·aₘ`, distance `Dₘ = ‖p(x) − sₘ‖` plus normalized cost `aₘ`.
+4. **Argmin** over the pool → selected backend. The `r` knob slides the whole pool from max-saving to max-quality.
+
+Multimodal inputs are preprocessed (OCR, Whisper-compatible STT) then routed as text, or
+forwarded directly to a vision model. Details in [apps/router/README.md](apps/router/README.md) and the [paper](docs/paper/paper.pdf) §3.
+
+---
+
+## 🚀 Three ways to use Brick
+
+### A. Run the gateway (Docker)
+
+The [60-second quickstart](#-quickstart-60-seconds) above. See [docs/quickstart/quick.md](docs/quickstart/quick.md).
+
+### B. CLI: self-host in one command
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1.git
-cd brick-SR1/apps/cli
-npm install
-npm run build
-npm link                       # makes `brick` available on $PATH
+cd brick-SR1/apps/cli && npm install && npm run build && npm link
 
-brick init                     # guided wizard, creates ~/.brick/profiles/<name>/
-brick serve                    # docker compose up
-brick chat                     # TUI chat against http://localhost:18000
-brick route "what is 2+2?"     # one-shot routing decision
-brick status                   # active profile + container state
+brick init     # guided wizard → ~/.brick/profiles/<name>/
+brick serve    # docker compose up
+brick chat     # TUI chat against http://localhost:18000
+brick route "what is 2+2?"   # show the routing decision for a prompt
 ```
 
-See [docs/quickstart/serve.md](docs/quickstart/serve.md) for the full CLI walkthrough.
+Full walkthrough: [docs/quickstart/serve.md](docs/quickstart/serve.md) · CLI reference: [apps/cli/README.md](apps/cli/README.md).
 
-### C. Reproduce the paper evaluation
+### C. Reproduce the paper
+
+<details>
+<summary>Full evaluation pipeline (Dataset A, 5,504 queries)</summary>
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
 
-# Install workspaces
-uv sync                                                  # Python (training/evals/datasets)
+uv sync                                                  # Python workspaces
 cd apps/cli && npm install && cd ../..                   # CLI
 
 # Download HF artifacts (datasets + models)
 python packages/datasets/scripts/download_dataset_a.py --out ./data/dataset_a
 python packages/datasets/scripts/download_models.py     --out ./models
 
-# Run inference + grading on Dataset A (5,504 queries)
-python packages/evals/scripts/100_run_inference.py     --config packages/evals/configs/protocols.yaml
+# Inference + grading
+python packages/evals/scripts/100_run_inference.py  --config packages/evals/configs/protocols.yaml
 python packages/evals/scripts/110_grade_inference.py
 python packages/evals/scripts/130_aggregate_results.py | tee results.txt
 
 # Expected: Brick max-quality ≈ 76.98% accuracy, oracle bound ≈ 83.25%
 ```
 
-See [docs/quickstart/eval.md](docs/quickstart/eval.md) for the full pipeline (with judges, baselines, cost/Pareto analysis).
+Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.md](docs/quickstart/eval.md).
+
+</details>
 
 ---
 
-## Repository layout
-
-```
-brick-SR1/
-├── apps/
-│   ├── router/                 # Go + Rust gateway (was vLLM Spatial Router fork)
-│   │   ├── src/spatial-router/  # Go (HTTP proxy, routing pipeline)
-│   │   ├── candle-binding/       # Rust (ML embeddings via candle)
-│   │   ├── ml-binding/           # Rust (Linfa classical ML)
-│   │   ├── nlp-binding/          # Rust (BM25 + n-gram)
-│   │   ├── config/, scripts/, benchmark/
-│   │   └── Dockerfile
-│   └── cli/                    # @regolo-ai/brick CLI (TypeScript + oclif + ink)
-├── packages/
-│   ├── training/               # Dataset B pipeline + ModernBERT/complexity training
-│   │   ├── dataset_b/          #   data generation (01..07) + judges + push HF
-│   │   └── modernbert/         #   training scripts + W&B sweep configs
-│   ├── evals/                  # Dataset A graders + 00..140 pipeline
-│   │   ├── scripts/            #   normalize → tokenize → infer → grade → aggregate
-│   │   ├── src/brick_evals/    #   Python package (clients, graders, judge, schema)
-│   │   ├── configs/            #   judges.yaml, models.yaml, protocols.yaml, …
-│   │   ├── tests/              #   pytest suite (smoke + unit)
-│   │   └── baselines/          #   RouteLLM, FrugalGPT, cascade-routing
-│   └── datasets/               # HF download recipes (no data in git)
-├── docs/
-│   ├── paper/                  # paper.tex + figures + compiled PDF
-│   └── quickstart/             # quick.md, serve.md, eval.md
-├── deploy/                     # docker-compose, addons, Windows installer
-├── config.yaml                 # router runtime config (docker-compose volume mount)
-├── package.json                # npm workspace root
-├── pyproject.toml              # uv workspace root
-└── Makefile                    # build / test / lint / docker-build / release
-```
-
----
-
-## How Brick decides which backend handles a query
-
-For every text request, the router computes:
-
-1. **Capability vector** `p(x) ∈ Δ⁶`: soft assignment over 6 dimensions (`coding`, `creative_synthesis`, `instruction_following`, `math_reasoning`, `planning_agentic`, `world_knowledge`), produced by [`regolo/brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier).
-2. **Complexity score** `τ ∈ {easy, medium, hard}` from [`regolo/brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco) (Qwen3.5-0.8B + LoRA).
-3. **Skill–distance objective** per model `m`: `J_m = D_m + β · a_m`, with `D_m = || p(x) - s_m ||` over a per-model skill vector and `a_m` the normalized cost.
-4. **Argmin** over the pool → selected backend (`qwen3.5-9b`, `deepseek-v4-flash`, `kimi2.6`, …).
-
-Multimodal inputs (image, audio) are preprocessed (OCR / Whisper-compatible STT) and then either routed through the same pipeline (text-derived content) or forwarded directly to a vision model. See [apps/router/README.md](apps/router/README.md) and [`docs/paper/paper.tex`](docs/paper/paper.tex) §3.
-
----
-
-## Headline result (Dataset A, n = 5,504)
-
-| Setting | Accuracy | Cost (× cheapest) | Latency (avg, s) |
-|---|---:|---:|---:|
-| Always Qwen3.5-9b | 65.4% | 1.0× | 8.1 |
-| Always DeepSeek-v4-flash | 71.2% | 4.0× | 14.7 |
-| Always Kimi2.6 | 75.02% | 6.0× | 51.2 |
-| **Brick (max-quality)** | **76.98%** | **1.5×** | **22.8** |
-| **Brick (max-saving)** | 72.4% | **1.0×** | 9.4 |
-| Oracle bound (3-model pool) | 83.25% | n/a | n/a |
-
-Brick beats always-Kimi at ~4× lower cost and roughly half the latency. Inter-rater κ on the 3-judge eval panel: 0.761. Full per-dimension breakdown and baseline comparisons (RouteLLM, FrugalGPT, cascade) in [`docs/paper/paper.tex`](docs/paper/paper.tex) and [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
-
----
-
-## Datasets and models on HuggingFace
+## 🤗 Datasets & models
 
 | Artifact | HF Repo | Type | Notes |
 |---|---|---|---|
 | Dataset A (eval) | [`regolo/brick-dataset-A-routing-eval`](https://huggingface.co/datasets/regolo/brick-dataset-A-routing-eval) | dataset | 5,504 queries, 6 dims, per-model verdicts |
-| Dataset B (training) | [`massaindustries/dataset-B-modernbert-train`](https://huggingface.co/datasets/massaindustries/dataset-B-modernbert-train) | dataset | ~50k labeled, multi-label per query |
+| Dataset B (training) | [`massaindustries/dataset-B-modernbert-train`](https://huggingface.co/datasets/massaindustries/dataset-B-modernbert-train) | dataset | ~50k labeled, multi-label |
 | Capability classifier | [`regolo/brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier) | model | ModernBERT-base, 6-label sigmoid |
 | Complexity classifier | [`regolo/brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco) | model | Qwen3.5-0.8B + LoRA, 3-class |
 
@@ -179,34 +182,80 @@ Download recipes: [`packages/datasets/`](packages/datasets/).
 
 ---
 
-## Develop, build, test
+## 🗂️ What's in the repo
 
-```bash
-make install        # npm install (apps/cli) + uv sync (packages/*)
-make build          # CLI + router Docker image
-make test           # Go tests + Python pytest + CLI vitest
-make lint           # pre-commit run --all-files
-make docker-build   # → ghcr.io/regolo-ai/brick:dev
+A monorepo to **run**, **use**, and **reproduce** every result in the Brick paper.
+
+| Component | Path | Purpose |
+|---|---|---|
+| **Router** (Go + Rust) | [`apps/router/`](apps/router/) | OpenAI-format gateway: capability + complexity classifiers, dispatch to the best backend |
+| **CLI** (`brick`) | [`apps/cli/`](apps/cli/) | TypeScript/oclif companion to self-host in one command |
+| **Training** | [`packages/training/`](packages/training/) | ModernBERT capability sweep + complexity LoRA recipes |
+| **Evaluation** | [`packages/evals/`](packages/evals/) | Dataset A pipeline + 3-judge majority-vote panel |
+| **Baselines** | [`packages/evals/baselines/`](packages/evals/baselines/) | Zero-shot RouteLLM, FrugalGPT, Cascade comparisons |
+| **Paper** | [`docs/paper/`](docs/paper/) | LaTeX source, figures, compiled PDF |
+
+<details>
+<summary>Full directory tree</summary>
+
+```
+brick-SR1/
+├── apps/
+│   ├── router/                 # Go + Rust gateway (was vLLM Spatial Router fork)
+│   │   ├── src/spatial-router/ #   Go (HTTP proxy, routing pipeline)
+│   │   ├── candle-binding/     #   Rust (ML embeddings via candle)
+│   │   ├── ml-binding/         #   Rust (Linfa classical ML)
+│   │   ├── nlp-binding/        #   Rust (BM25 + n-gram)
+│   │   └── Dockerfile
+│   └── cli/                    # @regolo-ai/brick CLI (TypeScript + oclif + ink)
+├── packages/
+│   ├── training/               # Dataset B pipeline + ModernBERT/complexity training
+│   ├── evals/                  # Dataset A graders + 00..140 pipeline + baselines/
+│   └── datasets/               # HF download recipes (no data in git)
+├── docs/
+│   ├── paper/                  # paper.tex + figures + compiled PDF
+│   └── quickstart/             # quick.md, serve.md, eval.md
+├── deploy/                     # docker-compose, addons, Windows installer
+├── config.yaml                 # router runtime config
+├── package.json / pyproject.toml  # npm + uv workspace roots
+└── Makefile                    # build / test / lint / docker-build / release
 ```
 
-Per-component docs:
-- [apps/router/README.md](apps/router/README.md): router architecture, build, config, GPU complexity addon
-- [apps/cli/README.md](apps/cli/README.md): `brick` CLI commands, profiles, custom Docker images
-- [packages/training/README.md](packages/training/README.md): ModernBERT capability + complexity LoRA training tutorial (W&B sweep audit)
-- [packages/evals/README.md](packages/evals/README.md): Dataset A pipeline (00..140) + 3-judge panel
-- [packages/datasets/README.md](packages/datasets/README.md): HF download recipes
-- [packages/evals/baselines/README.md](packages/evals/baselines/README.md): RouteLLM / FrugalGPT / Cascade reproduction
+</details>
 
 ---
 
-## Paper
+## 🛠️ Develop
+
+```bash
+make install   # npm install (apps/cli) + uv sync (packages/*)
+make build     # CLI + router Docker image
+make test      # Go tests + Python pytest + CLI vitest
+make lint      # pre-commit run --all-files
+```
+
+Per-component docs: [router](apps/router/README.md) · [CLI](apps/cli/README.md) · [training](packages/training/README.md) · [evals](packages/evals/README.md) · [datasets](packages/datasets/README.md) · [baselines](packages/evals/baselines/README.md).
+
+<details>
+<summary>Distribution channels (work in progress)</summary>
+
+| Channel | Status |
+|---|---|
+| Source clone + `npm link` | available |
+| Docker GHCR (`ghcr.io/regolo-ai/brick`) | pending first push (tag `v2.0.0`) |
+| npm (`@regolo-ai/brick`) | pending `NPM_TOKEN` secret |
+| Docker Hub mirror (`docker.io/regolo/brick`) | pending Docker Hub secrets |
+
+</details>
+
+---
+
+## 📄 Paper
 
 > **Brick and the Mixture-of-Models (MoM) Paradigm: Bridging Open- and Closed-Weight LLM Pools**
-> Francesco Massa, Marco Cristofanilli (2026)
+> Francesco Massa, Marco Cristofanilli (2026) · Built at [Regolo.ai](https://regolo.ai) (Seeweb)
 
-Compile from source: `cd docs/paper && latexmk -pdf paper.tex`. Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf).
-
-### Citation
+Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf) · compile with `cd docs/paper && latexmk -pdf paper.tex`.
 
 ```bibtex
 @misc{massa2026brick,
@@ -214,28 +263,24 @@ Compile from source: `cd docs/paper && latexmk -pdf paper.tex`. Pre-built PDF: [
             Bridging Open- and Closed-Weight {LLM} Pools},
   author = {Massa, Francesco and Cristofanilli, Marco},
   year   = {2026},
-  url    = {https://github.com/regolo-ai/brick-SR1},
-  note   = {Companion code and datasets at regolo-ai/brick-SR1}
+  url    = {https://github.com/regolo-ai/brick-SR1}
 }
 ```
 
 ---
 
-## Distribution roadmap
+## 📈 Star history
 
-Distribution channels currently in setup. Until each is ready, use the source-install commands above.
-
-| Channel | Status | Action needed |
-|---|---|---|
-| Source clone + `npm link` | available | `git clone` + `cd apps/cli && npm install && npm run build && npm link` |
-| Docker GHCR (`ghcr.io/regolo-ai/brick`) | pending first push | tag `v2.0.0` triggers `.github/workflows/docker.yml` |
-| npm registry (`@regolo-ai/brick`) | pending `NPM_TOKEN` secret | set repo secret, then tag `v2.0.0` triggers `.github/workflows/npm-publish.yml` |
-| Docker Hub mirror (`docker.io/regolo/brick`) | pending `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets | set repo secrets; the same workflow auto-pushes when both are present |
-
-Repo secrets are configured at https://github.com/regolo-ai/brick-SR1/settings/secrets/actions.
+<a href="https://star-history.com/#regolo-ai/brick-SR1&Date">
+  <img src="https://api.star-history.com/svg?repos=regolo-ai/brick-SR1&type=Date" alt="Star history chart" width="600">
+</a>
 
 ---
 
-## License
+## 📜 License
 
-Brick is released under the [Apache License 2.0](LICENSE). The router descends from [vLLM Spatial Router](https://github.com/vllm-project/spatial-router); upstream attributions in [`NOTICE`](NOTICE).
+[Apache License 2.0](LICENSE). The router descends from [vLLM Spatial Router](https://github.com/vllm-project/spatial-router); upstream attributions in [`NOTICE`](NOTICE).
+
+<div align="center">
+<sub>Built with 🧱 at <a href="https://regolo.ai">Regolo.ai</a> · Contact <a href="mailto:f.massa@regolo.ai">f.massa@regolo.ai</a></sub>
+</div>
