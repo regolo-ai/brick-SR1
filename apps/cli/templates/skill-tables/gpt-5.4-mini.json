@@ -1,0 +1,34 @@
+{
+  "model": "gpt-5.4-mini",
+  "provider": "openai",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.34,
+    0.4,
+    0.65,
+    0.65,
+    0.55,
+    0.75
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "medium",
+    "low",
+    "medium",
+    "medium",
+    "low",
+    "medium"
+  ],
+  "imputed_capabilities": [],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-06-11",
+  "notes": "Derived from published AI-lab benchmarks (SWE-bench, AIME, GPQA, MMLU-Pro, tau-bench, etc.), normalized to [0,1] and mapped onto the 6 capabilities. Cold-start prior: a `measured` extraction on the frozen probe set overrides this. See README.md."
+}

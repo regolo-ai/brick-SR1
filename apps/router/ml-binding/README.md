@@ -1,4 +1,4 @@
-# ML Binding for Semantic Router
+# ML Binding for Spatial Router
 
 This directory contains Rust-based traditional ML algorithm implementations using [Linfa](https://github.com/rust-ml/linfa) for CPU-based inference.
 
@@ -73,8 +73,8 @@ cd ml-binding
 cargo build --release
 
 # The library will be at:
-# - Linux: target/release/libml_semantic_router.so
-# - macOS: target/release/libml_semantic_router.dylib
+# - Linux: target/release/libml_spatial_router.so
+# - macOS: target/release/libml_spatial_router.dylib
 ```
 
 ### Set Library Path
@@ -188,4 +188,4 @@ python download_model.py --output-dir models/
 
 ## License
 
-Apache-2.0 (same as semantic-router)
+Apache-2.0 (same as spatial-router)

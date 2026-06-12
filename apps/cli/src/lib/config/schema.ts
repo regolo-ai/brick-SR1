@@ -108,10 +108,22 @@ export const PluginSchema = z.object({
 export const SkillRouterModelSchema = z.object({
   model: z.string(),
   skill_vector: z.array(z.number()).min(1),
+  // Provenance of skill_vector: 'benchmark' (public lab benchmarks, cold-start
+  // prior), 'measured' (brick skills extract on the frozen probe set), or
+  // 'heuristic' (interpolated fallback for an unknown id). Ignored by the Go
+  // router (unknown yaml field) but surfaced in the config and `brick status`.
+  skill_source: z.enum(['benchmark', 'measured', 'heuristic']).optional(),
+  skill_confidence: z.array(z.string()).optional(),
   use_reasoning: z.boolean().optional(),
   reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
   cost_weight: z.number().optional(),
   latency_weight: z.number().optional(),
+  // Native multimodal capability. When set, the brick gateway forwards the raw
+  // modality (image_url / audio part) straight to this model instead of running
+  // OCR/STT to flatten it to text first. Honored by the Go router's capability
+  // -aware passthrough (pkg/proxy/brick.go).
+  handles_images: z.boolean().optional(),
+  handles_audio: z.boolean().optional(),
   // Inline endpoint config — enables per-model routing to OpenRouter / Regolo /
   // Together / any OpenAI-compatible backend without provider_profiles boilerplate.
   base_url: z.string().url().optional(),

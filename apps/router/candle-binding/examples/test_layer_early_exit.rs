@@ -8,7 +8,7 @@
 //! ```
 
 use candle_core::{DType, Device, Tensor};
-use candle_semantic_router::model_architectures::embedding::MmBertEmbeddingModel;
+use candle_spatial_router::model_architectures::embedding::MmBertEmbeddingModel;
 use std::time::Instant;
 
 fn main() {
@@ -16,7 +16,7 @@ fn main() {
     println!("{}\n", "=".repeat(50));
 
     let model_path = std::env::var("MMBERT_MODEL_PATH").expect(
-        "MMBERT_MODEL_PATH not set. Download: huggingface-cli download llm-semantic-router/mmbert-embed-32k-2d-matryoshka"
+        "MMBERT_MODEL_PATH not set. Download: huggingface-cli download llm-spatial-router/mmbert-embed-32k-2d-matryoshka"
     );
 
     let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);

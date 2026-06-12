@@ -12,7 +12,7 @@
 package ml_binding
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/target/release -lml_semantic_router -lm -ldl -lpthread
+#cgo LDFLAGS: -L${SRCDIR}/target/release -lml_spatial_router -lm -ldl -lpthread
 #include <stdlib.h>
 #include <stdint.h>
 

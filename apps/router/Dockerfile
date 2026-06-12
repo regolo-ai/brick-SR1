@@ -85,18 +85,18 @@ RUN mkdir -p /app/libs
 COPY apps/router/candle-binding/ ./candle-binding/
 COPY apps/router/ml-binding/ ./ml-binding/
 COPY apps/router/nlp-binding/ ./nlp-binding/
-COPY apps/router/src/semantic-router/go.mod apps/router/src/semantic-router/go.sum ./src/semantic-router/
+COPY apps/router/src/spatial-router/go.mod apps/router/src/spatial-router/go.sum ./src/spatial-router/
 
 # Copy compiled libraries from Rust stages to centralized libs folder
-COPY --from=rust-builder /app/candle-binding/target/release/libcandle_semantic_router.so /app/libs/
-COPY --from=ml-builder /app/ml-binding/target/release/libml_semantic_router.so /app/libs/
+COPY --from=rust-builder /app/candle-binding/target/release/libcandle_spatial_router.so /app/libs/
+COPY --from=ml-builder /app/ml-binding/target/release/libml_spatial_router.so /app/libs/
 COPY --from=nlp-builder /app/nlp-binding/target/release/libnlp_binding.so /app/libs/
 
 # Download Go dependencies
-RUN cd src/semantic-router && go mod download
+RUN cd src/spatial-router && go mod download
 
 # Copy Go source code
-COPY apps/router/src/semantic-router/ ./src/semantic-router/
+COPY apps/router/src/spatial-router/ ./src/spatial-router/
 
 ENV CGO_ENABLED=1
 ENV GOOS=linux
@@ -105,9 +105,9 @@ ENV LD_LIBRARY_PATH=/app/libs
 
 # Build the proxy binary
 # CGO_CFLAGS includes binding directories for header discovery
-RUN cd src/semantic-router && \
+RUN cd src/spatial-router && \
     CGO_CFLAGS="-I/app/candle-binding -I/app/ml-binding -I/app/nlp-binding" \
-    CGO_LDFLAGS="-L/app/libs -lcandle_semantic_router -lml_semantic_router -lnlp_binding" \
+    CGO_LDFLAGS="-L/app/libs -lcandle_spatial_router -lml_spatial_router -lnlp_binding" \
     go build -ldflags="-w -s" -o /app/bin/brick cmd/main.go
 
 # ─── Stage 3: Runtime ───

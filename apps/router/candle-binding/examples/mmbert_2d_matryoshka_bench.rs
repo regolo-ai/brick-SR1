@@ -21,10 +21,10 @@
 ///   --example mmbert_2d_matryoshka_bench -- --device cpu
 ///
 /// # Download model first if needed:
-/// huggingface-cli download llm-semantic-router/mmbert-embed-32k-2d-matryoshka
+/// huggingface-cli download llm-spatial-router/mmbert-embed-32k-2d-matryoshka
 /// ```
 use candle_core::Device;
-use candle_semantic_router::model_architectures::embedding::{
+use candle_spatial_router::model_architectures::embedding::{
     MatryoshkaConfig, MmBertEmbeddingModel,
 };
 use std::env;
@@ -40,7 +40,7 @@ fn get_model_path() -> Result<String, String> {
     env::var("MMBERT_MODEL_PATH").map_err(|_| {
         "MMBERT_MODEL_PATH environment variable not set.\n\
          Usage: MMBERT_MODEL_PATH=/path/to/model cargo run --example mmbert_2d_matryoshka_bench\n\
-         Download: huggingface-cli download llm-semantic-router/mmbert-embed-32k-2d-matryoshka"
+         Download: huggingface-cli download llm-spatial-router/mmbert-embed-32k-2d-matryoshka"
             .to_string()
     })
 }

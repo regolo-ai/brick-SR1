@@ -15,7 +15,7 @@
     "brick",
     "llm",
     "router",
-    "semantic-routing",
+    "spatial-routing",
     "mixture-of-models",
     "regolo",
     "openai-compatible",

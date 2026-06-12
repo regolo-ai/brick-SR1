@@ -4,7 +4,7 @@
 
 #[test]
 fn test_classification_output_scenarios() {
-    use candle_semantic_router::model_architectures::generative::qwen3_causal::ClassificationResult;
+    use candle_spatial_router::model_architectures::generative::qwen3_causal::ClassificationResult;
 
     println!("\n=== Classification Output Demo ===\n");
 
@@ -257,7 +257,7 @@ fn test_classification_output_scenarios() {
 
 #[test]
 fn test_entropy_and_uncertainty() {
-    use candle_semantic_router::model_architectures::generative::qwen3_causal::ClassificationResult;
+    use candle_spatial_router::model_architectures::generative::qwen3_causal::ClassificationResult;
 
     println!("\n=== Entropy and Uncertainty Analysis ===\n");
 
@@ -306,7 +306,7 @@ fn test_entropy_and_uncertainty() {
 
 #[test]
 fn test_realistic_mmlu_pro_distribution() {
-    use candle_semantic_router::model_architectures::generative::qwen3_causal::ClassificationResult;
+    use candle_spatial_router::model_architectures::generative::qwen3_causal::ClassificationResult;
 
     println!("\n=== Realistic MMLU-Pro Classification ===\n");
 

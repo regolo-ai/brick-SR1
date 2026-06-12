@@ -1,4 +1,4 @@
-//! ML Binding for Semantic Router
+//! ML Binding for Spatial Router
 //!
 //! Inference-only library for ML-based model selection using traditional ML algorithms.
 //!

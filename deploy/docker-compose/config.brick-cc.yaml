@@ -1,6 +1,6 @@
 # Brick → Claude Code config (Docker Compose deploy, GPU classifier locally).
 # Only the bits strictly needed for the Anthropic pass-through are populated;
-# semantic routing / legacy / brick-multimodal pieces are stubs because the
+# spatial routing / legacy / brick-multimodal pieces are stubs because the
 # /v1/messages handler bypasses them entirely.
 
 model:
@@ -54,5 +54,5 @@ anthropic_passthrough:
     hard: "claude-opus-4-7"
 
 # No keyword/domain rules and no decisions: this deployment never runs the
-# semantic-routing pipeline, only the /v1/messages Anthropic pass-through.
+# spatial-routing pipeline, only the /v1/messages Anthropic pass-through.
 decisions: []

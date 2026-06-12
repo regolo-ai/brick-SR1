@@ -24,7 +24,7 @@
 /// cargo run --release --example embedding_benchmark -- --quick
 /// ```
 use candle_core::{Device, Tensor};
-use candle_semantic_router::model_architectures::embedding::{
+use candle_spatial_router::model_architectures::embedding::{
     continuous_batch_scheduler::ContinuousBatchConfig, qwen3_batched::Qwen3EmbeddingModelBatched,
     qwen3_embedding::Qwen3EmbeddingModel,
 };

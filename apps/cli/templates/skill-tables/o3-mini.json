@@ -1,0 +1,34 @@
+{
+  "model": "o3-mini",
+  "provider": "openai",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.49,
+    0.45,
+    0.58,
+    0.87,
+    0.68,
+    0.8
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "medium",
+    "low",
+    "low",
+    "high",
+    "medium",
+    "medium"
+  ],
+  "imputed_capabilities": [],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-06-11",
+  "notes": "Derived from published AI-lab benchmarks (SWE-bench, AIME, GPQA, MMLU-Pro, tau-bench, etc.), normalized to [0,1] and mapped onto the 6 capabilities. Cold-start prior: a `measured` extraction on the frozen probe set overrides this. See README.md."
+}

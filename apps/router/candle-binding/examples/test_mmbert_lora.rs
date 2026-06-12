@@ -8,7 +8,7 @@
 //!   MMBERT_INTENT_MODEL - Path to intent classifier model
 //!   MMBERT_JAILBREAK_MODEL - Path to jailbreak detector model
 
-use candle_semantic_router::classifiers::lora::{IntentLoRAClassifier, SecurityLoRAClassifier};
+use candle_spatial_router::classifiers::lora::{IntentLoRAClassifier, SecurityLoRAClassifier};
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

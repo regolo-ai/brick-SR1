@@ -9,7 +9,7 @@
 use anyhow::{anyhow, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_semantic_router::model_architectures::traditional::modernbert::ModernBertVariant;
+use candle_spatial_router::model_architectures::traditional::modernbert::ModernBertVariant;
 use candle_transformers::models::modernbert::{Config, ModernBert};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use std::time::Instant;
@@ -240,7 +240,7 @@ fn main() -> Result<()> {
 
     // Load model
     println!("\nLoading ModernBERT-base-32k...");
-    let base_model_id = "llm-semantic-router/modernbert-base-32k";
+    let base_model_id = "llm-spatial-router/modernbert-base-32k";
     let repo = Repo::with_revision(
         base_model_id.to_string(),
         RepoType::Model,

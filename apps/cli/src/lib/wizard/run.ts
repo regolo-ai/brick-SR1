@@ -6,6 +6,8 @@ import { saveConfig } from '../config/save.js';
 import { ConfigSchema, type BrickConfig } from '../config/schema.js';
 import { catalog, reasoningFamiliesDefault } from '../catalog/index.js';
 import { writeCompose } from '../docker/compose.js';
+import { lookupSkillRecord } from '../skills/table.js';
+import { MODES, R_BY_MODE, type ClaudeMode } from '../claude/modes.js';
 
 export async function runWizard(profile: string): Promise<BrickConfig> {
   const pp = paths(profile);
@@ -89,36 +91,106 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   if (p.isCancel(defaultModelChoice)) { p.cancel('aborted'); process.exit(0); }
   const defaultModel = String(defaultModelChoice);
 
-  // complexity service
-  const useComplexity = await p.confirm({ message: 'Enable Brick2 complexity service?', initialValue: true });
-  if (p.isCancel(useComplexity)) { p.cancel('aborted'); process.exit(0); }
-  let complexityService: any | undefined;
-  if (useComplexity) {
-    const baseUrl = await p.text({ message: 'complexity_service base_url:', placeholder: 'http://127.0.0.1:8094', defaultValue: 'http://127.0.0.1:8094' });
-    if (p.isCancel(baseUrl)) { p.cancel('aborted'); process.exit(0); }
-    complexityService = { enabled: true, base_url: String(baseUrl || 'http://127.0.0.1:8094'), timeout_seconds: 8, auto_spawn: false };
+  // complexity service — always enabled (it is essential to Brick routing); the
+  // wizard no longer asks whether to enable it, only where it lives.
+  const complexityBaseUrl = await p.text({ message: 'complexity_service base_url:', placeholder: 'http://127.0.0.1:8094', defaultValue: 'http://127.0.0.1:8094' });
+  if (p.isCancel(complexityBaseUrl)) { p.cancel('aborted'); process.exit(0); }
+  const complexityService = { enabled: true, base_url: String(complexityBaseUrl || 'http://127.0.0.1:8094'), timeout_seconds: 8, auto_spawn: false };
+
+  // routing mode — quantized preset of the continuous r knob
+  // (skill_router.math.routing_preference, honored by the Go router).
+  const MODE_HINTS: Record<ClaudeMode, string> = {
+    eco: 'max savings: cheapest models whenever possible',
+    lite: 'mostly cheap, escalate only when clearly needed',
+    mid: 'balanced (production default)',
+    pro: 'mostly capable, save only on trivial queries',
+    max: 'max quality: strongest models regardless of cost',
+  };
+  const modeChoice = await p.select({
+    message: 'Brick routing mode (cost/quality knob):',
+    options: MODES.map((m) => ({ value: m, label: `${m} (r=${R_BY_MODE[m]})`, hint: MODE_HINTS[m] })),
+    initialValue: 'mid' as ClaudeMode,
+  });
+  if (p.isCancel(modeChoice)) { p.cancel('aborted'); process.exit(0); }
+  const mode = modeChoice as ClaudeMode;
+  const routingPreference = R_BY_MODE[mode];
+
+  // keyword overrides — let the user force a model when keywords match,
+  // on top of the default coder rules.
+  const customKeywordRules: any[] = [];
+  const wantKeyword = await p.confirm({
+    message: 'Add a custom keyword override (force a model when keywords match)?',
+    initialValue: false,
+  });
+  if (p.isCancel(wantKeyword)) { p.cancel('aborted'); process.exit(0); }
+  if (wantKeyword) {
+    for (;;) {
+      const kws = await p.text({ message: 'Comma-separated keywords:', placeholder: 'prove, theorem, integral' });
+      if (p.isCancel(kws)) { p.cancel('aborted'); process.exit(0); }
+      const keywords = String(kws).split(',').map((s) => s.trim()).filter(Boolean);
+      const targets = await p.multiselect({
+        message: 'Model(s) to force for these keywords (space to toggle, enter to confirm):',
+        options: selectedModelIds.map((id) => ({ value: id, label: id })),
+        required: true,
+      });
+      if (p.isCancel(targets)) { p.cancel('aborted'); process.exit(0); }
+      const targetModels = (targets as string[]).map(String);
+      if (keywords.length > 0 && targetModels.length > 0) {
+        // One override rule per chosen model. The Go router keeps a single
+        // override per keyword match, ranked by importance (keywords.go:
+        // betterKeyword), so selection order = priority: the first model wins,
+        // the rest are fallbacks if it leaves the pool.
+        targetModels.forEach((model, i) => {
+          customKeywordRules.push({
+            name: `user_override_${customKeywordRules.length + 1}`,
+            mode: 'override',
+            importance: Math.max(1, 10 - i),
+            model,
+            operator: 'OR',
+            keywords,
+            case_sensitive: false,
+          });
+        });
+      }
+      const more = await p.confirm({ message: 'Add another keyword override?', initialValue: false });
+      if (p.isCancel(more)) { p.cancel('aborted'); process.exit(0); }
+      if (!more) break;
+    }
   }
 
-  // multimodal brick
-  const useBrick = await p.confirm({ message: 'Enable Brick multimodal (STT/OCR/Vision)?', initialValue: true });
-  if (p.isCancel(useBrick)) { p.cancel('aborted'); process.exit(0); }
-  let brick: any | undefined;
-  if (useBrick) {
-    const primaryProvider = enabledProviders.includes('regolo') ? 'regolo' : enabledProviders[0];
-    const mm = catalog[primaryProvider].multimodal;
-    brick = {
-      enabled: true,
-      stt_model: mm.stt?.model ?? 'faster-whisper-large-v3',
-      stt_endpoint: mm.stt?.endpoint ?? 'https://api.regolo.ai/v1/audio/transcriptions',
-      ocr_model: mm.ocr?.model ?? 'deepseek-ocr-2',
-      ocr_endpoint: mm.ocr?.endpoint ?? 'https://api.regolo.ai/v1/chat/completions',
-      vision_model: mm.vision?.model ?? 'qwen3.5-122b',
-      vision_endpoint: mm.vision?.endpoint ?? 'https://api.regolo.ai/v1/chat/completions',
-      ocr_min_text_length: 10,
-    };
-  }
+  // Multimodal — always on. Per-model native capability flags decide which
+  // models receive raw image/audio directly; the brick block below stays as the
+  // OCR/STT/vision FALLBACK for models that handle neither.
+  const imageCapable = await p.multiselect({
+    message: 'Which models handle IMAGES natively? (raw image passed through, no OCR) — space to toggle, enter to confirm',
+    options: selectedModelIds.map((id) => ({ value: id, label: id })),
+    required: false,
+  });
+  if (p.isCancel(imageCapable)) { p.cancel('aborted'); process.exit(0); }
+  const audioCapable = await p.multiselect({
+    message: 'Which models handle AUDIO natively? (raw audio passed through, no STT) — space to toggle, enter to confirm',
+    options: selectedModelIds.map((id) => ({ value: id, label: id })),
+    required: false,
+  });
+  if (p.isCancel(audioCapable)) { p.cancel('aborted'); process.exit(0); }
+  const caps: Record<string, { images?: boolean; audio?: boolean }> = {};
+  for (const id of imageCapable as string[]) caps[id] = { ...caps[id], images: true };
+  for (const id of audioCapable as string[]) caps[id] = { ...caps[id], audio: true };
 
-  const skillRouter = buildSkillRouter(selectedModelIds, complexityService?.base_url);
+  const primaryProvider = enabledProviders.includes('regolo') ? 'regolo' : enabledProviders[0];
+  const mm = catalog[primaryProvider].multimodal;
+  const brick = {
+    enabled: true,
+    stt_model: mm.stt?.model ?? 'faster-whisper-large-v3',
+    stt_endpoint: mm.stt?.endpoint ?? 'https://api.regolo.ai/v1/audio/transcriptions',
+    ocr_model: mm.ocr?.model ?? 'deepseek-ocr-2',
+    ocr_endpoint: mm.ocr?.endpoint ?? 'https://api.regolo.ai/v1/chat/completions',
+    vision_model: mm.vision?.model ?? 'qwen3.5-122b',
+    vision_endpoint: mm.vision?.endpoint ?? 'https://api.regolo.ai/v1/chat/completions',
+    ocr_min_text_length: 10,
+  };
+
+  const skillRouter = buildSkillRouter(selectedModelIds, complexityService?.base_url, routingPreference, customKeywordRules, caps);
 
   // assemble
   const reasoningFamilies: Record<string, any> = {};
@@ -148,14 +220,22 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   });
 
   // summary
+  const skillLines = skillRouter.models.map(
+    (m: any) => `  ${m.model}: ${m.skill_source}${m.skill_source === 'heuristic' ? ' (run: brick skills extract)' : ''}`
+  );
   p.note(
     [
       `providers: ${Object.keys(providers).join(', ')}`,
       `models: ${selectedModelIds.join(', ')}`,
       `default_model: ${defaultModel}`,
-      `skill_router models: ${skillRouter.models.length}`,
-      `complexity_service: ${useComplexity ? 'on' : 'off'}`,
-      `multimodal brick: ${useBrick ? 'on' : 'off'}`,
+      `mode: ${mode} (r=${routingPreference})`,
+      `keyword overrides: ${customKeywordRules.length} custom + ${skillRouter.keyword_rules.length - customKeywordRules.length} default`,
+      `skill sources:`,
+      ...skillLines,
+      `complexity_service: on (${complexityService.base_url})`,
+      `multimodal: on (passthrough per-model; OCR/STT/vision fallback)`,
+      `  native image: ${(imageCapable as string[]).join(', ') || 'none'}`,
+      `  native audio: ${(audioCapable as string[]).join(', ') || 'none'}`,
     ].join('\n'),
     'summary'
   );
@@ -185,14 +265,56 @@ const KNOWN_SKILL_VECTORS: Record<string, number[]> = {
   'kimi2.6': [0.904272, 0.751595, 0.87018, 0.943892, 0.641863, 0.344074],
 };
 
-function buildSkillRouter(modelIds: string[], complexityBaseUrl?: string): any {
-  const models = modelIds.map((id, idx) => ({
-    model: id,
-    skill_vector: KNOWN_SKILL_VECTORS[id] ?? heuristicSkillVector(idx, modelIds.length),
-    use_reasoning: id === 'kimi2.6' ? true : false,
-    ...(id === 'kimi2.6' ? { reasoning_effort: 'medium' } : {}),
-    cost_weight: Number(((idx + 1) / Math.max(1, modelIds.length)).toFixed(2)),
-  }));
+// Normalized model costs a_m from the paper (Table 7). cost_weight enters the
+// routing objective J_m = D_m + beta * a_m, so for the calibrated pool it must
+// match the values the math was locked against. Unknown models fall back to a
+// rank-based proxy.
+const KNOWN_COST_WEIGHTS: Record<string, number> = {
+  'qwen3.5-9b': 0.1,
+  'deepseek-v4-flash': 0.4,
+  'kimi2.6': 0.6,
+};
+
+function buildSkillRouter(
+  modelIds: string[],
+  complexityBaseUrl?: string,
+  routingPreference = 0,
+  extraKeywordRules: any[] = [],
+  caps: Record<string, { images?: boolean; audio?: boolean }> = {}
+): any {
+  const models = modelIds.map((id, idx) => {
+    // Prefer a published skill vector (measured > benchmark) from the public
+    // table; fall back to the legacy hardcoded set, then to a heuristic. The
+    // chosen provenance is recorded so the user knows how trustworthy it is.
+    const published = lookupSkillRecord(id);
+    let skill_vector: number[];
+    let skill_source: 'benchmark' | 'measured' | 'heuristic';
+    let skill_confidence: string[] | undefined;
+    if (published) {
+      skill_vector = published.skill_vector;
+      skill_source = published.source;
+      skill_confidence = published.confidence;
+    } else if (KNOWN_SKILL_VECTORS[id]) {
+      skill_vector = KNOWN_SKILL_VECTORS[id];
+      skill_source = 'measured';
+    } else {
+      skill_vector = heuristicSkillVector(idx, modelIds.length);
+      skill_source = 'heuristic';
+    }
+    return {
+      model: id,
+      skill_vector,
+      skill_source,
+      ...(skill_confidence ? { skill_confidence } : {}),
+      use_reasoning: id === 'kimi2.6' ? true : false,
+      ...(id === 'kimi2.6' ? { reasoning_effort: 'medium' } : {}),
+      cost_weight: KNOWN_COST_WEIGHTS[id] ?? Number(((idx + 1) / Math.max(1, modelIds.length)).toFixed(2)),
+      // Native multimodal flags: when set, the brick gateway forwards the raw
+      // image/audio to this model instead of OCR/STT-flattening it to text.
+      ...(caps[id]?.images ? { handles_images: true } : {}),
+      ...(caps[id]?.audio ? { handles_audio: true } : {}),
+    };
+  });
 
   return {
     enabled: true,
@@ -213,6 +335,7 @@ function buildSkillRouter(modelIds: string[], complexityBaseUrl?: string): any {
     math: {
       prior_strength: 8,
       tau: { easy: 0.55, medium: 0.72, hard: 0.88 },
+      routing_preference: routingPreference,
       complexity_mu: 0.345170,
       complexity_bias: 0.822235,
       cost_penalty_beta: 0.230778,
@@ -250,6 +373,7 @@ function buildSkillRouter(modelIds: string[], complexityBaseUrl?: string): any {
         keywords: ['python', 'javascript', 'typescript', 'golang', 'rust', 'java', 'sql', 'bash', 'async', 'thread'],
         case_sensitive: false,
       },
+      ...extraKeywordRules,
     ],
   };
 }

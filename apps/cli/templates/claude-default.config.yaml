@@ -1,0 +1,55 @@
+# Default Brick profile for Claude Code — materialized automatically by `brick claude on`.
+# Two-container stack: complexity classifier + Brick router. The classifier is reached
+# via Docker Compose service DNS (classifier:8094). No API key needed: the client's own
+# Anthropic bearer (OAuth subscription or API key) is forwarded verbatim.
+
+model:
+  name: brick-claude
+  description: Default Brick router for Claude Code pass-through
+
+server_port: 8000
+auto_model_name: brick-claude
+
+# Stubs required by the config loader (not exercised on the /v1/messages path).
+providers:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+provider_profiles:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+provider_endpoints:
+  - name: regolo
+    provider_profile: regolo
+    weight: 1
+default_model: claude-sonnet-4-6
+model_config:
+  claude-haiku-4-5: { preferred_endpoints: ["regolo"], param_size: "1b" }
+  claude-sonnet-4-6: { preferred_endpoints: ["regolo"], param_size: "1b" }
+  claude-opus-4-7: { preferred_endpoints: ["regolo"], param_size: "1b" }
+
+# Complexity classifier: reaches the classifier sidecar via Docker Compose service DNS.
+complexity_service:
+  enabled: true
+  base_url: http://classifier:8094
+  bearer_token: "${BRICK_CLASSIFIER_TOKEN}"
+  timeout_seconds: 8
+  auto_spawn: false
+
+# Anthropic pass-through: the only routing this profile performs.
+anthropic_passthrough:
+  enabled: true
+  upstream_url: https://api.anthropic.com
+  extra_usage_enabled: false
+  context_1m_threshold_bytes: 600000
+  model_map:
+    easy: claude-haiku-4-5
+    medium: claude-sonnet-4-6
+    hard: claude-opus-4-7
+  model_map_1m:
+    easy: claude-sonnet-4-6
+    medium: claude-sonnet-4-6
+    hard: claude-opus-4-7
+
+decisions: []

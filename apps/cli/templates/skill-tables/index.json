@@ -1,0 +1,85 @@
+{
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "date": "2026-06-11",
+  "models": [
+    {
+      "model": "claude-opus-4-8",
+      "provider": "anthropic",
+      "file": "claude-opus-4-8.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "file": "claude-sonnet-4-6.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "provider": "anthropic",
+      "file": "claude-haiku-4-5.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-5.5",
+      "provider": "openai",
+      "file": "gpt-5.5.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-5.4",
+      "provider": "openai",
+      "file": "gpt-5.4.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-5.4-mini",
+      "provider": "openai",
+      "file": "gpt-5.4-mini.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "o3",
+      "provider": "openai",
+      "file": "o3.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "o3-mini",
+      "provider": "openai",
+      "file": "o3-mini.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gemini-3.1-pro",
+      "provider": "google",
+      "file": "gemini-3.1-pro.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gemini-3.5-flash",
+      "provider": "google",
+      "file": "gemini-3.5-flash.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gemini-3.1-flash-lite",
+      "provider": "google",
+      "file": "gemini-3.1-flash-lite.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gemini-2.5-pro",
+      "provider": "google",
+      "file": "gemini-2.5-pro.json",
+      "source": "benchmark"
+    }
+  ]
+}

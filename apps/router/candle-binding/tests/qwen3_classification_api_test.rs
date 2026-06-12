@@ -2,7 +2,7 @@
 //!
 //! This tests the API surface without requiring an actual model.
 
-use candle_semantic_router::model_architectures::generative::qwen3_causal::{
+use candle_spatial_router::model_architectures::generative::qwen3_causal::{
     ClassificationResult, GenerationConfig, GenerationResult,
 };
 

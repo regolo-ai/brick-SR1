@@ -2,7 +2,7 @@
 
 # Brick: Multimodal LLM Routing Gateway
 
-**A semantic-routing gateway that exposes a single virtual model (`model: "brick"`) over OpenAI-compatible APIs, with per-query capability + complexity classifiers selecting the best backend from a pool of open- and closed-weight LLMs.**
+**A spatial-routing gateway that exposes a single virtual model (`model: "brick"`) over OpenAI-compatible APIs, with per-query capability + complexity classifiers selecting the best backend from a pool of open- and closed-weight LLMs.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8.svg)](https://go.dev)
@@ -107,8 +107,8 @@ See [docs/quickstart/eval.md](docs/quickstart/eval.md) for the full pipeline (wi
 ```
 brick-SR1/
 ├── apps/
-│   ├── router/                 # Go + Rust gateway (was vLLM Semantic Router fork)
-│   │   ├── src/semantic-router/  # Go (HTTP proxy, routing pipeline)
+│   ├── router/                 # Go + Rust gateway (was vLLM Spatial Router fork)
+│   │   ├── src/spatial-router/  # Go (HTTP proxy, routing pipeline)
 │   │   ├── candle-binding/       # Rust (ML embeddings via candle)
 │   │   ├── ml-binding/           # Rust (Linfa classical ML)
 │   │   ├── nlp-binding/          # Rust (BM25 + n-gram)
@@ -238,4 +238,4 @@ Repo secrets are configured at https://github.com/regolo-ai/brick-SR1/settings/s
 
 ## License
 
-Brick is released under the [Apache License 2.0](LICENSE). The router descends from [vLLM Semantic Router](https://github.com/vllm-project/semantic-router); upstream attributions in [`NOTICE`](NOTICE).
+Brick is released under the [Apache License 2.0](LICENSE). The router descends from [vLLM Spatial Router](https://github.com/vllm-project/spatial-router); upstream attributions in [`NOTICE`](NOTICE).

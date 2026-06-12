@@ -24,7 +24,7 @@
 //! - RoPE theta: 160000 (YaRN-scaled for 32K)
 //!
 //! ## References
-//! - Model: https://huggingface.co/llm-semantic-router/mmbert-embed-32k-2d-matryoshka
+//! - Model: https://huggingface.co/llm-spatial-router/mmbert-embed-32k-2d-matryoshka
 //! - Base: https://huggingface.co/jhu-clsp/mmBERT-base
 //! - Paper: YaRN: Efficient Context Window Extension of Large Language Models
 

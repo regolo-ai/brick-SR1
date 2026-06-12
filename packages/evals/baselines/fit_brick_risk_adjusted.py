@@ -31,7 +31,7 @@ CAPABILITIES = (
 )
 CAP_INDEX = {name: i for i, name in enumerate(CAPABILITIES)}
 
-# Current semantic-routing/config/config.yaml values, mapped to short model ids.
+# Current spatial-routing/config/config.yaml values, mapped to short model ids.
 # planning_agentic_multiturn is not part of the production capability model yet,
 # so it reuses planning_agentic in this diagnostic.
 SKILL_VECTORS = {

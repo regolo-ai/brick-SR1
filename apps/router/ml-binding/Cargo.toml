@@ -1,12 +1,12 @@
 [package]
-name = "ml_semantic_router"
+name = "ml_spatial_router"
 version = "0.1.0"
 edition = "2021"
-description = "Traditional ML algorithms binding for semantic-router using Linfa"
+description = "Traditional ML algorithms binding for spatial-router using Linfa"
 license = "Apache-2.0"
 
 [lib]
-name = "ml_semantic_router"
+name = "ml_spatial_router"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

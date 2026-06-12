@@ -63,7 +63,7 @@ export function Welcome(props: {
         {babl ? (
           <Text dimColor>multi-agent debate · powered by Regolo · BABEL mode</Text>
         ) : (
-          <Text dimColor>self-hosted semantic router · Brick gateway, powered by</Text>
+          <Text dimColor>self-hosted spatial router · Brick gateway, powered by</Text>
         )}
       </Box>
       <Box marginTop={1} flexDirection="column">

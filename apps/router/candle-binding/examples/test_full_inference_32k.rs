@@ -10,7 +10,7 @@
 //!   cargo run --example test_full_inference_32k --release --no-default-features
 
 use anyhow::{anyhow, Result};
-use candle_semantic_router::model_architectures::traditional::{
+use candle_spatial_router::model_architectures::traditional::{
     Config, ModernBertVariant, TraditionalModernBertClassifier,
 };
 use hf_hub::{api::sync::Api, Repo, RepoType};
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
 
     // Step 1: Download Extended32K base model
     println!("\nDownloading Extended32K base model...");
-    let base_model_id = "llm-semantic-router/modernbert-base-32k";
+    let base_model_id = "llm-spatial-router/modernbert-base-32k";
     let repo = Repo::with_revision(
         base_model_id.to_string(),
         RepoType::Model,

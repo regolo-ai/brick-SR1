@@ -36,11 +36,11 @@ pub enum ModernBertVariant {
     /// Reference: https://huggingface.co/jhu-clsp/mmBERT-base
     Multilingual,
     /// ModernBERT-base-32k - Extended context ModernBERT (32,768 max length with RoPE)
-    /// Reference: https://huggingface.co/llm-semantic-router/modernbert-base-32k
+    /// Reference: https://huggingface.co/llm-spatial-router/modernbert-base-32k
     Extended32K,
     /// mmBERT-32K - YaRN-scaled Multilingual ModernBERT (32768 max length)
     /// Extended from 8K to 32K using YaRN RoPE scaling (theta=160000)
-    /// Reference: https://huggingface.co/llm-semantic-router/mmbert-32k-yarn
+    /// Reference: https://huggingface.co/llm-spatial-router/mmbert-32k-yarn
     Multilingual32K,
 }
 
@@ -824,7 +824,7 @@ impl TraditionalModernBertClassifier {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use candle_semantic_router::model_architectures::traditional::modernbert::{
+    /// use candle_spatial_router::model_architectures::traditional::modernbert::{
     ///     ModernBertVariant, TraditionalModernBertClassifier
     /// };
     ///
@@ -1072,7 +1072,7 @@ impl TraditionalModernBertClassifier {
     /// Load mmBERT-32K (YaRN-scaled multilingual) model from directory
     /// Convenience method that explicitly loads as Multilingual32K variant
     /// This variant supports 32K context length with YaRN RoPE scaling (theta=160000)
-    /// Reference: https://huggingface.co/llm-semantic-router/mmbert-32k-yarn
+    /// Reference: https://huggingface.co/llm-spatial-router/mmbert-32k-yarn
     pub fn load_mmbert_32k_from_directory(
         model_path: &str,
         use_cpu: bool,
@@ -1311,7 +1311,7 @@ impl TraditionalModernBertTokenClassifier {
 
     /// Create mmBERT-32K (YaRN-scaled multilingual) token classifier
     /// This variant supports 32K context length with YaRN RoPE scaling (theta=160000)
-    /// Reference: https://huggingface.co/llm-semantic-router/mmbert-32k-yarn
+    /// Reference: https://huggingface.co/llm-spatial-router/mmbert-32k-yarn
     pub fn new_mmbert_32k(model_id: &str, use_cpu: bool) -> Result<Self> {
         Self::new_with_variant(model_id, use_cpu, ModernBertVariant::Multilingual32K)
     }

@@ -1,12 +1,12 @@
 [package]
-name = "candle-semantic-router"
+name = "candle-spatial-router"
 version = "0.4.0"
 edition = "2021"
 description = "Go bindings for Candle BERT semantic similarity model for LLM routing"
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "candle_semantic_router"
+name = "candle_spatial_router"
 # Order: rlib for Rust-to-Rust linking, staticlib for C/Go FFI (static), cdylib for dynamic linking
 crate-type = ["rlib", "staticlib", "cdylib"]
 

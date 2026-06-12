@@ -118,15 +118,15 @@ async function suiteSchema(): Promise<void> {
   try {
     const upstreamPath = process.env.UPSTREAM_CONFIG ?? '';
     if (!upstreamPath) {
-      record('schema', 'parse upstream semantic-routing/config.yaml', true, 'skipped (set UPSTREAM_CONFIG=path/to/config.yaml to enable)');
+      record('schema', 'parse upstream spatial-routing/config.yaml', true, 'skipped (set UPSTREAM_CONFIG=path/to/config.yaml to enable)');
       return;
     }
     const upstream = await readFile(upstreamPath, 'utf8');
     const parsed = yaml.load(upstream);
     ConfigSchema.parse(parsed);
-    record('schema', 'parse upstream semantic-routing/config.yaml', true);
+    record('schema', 'parse upstream spatial-routing/config.yaml', true);
   } catch (e: any) {
-    record('schema', 'parse upstream semantic-routing/config.yaml', false, e?.message?.slice(0, 300) ?? 'err');
+    record('schema', 'parse upstream spatial-routing/config.yaml', false, e?.message?.slice(0, 300) ?? 'err');
   }
 }
 

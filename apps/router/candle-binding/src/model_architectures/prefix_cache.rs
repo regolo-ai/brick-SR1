@@ -50,7 +50,7 @@
 //! ## Usage
 //!
 //! ```rust,ignore
-//! use candle_semantic_router::model_architectures::prefix_cache::PrefixCache;
+//! use candle_spatial_router::model_architectures::prefix_cache::PrefixCache;
 //!
 //! // 1. Initialize cache with fixed prompt
 //! let fixed_prompt = "You are a safety classifier. Classify the following...";

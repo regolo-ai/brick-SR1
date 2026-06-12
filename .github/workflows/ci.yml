@@ -32,7 +32,7 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: apps/router/src/semantic-router/go.sum
+          cache-dependency-path: apps/router/src/spatial-router/go.sum
       - name: Install Rust (for CGO bindings build artifacts)
         uses: dtolnay/rust-toolchain@stable
       - name: Build Rust bindings (shared libs needed by CGO link)
@@ -41,19 +41,19 @@ jobs:
           cd ../ml-binding              && cargo build --release
           cd ../nlp-binding             && cargo build --release
           mkdir -p /tmp/libs
-          cp candle-binding/target/release/libcandle_semantic_router.so /tmp/libs/ || true
-          cp ml-binding/target/release/libml_semantic_router.so         /tmp/libs/ || true
+          cp candle-binding/target/release/libcandle_spatial_router.so /tmp/libs/ || true
+          cp ml-binding/target/release/libml_spatial_router.so         /tmp/libs/ || true
           cp nlp-binding/target/release/libnlp_binding.so               /tmp/libs/ || true
         working-directory: apps/router
         continue-on-error: true
       - name: go vet
-        working-directory: apps/router/src/semantic-router
+        working-directory: apps/router/src/spatial-router
         run: go vet ./...
       - name: go test
-        working-directory: apps/router/src/semantic-router
+        working-directory: apps/router/src/spatial-router
         env:
           CGO_CFLAGS: "-I${{ github.workspace }}/apps/router/candle-binding -I${{ github.workspace }}/apps/router/ml-binding -I${{ github.workspace }}/apps/router/nlp-binding"
-          CGO_LDFLAGS: "-L/tmp/libs -lcandle_semantic_router -lml_semantic_router -lnlp_binding"
+          CGO_LDFLAGS: "-L/tmp/libs -lcandle_spatial_router -lml_spatial_router -lnlp_binding"
           LD_LIBRARY_PATH: "/tmp/libs"
         run: go test ./... -short
 

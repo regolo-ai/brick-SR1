@@ -616,7 +616,7 @@ pub extern "C" fn is_mmbert_model(config_path: *const c_char) -> bool {
 // ============================================================================
 // mmBERT-32K (YaRN RoPE scaling) FFI functions
 // These support 32K context length with multilingual capabilities
-// Reference: https://huggingface.co/llm-semantic-router/mmbert-32k-yarn
+// Reference: https://huggingface.co/llm-spatial-router/mmbert-32k-yarn
 // ============================================================================
 
 /// Initialize mmBERT-32K intent classifier
@@ -828,7 +828,7 @@ pub extern "C" fn init_mmbert_32k_pii_classifier(model_id: *const c_char, use_cp
 /// - DIFFUSION (1): Image generation via diffusion model
 /// - BOTH (2): Hybrid response requiring both text and image
 ///
-/// Reference: https://huggingface.co/llm-semantic-router/mmbert32k-modality-router-merged
+/// Reference: https://huggingface.co/llm-spatial-router/mmbert32k-modality-router-merged
 ///
 /// # Safety
 /// - `model_id` must be a valid null-terminated C string

@@ -136,7 +136,7 @@ impl DebertaV3SequenceClassifier {
 ///
 /// ## Example
 /// ```no_run
-/// use candle_semantic_router::model_architectures::traditional::deberta_v3::DebertaV3Classifier;
+/// use candle_spatial_router::model_architectures::traditional::deberta_v3::DebertaV3Classifier;
 ///
 /// // Load prompt injection detection model
 /// let classifier = DebertaV3Classifier::new(

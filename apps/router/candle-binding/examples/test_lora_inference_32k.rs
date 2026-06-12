@@ -13,8 +13,8 @@
 use anyhow::{anyhow, Result};
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::{Linear, Module, VarBuilder};
-use candle_semantic_router::model_architectures::lora::lora_adapter::{LoRAAdapter, LoRAConfig};
-use candle_semantic_router::model_architectures::traditional::modernbert::ModernBertVariant;
+use candle_spatial_router::model_architectures::lora::lora_adapter::{LoRAAdapter, LoRAConfig};
+use candle_spatial_router::model_architectures::traditional::modernbert::ModernBertVariant;
 use candle_transformers::models::modernbert::{Config, ModernBert};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use std::path::Path;
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     // Step 1: Download and load ModernBERT-base-32k
     println!("\nDownloading ModernBERT-base-32k base model...");
-    let base_model_id = "llm-semantic-router/modernbert-base-32k";
+    let base_model_id = "llm-spatial-router/modernbert-base-32k";
     let repo = Repo::with_revision(
         base_model_id.to_string(),
         RepoType::Model,
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
                 ],
                 use_bias: false,
                 init_method:
-                    candle_semantic_router::model_architectures::lora::LoRAInitMethod::Kaiming,
+                    candle_spatial_router::model_architectures::lora::LoRAInitMethod::Kaiming,
             };
 
             // Check if this is a LoRA adapter or traditional classifier

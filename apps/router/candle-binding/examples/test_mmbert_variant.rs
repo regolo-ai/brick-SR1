@@ -4,7 +4,7 @@
 //!
 //! Note: Skipped in CI environments (mmBERT model is not downloaded in CI)
 
-use candle_semantic_router::model_architectures::traditional::{
+use candle_spatial_router::model_architectures::traditional::{
     ModernBertVariant, TraditionalModernBertClassifier,
 };
 

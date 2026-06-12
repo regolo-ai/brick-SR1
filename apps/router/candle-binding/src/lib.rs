@@ -1,4 +1,4 @@
-//! # Semantic Router - Modular Dual-Path Classification Engine
+//! # Spatial Router - Modular Dual-Path Classification Engine
 //!
 //! A high-performance, modular text classification system built with Rust and Candle.
 //! Features unified trait architecture, dual-path model support, and comprehensive

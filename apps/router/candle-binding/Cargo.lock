@@ -411,7 +411,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "candle-semantic-router"
+name = "candle-spatial-router"
 version = "0.4.0"
 dependencies = [
  "anyhow",

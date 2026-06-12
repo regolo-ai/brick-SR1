@@ -12,7 +12,7 @@ The HTTP proxy that exposes a single virtual model `model: "brick"` over an Open
 │         ↓                              ┌─ image+text   → vision model │
 │  Preprocessing (OCR, STT in parallel)  ├─ image only   → OCR + …      │
 │         ↓                              ├─ audio        → STT + …      │
-│  Semantic routing pipeline (text)      └─ text         → pipeline     │
+│  Spatial routing pipeline (text)      └─ text         → pipeline     │
 │         ↓                                                             │
 │  ① Capability vector p(x) ∈ Δ⁶  via ModernBERT classifier (CGO)       │
 │  ② Complexity τ ∈ {easy,medium,hard} via Qwen+LoRA classifier (HTTP)  │
@@ -29,7 +29,7 @@ The HTTP proxy that exposes a single virtual model `model: "brick"` over an Open
 
 ```
 apps/router/
-├── src/semantic-router/         # Go module github.com/regolo-ai/brick-SR1/apps/router/src/semantic-router
+├── src/spatial-router/         # Go module github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router
 │   ├── cmd/main.go              # HTTP server entrypoint
 │   └── pkg/
 │       ├── proxy/               # HTTP server, /v1/chat/completions, /v1/models, /v1/messages (Anthropic)
@@ -58,7 +58,7 @@ For local Go development:
 ```bash
 cd apps/router
 make -f ../../Makefile test-router         # or:
-cd src/semantic-router && go test ./...
+cd src/spatial-router && go test ./...
 ```
 
 Rust libraries:
@@ -128,7 +128,7 @@ For best-quality complexity scoring, run the `brick-complexity-server` as a GPU 
 ## Tests
 
 ```bash
-cd apps/router/src/semantic-router
+cd apps/router/src/spatial-router
 go vet ./...
 go test ./...
 
@@ -138,7 +138,7 @@ cd apps/router/candle-binding && cargo test --no-default-features
 
 ## Where this code came from
 
-This router descends from [`vllm-project/semantic-router`](https://github.com/vllm-project/semantic-router) (Apache-2.0) with substantial extensions for the Brick paper:
+This router descends from [`vllm-project/spatial-router`](https://github.com/vllm-project/spatial-router) (Apache-2.0) with substantial extensions for the Brick paper:
 - 6-dim capability classifier (ModernBERT instead of MMBERT)
 - Complexity score integration
 - Skill–distance objective `J_m = D_m + β · a_m`

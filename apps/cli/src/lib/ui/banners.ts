@@ -55,6 +55,6 @@ export function info(text: string): void {
 
 export function banner(): void {
   printLogo();
-  console.log(LEFT_PAD + ACCENT_DIM('   self-hosted semantic router gateway'));
+  console.log(LEFT_PAD + ACCENT_DIM('   self-hosted spatial router gateway'));
   console.log();
 }

@@ -71,7 +71,7 @@ def main() -> int:
         "5. `planning_agentic`",
         "6. `creative_synthesis`",
         "",
-        "Designed for downstream routing in the Brick semantic router as a "
+        "Designed for downstream routing in the Brick spatial router as a "
         "drop-in replacement for the domain classifier.",
         "",
         "## Training",

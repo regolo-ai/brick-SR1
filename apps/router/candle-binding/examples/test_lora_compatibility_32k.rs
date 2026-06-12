@@ -12,7 +12,7 @@
 use anyhow::{anyhow, Result};
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use candle_semantic_router::model_architectures::lora::lora_adapter::{LoRAAdapter, LoRAConfig};
+use candle_spatial_router::model_architectures::lora::lora_adapter::{LoRAAdapter, LoRAConfig};
 use candle_transformers::models::modernbert::Config;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use std::path::Path;
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     // Step 1: Download and load ModernBERT-base-32k
     println!("\nDownloading ModernBERT-base-32k...");
-    let base_model_id = "llm-semantic-router/modernbert-base-32k";
+    let base_model_id = "llm-spatial-router/modernbert-base-32k";
     let repo = Repo::with_revision(
         base_model_id.to_string(),
         RepoType::Model,
@@ -141,7 +141,7 @@ fn main() -> Result<()> {
                 "output".to_string(),
             ],
             use_bias: false,
-            init_method: candle_semantic_router::model_architectures::lora::LoRAInitMethod::Kaiming,
+            init_method: candle_spatial_router::model_architectures::lora::LoRAInitMethod::Kaiming,
         };
 
         // Try different prefix patterns

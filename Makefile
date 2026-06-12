@@ -11,7 +11,7 @@ help:
 	@echo "  build-router    build router Docker image (brick:dev)"
 	@echo "  test            run all tests (CLI + router Go + Python)"
 	@echo "  test-cli        npm test in apps/cli"
-	@echo "  test-router     go test in apps/router/src/semantic-router"
+	@echo "  test-router     go test in apps/router/src/spatial-router"
 	@echo "  test-python     pytest in packages/evals/tests"
 	@echo "  lint            pre-commit run --all-files"
 	@echo "  docker-build    docker build router → ghcr.io/regolo-ai/brick:dev"
@@ -36,7 +36,7 @@ test-cli:
 	cd apps/cli && npm test
 
 test-router:
-	cd apps/router/src/semantic-router && go test ./...
+	cd apps/router/src/spatial-router && go test ./...
 
 test-python:
 	uv run pytest packages/evals/tests -q 2>/dev/null || pytest packages/evals/tests -q
@@ -69,7 +69,7 @@ shellcheck:
 
 go-lint:
 	@command -v golangci-lint >/dev/null 2>&1 && \
-		(cd apps/router/src/semantic-router && golangci-lint run ./... 2>/dev/null) || \
+		(cd apps/router/src/spatial-router && golangci-lint run ./... 2>/dev/null) || \
 		echo "golangci-lint not installed; skipping"
 
 markdown-lint:

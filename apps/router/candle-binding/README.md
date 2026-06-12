@@ -1,6 +1,6 @@
 # candle-binding
 
-This directory contains Go bindings and tests for the `candle_semantic_router` native library.
+This directory contains Go bindings and tests for the `candle_spatial_router` native library.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ cd candle-binding
 cargo build --release
 ```
 
-This will produce the library file (e.g., `libcandle_semantic_router.dylib` on macOS) in `candle-binding/target/release/`.
+This will produce the library file (e.g., `libcandle_spatial_router.dylib` on macOS) in `candle-binding/target/release/`.
 
 ## Run the Go Tests
 
@@ -42,7 +42,7 @@ go test -v
 
 ## Troubleshooting
 
-- If you see an error like `library 'candle_semantic_router' not found`, make sure you have built the native library and that the library file exists in `target/release/`.
+- If you see an error like `library 'candle_spatial_router' not found`, make sure you have built the native library and that the library file exists in `target/release/`.
 - Ensure your `DYLD_LIBRARY_PATH` (macOS) or `LD_LIBRARY_PATH` (Linux) includes the path to the built library.
 
 ## Notes

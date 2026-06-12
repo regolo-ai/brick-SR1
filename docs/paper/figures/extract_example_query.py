@@ -29,7 +29,7 @@ CAP_ORDER = ["coding", "creative_synthesis", "instruction_following",
 SHORT = {"coding": "cod", "creative_synthesis": "crea", "instruction_following": "ifo",
          "math_reasoning": "mat", "planning_agentic": "pln", "world_knowledge": "wld"}
 
-# Production-locked Brick configuration (from semantic-routing/config.yaml).
+# Production-locked Brick configuration (from spatial-routing/config.yaml).
 # Keep in sync with the values printed in Table tab:brick-knob-defaults.
 SKILL_MATRIX = {
     "qwen": [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876],
