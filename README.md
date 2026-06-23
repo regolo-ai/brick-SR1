@@ -354,10 +354,3 @@ Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf) · compile with `c
 
 ---
 
-## 📜 License
-
-[Apache License 2.0](LICENSE). The router descends from [vLLM Spatial Router](https://github.com/vllm-project/spatial-router); upstream attributions in [`NOTICE`](NOTICE).
-
-<div align="center">
-<sub>Built with 🧱 at <a href="https://regolo.ai">Regolo.ai</a> · Contact <a href="mailto:f.massa@regolo.ai">f.massa@regolo.ai</a></sub>
-</div>
