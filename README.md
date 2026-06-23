@@ -16,7 +16,7 @@ fraction of its cost. No cascades. No wasted calls. Drop-in `model: "brick"`.
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](#-datasets--models)
 
-**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Models](#-datasets--models) · [Paper](#-paper) · [CLI](#b-cli-self-host-in-one-command)**
+**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [Paper](#-paper) · [CLI](#b-cli-self-host-in-one-command)**
 
 </div>
 
@@ -166,6 +166,81 @@ python packages/evals/scripts/130_aggregate_results.py | tee results.txt
 Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.md](docs/quickstart/eval.md).
 
 </details>
+
+---
+
+## 🧠 Brick + Claude Code
+
+Put one OpenAI/Anthropic-compatible endpoint in front of Claude Code, and Brick routes every request to **haiku**, **sonnet**, or **opus** based on capability and complexity. You keep the Claude Code UX; Brick picks the cheapest model that can do the job.
+
+### Setup
+
+```bash
+brick claude on     # wires ANTHROPIC_BASE_URL in ~/.claude/settings.json, auto-starts the router
+```
+
+Then:
+1. Open a **new** Claude Code session (your current session is unaffected).
+2. In the `/model` picker, select **brick-claude** (it sits alongside the built-in opus/sonnet/haiku aliases, which it does not replace).
+
+To revert:
+
+```bash
+brick claude off    # restores ANTHROPIC_BASE_URL, optionally stops the router
+```
+
+Use `brick claude on --no-start` to require an already-healthy router instead of auto-starting one, and `brick claude off --stop` / `--keep` to control the router without a prompt.
+
+### The 5 modes
+
+Each mode sets a routing preference `r` and a complexity (easy/medium/hard) to model map. Switch with `brick claude mode` or directly via `brick claude <mode>`.
+
+| Mode | r | easy | medium | hard |
+|------|-----|--------|--------|--------|
+| eco  | -1   | haiku  | haiku  | haiku  |
+| lite | -0.5 | haiku  | haiku  | sonnet |
+| mid  | 0    | haiku  | sonnet | opus   |
+| pro  | 0.5  | sonnet | sonnet | opus   |
+| max  | 1    | opus   | opus   | opus   |
+
+`mid` is the default. (On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium resolve to sonnet, hard to opus.)
+
+### How the effort picker works
+
+The effort slider in Claude Code's `/model` picker selects the **Brick mode** (the model tier), not the thinking budget:
+
+| Effort | Mode |
+|--------|------|
+| low    | eco  |
+| medium | lite |
+| high   | mid  |
+| xhigh  | pro  |
+| max    | max  |
+
+Reasoning effort itself is then decided **autonomously per request** from the router's own signals (query difficulty plus the chosen model's headroom). You pick the tier; Brick picks how hard to think.
+
+### Native models bypass the router
+
+Selecting **opus**, **sonnet**, or **haiku** explicitly in the picker skips Brick entirely: the request is forwarded verbatim to that exact model, with no skill routing and no effort override. Only **brick-claude** runs the router.
+
+### Observability
+
+```bash
+brick claude status         # live dashboard (default in an interactive terminal)
+brick claude status --once  # static one-shot view
+```
+
+The dashboard reports, since the last router restart:
+- **Routed by model**: count and percent per model.
+- **Per-model effort distribution**: how reasoning effort spread out within each model.
+- **Difficulty mix**: the classifier's easy/medium/hard verdicts across routed requests.
+- **Economy**: an estimated `saved ~X% vs all-opus` over the routed request count (a relative estimate from request mix, excluding real token counts and caching).
+
+It also shows connection/wiring state, classifier latency (avg, p50, p95), and fallback rate.
+
+### Works with workflows and subagents
+
+Brick routing is per request. In Claude Code workflows and subagents, each agent's call is routed **independently** as long as that agent uses **brick-claude**, so a cheap subagent task can land on haiku while a hard one escalates to opus in the same run.
 
 ---
 
