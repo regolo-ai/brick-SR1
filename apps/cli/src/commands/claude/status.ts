@@ -3,7 +3,11 @@ import React from 'react';
 import { render } from 'ink';
 import {
   fetchSnapshot,
-  routingRows,
+  routedRowsByModel,
+  nativeRowsByModel,
+  difficultyDistribution,
+  effortRowsForModel,
+  economy,
   totalRequests,
   classifierPercentiles,
   classifierMean,
@@ -35,7 +39,7 @@ export default class ClaudeStatus extends Command {
 
   static examples = [
     '<%= config.bin %> claude status',
-    '<%= config.bin %> claude status --watch',
+    '<%= config.bin %> claude status --once',
     '<%= config.bin %> claude status --url http://localhost:19000',
   ];
 
@@ -44,13 +48,17 @@ export default class ClaudeStatus extends Command {
       char: 'u',
       description: 'brick base URL (default: $ANTHROPIC_BASE_URL or http://localhost:18000)',
     }),
+    once: Flags.boolean({
+      char: 'o',
+      description: 'one-shot static output instead of the live dashboard',
+    }),
     watch: Flags.boolean({
       char: 'w',
-      description: 'live terminal dashboard that refreshes performance stats',
+      description: 'force the live dashboard (now the default in an interactive terminal)',
     }),
     interval: Flags.integer({
       default: 2,
-      description: 'dashboard refresh interval in seconds (with --watch)',
+      description: 'dashboard refresh interval in seconds',
     }),
   };
 
@@ -69,10 +77,11 @@ export default class ClaudeStatus extends Command {
     const displaySource = envUrl ? 'env' : settingsUrl ? 'settings.json' : null;
     const isAttached = !!displayUrl && displayUrl.replace(/\/$/, '') === baseUrl;
 
-    if (flags.watch) {
-      if (!process.stdout.isTTY) {
-        this.error('--watch requires an interactive TTY. Run `brick claude status` for one-shot output.', { exit: 2 });
-      }
+    // The live dashboard is the default in an interactive terminal. `--once`
+    // forces the static text output; when there is no TTY (pipe, redirect, CI)
+    // we silently fall back to it instead of erroring.
+    const wantsLive = !flags.once && process.stdout.isTTY;
+    if (wantsLive) {
       const { waitUntilExit } = render(
         React.createElement(Dashboard, { baseUrl, envUrl: displayUrl, intervalMs: Math.max(500, flags.interval * 1000) })
       );
@@ -139,7 +148,7 @@ export default class ClaudeStatus extends Command {
     this.printRoutingStats(snap.metrics);
 
     this.log('');
-    this.log(`${COLORS.dim}Live dashboard: brick claude status --watch${COLORS.reset}`);
+    this.log(`${COLORS.dim}Live dashboard: run brick claude status in an interactive terminal (or --once for this static view).${COLORS.reset}`);
   }
 
   private printRoutingStats(m: ParsedMetrics): void {
@@ -149,10 +158,37 @@ export default class ClaudeStatus extends Command {
       return;
     }
 
-    for (const row of routingRows(m)) {
+    this.log(`  ${COLORS.dim}routed by model${COLORS.reset}`);
+    for (const row of routedRowsByModel(m)) {
       const pct = row.pct.toFixed(0).padStart(2);
-      this.log(`  ${row.label.padEnd(6)} → ${row.model.padEnd(20)}  ${String(row.count).padStart(4)}  (${pct}%)`);
+      this.log(`    ${row.model.padEnd(22)}  ${String(row.count).padStart(4)}  (${pct}%)`);
+      for (const e of effortRowsForModel(m, row.model)) {
+        const epct = e.pct.toFixed(0).padStart(2);
+        this.log(`      ${COLORS.dim}└ ${e.label.padEnd(18)}  ${String(e.count).padStart(4)}  (${epct}%)${COLORS.reset}`);
+      }
     }
+
+    const native = nativeRowsByModel(m);
+    if (native.length > 0) {
+      this.log('');
+      this.log(`  ${COLORS.dim}native (router bypass)${COLORS.reset}`);
+      for (const row of native) {
+        const pct = row.pct.toFixed(0).padStart(2);
+        this.log(`    ${row.model.padEnd(22)}  ${String(row.count).padStart(4)}  (${pct}%)`);
+      }
+    }
+
+    const difficulty = difficultyDistribution(m);
+    if (difficulty.length > 0) {
+      this.log('');
+      this.log(`  ${COLORS.dim}difficulty mix (classifier verdict, routed only)${COLORS.reset}`);
+      for (const row of difficulty) {
+        const pct = row.pct.toFixed(0).padStart(2);
+        this.log(`    ${row.label.padEnd(22)}  ${String(row.count).padStart(4)}  (${pct}%)`);
+      }
+    }
+
+    this.log('');
     this.log(`  Total requests        ${total}`);
 
     const mean = classifierMean(m);
@@ -168,5 +204,16 @@ export default class ClaudeStatus extends Command {
     const pct = fallbackPct(m);
     const fallbackColor = pct > 5 ? COLORS.red : pct > 1 ? COLORS.yellow : COLORS.green;
     this.log(`  Fallback rate          ${fallbackColor}${pct.toFixed(1)}%${COLORS.reset} (${m.fallbackTotal} fallbacks)`);
+
+    const e = economy(m);
+    if (e.totalRoutedReqs > 0) {
+      this.log('');
+      this.log(`${COLORS.bold}${COLORS.cyan}Economy${COLORS.reset}`);
+      const savedColor = e.savedPct > 50 ? COLORS.green : e.savedPct > 20 ? COLORS.yellow : COLORS.dim;
+      this.log(
+        `  ${savedColor}saved ~${e.savedPct.toFixed(0)}%${COLORS.reset} vs all-opus  ${COLORS.dim}(${e.totalRoutedReqs} routed reqs)${COLORS.reset}`
+      );
+      this.log(`  ${COLORS.dim}relative estimate from request mix; excludes real token counts & caching${COLORS.reset}`);
+    }
   }
 }

@@ -191,6 +191,7 @@ func (s *Server) handleBrickRouted(
 		level := autonomousEffortLevel(tauQuery, under)
 		rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
 		effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
+		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
 	}
 	rewritten = stripUnsupportedFieldsForModel(rewritten, selectedModel)
 

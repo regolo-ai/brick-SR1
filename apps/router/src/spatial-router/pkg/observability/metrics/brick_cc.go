@@ -22,6 +22,18 @@ var (
 		[]string{"label", "model"},
 	)
 
+	// BrickCCEffort counts Brick-routed /v1/messages requests by selected model
+	// and the autonomous reasoning effort Brick assigned to them. Only emitted on
+	// the skill-routed + dynamic-effort path (native and non-dynamic requests have
+	// no Brick-decided effort).
+	BrickCCEffort = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "brick_cc_effort_total",
+			Help: "Total Brick-routed /v1/messages requests labelled by selected model and autonomous reasoning effort.",
+		},
+		[]string{"model", "effort"},
+	)
+
 	// BrickCCClassifyDuration measures wall time of a single /classify call.
 	BrickCCClassifyDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{

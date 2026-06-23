@@ -2,6 +2,8 @@
 // live dashboard. Kept free of any rendering so both the one-shot text output
 // and the ink TUI can reuse it.
 
+import { blendedPricePerReq, OPUS_BLENDED } from './pricing.js';
+
 export type DiagClassifier = {
   enabled: boolean;
   endpoint?: string;
@@ -14,6 +16,7 @@ export type DiagClassifier = {
 
 export type ParsedMetrics = {
   requestsByLabelModel: Map<string, number>;
+  effortByModelEffort: Map<string, number>;
   fallbackTotal: number;
   classifyDurationCount: number;
   classifyDurationSum: number;
@@ -80,6 +83,7 @@ export async function fetchSnapshot(baseUrl: string, envUrl?: string): Promise<S
 export function parsePromExposition(body: string): ParsedMetrics {
   const out: ParsedMetrics = {
     requestsByLabelModel: new Map(),
+    effortByModelEffort: new Map(),
     fallbackTotal: 0,
     classifyDurationCount: 0,
     classifyDurationSum: 0,
@@ -90,7 +94,13 @@ export function parsePromExposition(body: string): ParsedMetrics {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
 
-    if (line.startsWith('brick_cc_requests_total')) {
+    if (line.startsWith('brick_cc_effort_total')) {
+      const m = line.match(/^brick_cc_effort_total\{([^}]*)\}\s+([0-9.eE+-]+)$/);
+      if (!m) continue;
+      const labels = parseLabels(m[1]);
+      const key = `${labels.model ?? 'unknown'}|${labels.effort ?? 'unknown'}`;
+      out.effortByModelEffort.set(key, (out.effortByModelEffort.get(key) ?? 0) + Number(m[2]));
+    } else if (line.startsWith('brick_cc_requests_total')) {
       const m = line.match(/^brick_cc_requests_total\{([^}]*)\}\s+([0-9.eE+-]+)$/);
       if (!m) continue;
       const labels = parseLabels(m[1]);
@@ -128,6 +138,10 @@ export function parseLabels(s: string): Record<string, string> {
 
 const LABEL_ORDER = ['easy', 'medium', 'hard'];
 
+// Label emitted by the router for requests that bypass the skill router entirely
+// (client picked a native model explicitly, so the complexity classifier never ran).
+export const NATIVE_LABEL = 'native';
+
 export function totalRequests(m: ParsedMetrics): number {
   return [...m.requestsByLabelModel.values()].reduce((a, b) => a + b, 0);
 }
@@ -141,6 +155,104 @@ export function routingRows(m: ParsedMetrics): RoutingRow[] {
   }
   rows.sort((a, b) => LABEL_ORDER.indexOf(a.label) - LABEL_ORDER.indexOf(b.label));
   return rows;
+}
+
+// Aggregates the {label, model} counter into one row per selected model, keeping
+// only Brick-routed traffic (label !== native). The difficulty label is dropped
+// on purpose: it is just the complexity classifier's verdict, one of several
+// inputs, and pairing it with the final model implies a mapping that does not
+// exist. Percentages are over the grand total so routed + native sum to ~100%.
+export function routedRowsByModel(m: ParsedMetrics): RoutingRow[] {
+  return aggregateByModel(m, (label) => label !== NATIVE_LABEL);
+}
+
+// Same aggregation but only for native (router-bypass) traffic. Kept separate
+// from the routed rows because a native opus call is not a routing decision.
+export function nativeRowsByModel(m: ParsedMetrics): RoutingRow[] {
+  return aggregateByModel(m, (label) => label === NATIVE_LABEL);
+}
+
+function aggregateByModel(m: ParsedMetrics, keep: (label: string) => boolean): RoutingRow[] {
+  const total = totalRequests(m);
+  const byModel = new Map<string, number>();
+  for (const [key, count] of m.requestsByLabelModel.entries()) {
+    const [label, model] = key.split('|');
+    if (!keep(label)) continue;
+    byModel.set(model, (byModel.get(model) ?? 0) + count);
+  }
+  const rows: RoutingRow[] = [];
+  for (const [model, count] of byModel.entries()) {
+    rows.push({ label: '', model, count, pct: total === 0 ? 0 : (count / total) * 100 });
+  }
+  rows.sort((a, b) => b.count - a.count);
+  return rows;
+}
+
+// Distribution of the complexity classifier verdict across Brick-routed traffic,
+// independent of which model was ultimately selected. Native traffic is excluded
+// since it never gets classified. Percentages are over routed traffic only.
+export function difficultyDistribution(m: ParsedMetrics): RoutingRow[] {
+  const byLabel = new Map<string, number>();
+  let routedTotal = 0;
+  for (const [key, count] of m.requestsByLabelModel.entries()) {
+    const [label] = key.split('|');
+    if (label === NATIVE_LABEL) continue;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + count);
+    routedTotal += count;
+  }
+  const rows: RoutingRow[] = [];
+  for (const [label, count] of byLabel.entries()) {
+    rows.push({ label, model: '', count, pct: routedTotal === 0 ? 0 : (count / routedTotal) * 100 });
+  }
+  rows.sort((a, b) => LABEL_ORDER.indexOf(a.label) - LABEL_ORDER.indexOf(b.label));
+  return rows;
+}
+
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// Distribution of autonomous reasoning effort for a single model: one row per
+// effort level, pct over that model's own routed requests. Empty when the model
+// has no effort samples (e.g. effort tracking just started, or Haiku which has a
+// reduced vocabulary). The `label` field carries the effort name.
+export function effortRowsForModel(m: ParsedMetrics, model: string): RoutingRow[] {
+  const byEffort = new Map<string, number>();
+  let modelTotal = 0;
+  for (const [key, count] of m.effortByModelEffort.entries()) {
+    const [mdl, effort] = key.split('|');
+    if (mdl !== model) continue;
+    byEffort.set(effort, (byEffort.get(effort) ?? 0) + count);
+    modelTotal += count;
+  }
+  const rows: RoutingRow[] = [];
+  for (const [effort, count] of byEffort.entries()) {
+    rows.push({ label: effort, model, count, pct: modelTotal === 0 ? 0 : (count / modelTotal) * 100 });
+  }
+  rows.sort((a, b) => EFFORT_ORDER.indexOf(a.label) - EFFORT_ORDER.indexOf(b.label));
+  return rows;
+}
+
+export type Economy = {
+  actualUnits: number;   // blended cost weight of the actual routed mix
+  opusUnits: number;     // blended cost weight if everything had gone to opus
+  savedPct: number;      // 1 - actual/opus, in percent (0 when no routed traffic)
+  totalRoutedReqs: number;
+};
+
+// Relative cost estimate of the routed traffic vs an all-opus baseline. Native
+// requests are excluded since they are not a Brick routing decision. See
+// pricing.ts for the (deliberate) assumptions: this is a request-mix estimate,
+// not a token-accurate dollar figure.
+export function economy(m: ParsedMetrics): Economy {
+  const routed = routedRowsByModel(m);
+  let actualUnits = 0;
+  let totalRoutedReqs = 0;
+  for (const r of routed) {
+    actualUnits += r.count * blendedPricePerReq(r.model);
+    totalRoutedReqs += r.count;
+  }
+  const opusUnits = totalRoutedReqs * OPUS_BLENDED;
+  const savedPct = opusUnits === 0 ? 0 : (1 - actualUnits / opusUnits) * 100;
+  return { actualUnits, opusUnits, savedPct, totalRoutedReqs };
 }
 
 export function classifierPercentiles(m: ParsedMetrics): { p50: number | null; p95: number | null } {
