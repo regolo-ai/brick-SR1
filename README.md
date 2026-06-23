@@ -238,6 +238,8 @@ The dashboard reports, since the last router restart:
 
 It also shows connection/wiring state, classifier latency (avg, p50, p95), and fallback rate.
 
+<img width="286" height="440" alt="image" src="https://github.com/user-attachments/assets/5e06562b-85c2-45c6-b4e5-fb75fcc47fcb" />
+
 ### Works with workflows and subagents
 
 Brick routing is per request. In Claude Code workflows and subagents, each agent's call is routed **independently** as long as that agent uses **brick-claude**, so a cheap subagent task can land on haiku while a hard one escalates to opus in the same run.
