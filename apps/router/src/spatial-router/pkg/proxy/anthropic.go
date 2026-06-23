@@ -198,8 +198,9 @@ func (s *Server) handleBrickRouted(
 	rewritten := rewriteModelInBody(body, selectedModel)
 	effortStr := ""
 	if routedViaSkill && cfg.SkillRouter.DynamicEffort {
-		// Autonomous effort: difficulty + chosen-model headroom, NO mode window.
-		level := autonomousEffortLevel(tauQuery, under)
+		// Autonomous effort: query difficulty + chosen-model headroom, shifted by
+		// the Brick mode bias (additive, preserves per-query granularity).
+		level := autonomousEffortLevel(tauQuery, under, preference)
 		rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
 		effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
 		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()

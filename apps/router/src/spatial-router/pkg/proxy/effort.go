@@ -123,20 +123,47 @@ func ladderFromTau(tau float64) int {
 	}
 }
 
-// autonomousEffortLevel derives the reasoning-effort ordinal purely from the
-// router's own signals, independent of the routing mode (eco/lite/mid/pro/max).
-// It starts from absolute query difficulty (tauQuery) and bumps +1 only when the
-// chosen model is stretched (underCapacity >= stretchHigh) for that query. There
-// is no headroom decrement: the router selects the best-fitting model, so
-// underCapacity is ~0 on nearly every request, and a -1 cut would pin effort one
-// rung below the complexity ladder universally. The result is clamped to the
-// 0..5 ladder with NO mode window — the mode only governs which model was
-// selected upstream.
-func autonomousEffortLevel(tauQuery, underCapacity float64) int {
+// modeBiasForPreference maps the routing preference r in [-1,1] (the Brick mode
+// knob: eco/lite/mid/pro/max) to an additive effort bias. The mode shifts the
+// whole effort distribution up or down WITHOUT collapsing per-query granularity:
+// two queries of different difficulty in the same mode still land on different
+// rungs; the mode only translates them. Bands mirror effortWindowForPreference.
+//
+//	eco  (r<=-0.75) -> -2
+//	lite (r<=-0.25) -> -1
+//	mid  (r< 0.25)  ->  0
+//	pro  (r< 0.75)  -> +1
+//	max  (else)     -> +2
+func modeBiasForPreference(r float64) int {
+	switch {
+	case r <= -0.75:
+		return -2
+	case r <= -0.25:
+		return -1
+	case r < 0.25:
+		return 0
+	case r < 0.75:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// autonomousEffortLevel derives the reasoning-effort ordinal from the router's
+// own signals plus the Brick mode bias. It starts from absolute query difficulty
+// (tauQuery via ladderFromTau), bumps +1 when the chosen model is stretched
+// (underCapacity >= stretchHigh) for that query, and adds the mode bias
+// (modeBiasForPreference): the mode is an additive shift, not a fixed trajectory,
+// so per-query granularity is preserved while eco..max moves the whole band. The
+// result is clamped to the 0..5 ladder. There is no headroom decrement: the
+// router selects the best-fitting model, so underCapacity is ~0 on nearly every
+// request and a -1 cut would fire universally.
+func autonomousEffortLevel(tauQuery, underCapacity, preference float64) int {
 	level := ladderFromTau(tauQuery)
 	if underCapacity >= stretchHigh {
 		level++
 	}
+	level += modeBiasForPreference(preference)
 	if level < 0 {
 		level = 0
 	}

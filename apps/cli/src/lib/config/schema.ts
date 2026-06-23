@@ -21,7 +21,7 @@ export const RuleSchema: z.ZodType<Rule> = z.lazy(() =>
 export const ModelRefSchema = z.object({
   model: z.string(),
   use_reasoning: z.boolean().optional(),
-  reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoning_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
 });
 
 export const DecisionSchema = z.object({
@@ -124,7 +124,7 @@ export const SkillRouterModelSchema = z.object({
   skill_source: z.enum(['benchmark', 'measured', 'heuristic']).optional(),
   skill_confidence: z.array(z.string()).optional(),
   use_reasoning: z.boolean().optional(),
-  reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoning_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   cost_weight: z.number().optional(),
   latency_weight: z.number().optional(),
   // Native multimodal capability. When set, the brick gateway forwards the raw
@@ -218,7 +218,7 @@ export const ConfigSchema = z.object({
   default_model: z.string(),
   model_config: z.record(ModelConfigSchema).default({}),
   reasoning_families: z.record(ReasoningFamilySchema).default({}),
-  default_reasoning_effort: z.enum(['low', 'medium', 'high']).default('medium'),
+  default_reasoning_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   classifier: ClassifierSchema.optional(),
   complexity_service: ComplexityServiceSchema.optional(),
   skill_router: SkillRouterSchema.optional(),

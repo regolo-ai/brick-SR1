@@ -168,31 +168,63 @@ func TestLadderFromTau(t *testing.T) {
 	}
 }
 
-func TestAutonomousEffortLevel(t *testing.T) {
+func TestModeBiasForPreference(t *testing.T) {
 	cases := []struct {
-		name  string
-		tau   float64
-		under float64
-		want  int
+		name string
+		r    float64
+		want int
 	}{
-		// Neutral under-capacity (between low and high): pure ladder.
-		{"easy-neutral", 0.55, 0.4, 1},
-		{"medium-neutral", 0.72, 0.4, 2},
-		{"hard-neutral", 0.88, 0.4, 4},
-		// Comfortable headroom (under <= old stretchLow): no decrement, pure ladder.
-		{"easy-headroom", 0.55, 0.10, 1},
-		{"hard-headroom", 0.88, 0.05, 4},
-		// Stretched model (under >= stretchHigh): +1.
-		{"medium-stretched", 0.72, 0.90, 3},
-		{"hard-stretched", 0.88, 1.50, 5},
-		// Clamp floor/ceiling.
-		{"floor", 0.10, 0.0, 0},
-		{"ceiling", 0.99, 2.0, 5},
+		{"eco", -1.0, -2},
+		{"eco-edge", -0.75, -2},
+		{"lite", -0.5, -1},
+		{"mid", 0.0, 0},
+		{"pro", 0.5, 1},
+		{"max", 1.0, 2},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := autonomousEffortLevel(c.tau, c.under); got != c.want {
-				t.Fatalf("autonomousEffortLevel(%v, %v) = %d, want %d", c.tau, c.under, got, c.want)
+			if got := modeBiasForPreference(c.r); got != c.want {
+				t.Fatalf("modeBiasForPreference(%v) = %d, want %d", c.r, got, c.want)
+			}
+		})
+	}
+}
+
+func TestAutonomousEffortLevel(t *testing.T) {
+	cases := []struct {
+		name string
+		tau  float64
+		under float64
+		pref float64
+		want int
+	}{
+		// mid (bias 0): pure ladder + stretch.
+		{"mid-easy-neutral", 0.55, 0.4, 0.0, 1},
+		{"mid-medium-neutral", 0.72, 0.4, 0.0, 2},
+		{"mid-hard-neutral", 0.88, 0.4, 0.0, 4},
+		{"mid-easy-headroom", 0.55, 0.10, 0.0, 1}, // no decrement
+		{"mid-medium-stretched", 0.72, 0.90, 0.0, 3},
+		// max (bias +2): the whole band shifts up.
+		{"max-medium", 0.72, 0.4, 1.0, 4},    // L2 + 2
+		{"max-hard-clamp", 0.88, 0.4, 1.0, 5}, // L4 + 2 -> clamp 5
+		{"max-easy", 0.55, 0.4, 1.0, 3},      // L1 + 2
+		// pro (bias +1).
+		{"pro-medium", 0.72, 0.4, 0.5, 3}, // L2 + 1
+		// eco (bias -2): band shifts down.
+		{"eco-medium", 0.72, 0.4, -1.0, 0}, // L2 - 2 -> clamp 0
+		{"eco-hard", 0.88, 0.4, -1.0, 2},   // L4 - 2
+		// lite (bias -1).
+		{"lite-hard", 0.88, 0.4, -0.5, 3}, // L4 - 1
+		// stretch + mode bias combine then clamp.
+		{"max-medium-stretched", 0.72, 0.90, 1.0, 5}, // L2 +1 +2 -> 5
+		// Clamp floor/ceiling.
+		{"floor", 0.10, 0.0, 0.0, 0},
+		{"ceiling", 0.99, 2.0, 1.0, 5},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := autonomousEffortLevel(c.tau, c.under, c.pref); got != c.want {
+				t.Fatalf("autonomousEffortLevel(%v, %v, %v) = %d, want %d", c.tau, c.under, c.pref, got, c.want)
 			}
 		})
 	}
