@@ -4,6 +4,21 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from '
 
 const ENV_KEY = 'ANTHROPIC_BASE_URL';
 
+// Custom model option env vars: make Brick appear as a selectable entry at the
+// bottom of Claude Code's `/model` picker, alongside the built-in opus/sonnet/
+// haiku aliases (which it does NOT replace). The _SUPPORTED_CAPABILITIES var is
+// essential: the "brick-claude" id does not match Claude Code's known model
+// patterns, so without it the effort slider would be hidden — and the effort
+// level IS the Brick routing-mode control (low=eco … max=max).
+const CUSTOM_MODEL_ENV: Record<string, string> = {
+  ANTHROPIC_CUSTOM_MODEL_OPTION: 'brick-claude',
+  ANTHROPIC_CUSTOM_MODEL_OPTION_NAME: 'Brick (auto-routing)',
+  ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION:
+    'Effort sets routing mode: low eco, medium lite, high mid, xhigh pro, max max',
+  ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES:
+    'effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking',
+};
+
 /** Claude Code honors CLAUDE_CONFIG_DIR; default is ~/.claude. */
 export function settingsDir(): string {
   return process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude');
@@ -49,7 +64,20 @@ export function getBaseUrl(): string | undefined {
 }
 
 /**
- * Set env.ANTHROPIC_BASE_URL, preserving every other key.
+ * Whether the Brick custom-model-option env vars are present in settings.json.
+ * Used by `claude on` to detect a wiring written before this feature existed,
+ * so it re-runs setBaseUrl to add the picker entry instead of short-circuiting.
+ */
+export function hasBrickModelOption(): boolean {
+  const env = readSettings().env;
+  if (!env || typeof env !== 'object') return false;
+  return env.ANTHROPIC_CUSTOM_MODEL_OPTION === CUSTOM_MODEL_ENV.ANTHROPIC_CUSTOM_MODEL_OPTION;
+}
+
+/**
+ * Set env.ANTHROPIC_BASE_URL plus the Brick custom-model-option env vars,
+ * preserving every other key. The custom-model vars register "brick-claude" in
+ * the `/model` picker with the effort slider enabled.
  * Returns whether we had to create the `env` block (so `off` can clean it up).
  */
 export function setBaseUrl(url: string): { createdEnvBlock: boolean } {
@@ -57,12 +85,16 @@ export function setBaseUrl(url: string): { createdEnvBlock: boolean } {
   const createdEnvBlock = !settings.env || typeof settings.env !== 'object';
   if (createdEnvBlock) settings.env = {};
   settings.env[ENV_KEY] = url;
+  for (const [k, v] of Object.entries(CUSTOM_MODEL_ENV)) {
+    settings.env[k] = v;
+  }
   writeSettings(settings);
   return { createdEnvBlock };
 }
 
 /**
- * Restore the previous value, or delete the key when there was none.
+ * Restore the previous base URL (or delete the key when there was none) and
+ * remove the Brick custom-model-option env vars we added in `setBaseUrl`.
  * If `removeEmptyEnv` and the env block ends up empty, drop it entirely.
  */
 export function restoreBaseUrl(previous: string | null, removeEmptyEnv: boolean): void {
@@ -73,6 +105,10 @@ export function restoreBaseUrl(previous: string | null, removeEmptyEnv: boolean)
       writeSettings(settings);
     }
     return;
+  }
+  // Always strip the custom-model vars Brick added.
+  for (const k of Object.keys(CUSTOM_MODEL_ENV)) {
+    delete settings.env[k];
   }
   if (previous !== null) {
     settings.env[ENV_KEY] = previous;

@@ -3,7 +3,7 @@ import { resolveProfile, listProfiles } from '../../lib/config/paths.js';
 import { loadConfig, loadConfigRaw } from '../../lib/config/load.js';
 import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
 import { ensureDefaultProfile } from '../../lib/claude/bootstrap.js';
-import { getBaseUrl, setBaseUrl, settingsPath } from '../../lib/claude/settings.js';
+import { getBaseUrl, setBaseUrl, settingsPath, hasBrickModelOption } from '../../lib/claude/settings.js';
 import { readWiring, writeWiring } from '../../lib/claude/wiring-state.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
@@ -73,9 +73,11 @@ export default class ClaudeOn extends Command {
 
     const baseUrl = `http://localhost:${port}`;
 
-    // 3. Idempotent: already wired to the same URL → nothing to do.
+    // 3. Idempotent: already wired to the same URL AND the picker entry is
+    // present → nothing to do. (A wiring written before the custom-model-option
+    // feature lacks the picker entry, so we fall through to re-write it.)
     const existing = readWiring();
-    if (existing?.wired && existing.baseUrl === baseUrl && getBaseUrl() === baseUrl) {
+    if (existing?.wired && existing.baseUrl === baseUrl && getBaseUrl() === baseUrl && hasBrickModelOption()) {
       ok(`already wired to ${baseUrl}`);
       print();
       this.printRestartHint();

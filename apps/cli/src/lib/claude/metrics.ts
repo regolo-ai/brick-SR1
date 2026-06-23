@@ -150,6 +150,12 @@ export function classifierPercentiles(m: ParsedMetrics): { p50: number | null; p
   };
 }
 
+/** Mean classifier call latency in seconds (histogram sum/count), or null when
+ *  no classify calls have been recorded yet. */
+export function classifierMean(m: ParsedMetrics): number | null {
+  return m.classifyDurationCount > 0 ? m.classifyDurationSum / m.classifyDurationCount : null;
+}
+
 export function fallbackPct(m: ParsedMetrics): number {
   const total = totalRequests(m);
   return total === 0 ? 0 : (m.fallbackTotal / total) * 100;

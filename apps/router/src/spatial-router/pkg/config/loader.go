@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v2"
@@ -55,6 +56,18 @@ func Parse(configPath string) (*RouterConfig, error) {
 	cfg := &RouterConfig{}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Override the complexity classifier endpoint from BRICK_CLASSIFIER_URL when
+	// set. In production every component runs inside the compose network and the
+	// "http://classifier:8094" DNS name resolves fine; for local dev (router run
+	// on the host, classifier in docker) this env var points at an exposed port
+	// or SSH tunnel without editing the prod config YAML.
+	if envURL := strings.TrimSpace(os.Getenv("BRICK_CLASSIFIER_URL")); envURL != "" {
+		if cfg.ComplexityService == nil {
+			cfg.ComplexityService = &ComplexityServiceConfig{Enabled: true}
+		}
+		cfg.ComplexityService.BaseURL = envURL
 	}
 
 	// Apply default model registry if not specified in config

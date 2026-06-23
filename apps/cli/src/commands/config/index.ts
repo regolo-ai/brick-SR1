@@ -92,7 +92,8 @@ export default class ConfigShow extends Command {
     const features: string[] = [];
     features.push(`skill_router: ${cfg.skill_router?.enabled ? chalk.green('on') : chalk.dim('off')}` + (cfg.skill_router?.enabled ? ` (${cfg.skill_router.models.length} models · ${cfg.skill_router.capabilities.length}D)` : ''));
     const complexityEndpoint = cfg.complexity_service?.base_url ?? (cfg.complexity_service?.address ? `${cfg.complexity_service.address}:${cfg.complexity_service.port ?? 8094}` : '');
-    features.push(`complexity_service: ${cfg.complexity_service?.enabled ? chalk.green('on') : chalk.dim('off')}` + (cfg.complexity_service?.enabled ? ` (${complexityEndpoint})` : ''));
+    const complexityMode = cfg.complexity_service?.protocol === 'openai' ? 'remote openai' : 'local';
+    features.push(`complexity_service: ${cfg.complexity_service?.enabled ? chalk.green('on') : chalk.dim('off')}` + (cfg.complexity_service?.enabled ? ` (${complexityMode} · ${complexityEndpoint})` : ''));
     features.push(`brick multimodal: ${cfg.brick?.enabled ? chalk.green('on') : chalk.dim('off')}` + (cfg.brick?.enabled ? ` (STT=${cfg.brick.stt_model} OCR=${cfg.brick.ocr_model} Vision=${cfg.brick.vision_model})` : ''));
     if (cfg.plugins) {
       const enabled = Object.entries(cfg.plugins).filter(([, v]: any) => v?.enabled).map(([k]) => k);

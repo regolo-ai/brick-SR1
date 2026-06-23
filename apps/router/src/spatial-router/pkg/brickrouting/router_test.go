@@ -61,6 +61,47 @@ func TestScoreModelsAllowlistRestrictsCandidates(t *testing.T) {
 	}
 }
 
+// TestScoreModelsWithConfigPreferenceShiftsSelection verifies that overriding
+// the routing preference (the per-request mode knob used by RouteWithPreference)
+// changes which model wins for the same query. eco (r=-1) should prefer the
+// cheaper/smaller model; max (r=+1) should prefer the most capable one.
+func TestScoreModelsWithConfigPreferenceShiftsSelection(t *testing.T) {
+	r := &Router{
+		skillCfg: config.SkillRouterConfig{
+			Models: []config.SkillRouterModelConfig{
+				{Model: "small", SkillVector: []float64{0.60, 0.60}, CostWeight: 0.1},
+				{Model: "fit", SkillVector: []float64{0.80, 0.80}, CostWeight: 0.4},
+				{Model: "large", SkillVector: []float64{0.95, 0.95}, CostWeight: 1.0},
+			},
+		},
+		kp: resolveKnobParams(config.SkillRouterMathConfig{}),
+	}
+
+	mkCfg := func(pref float64) mathConfig {
+		mc := newMathConfig(config.SkillRouterMathConfig{})
+		mu, bias, beta, lambda := effectiveParams(r.kp, pref)
+		mc.routingPreference = pref
+		mc.mu, mc.bias, mc.beta, mc.lambdaOver = mu, bias, beta, lambda
+		return mc
+	}
+
+	probs := []float64{0.5, 0.5}
+	tau := 0.72
+
+	eco := r.scoreModelsWithConfig(probs, tau, nil, mkCfg(-1))
+	max := r.scoreModelsWithConfig(probs, tau, nil, mkCfg(1))
+
+	if len(eco) == 0 || len(max) == 0 {
+		t.Fatalf("expected scores in both modes")
+	}
+	if eco[0].Model == "large" {
+		t.Fatalf("eco mode should not pick the most expensive model, got %s", eco[0].Model)
+	}
+	if max[0].Model != "large" {
+		t.Fatalf("max mode should pick the most capable model, got %s (scores=%+v)", max[0].Model, max)
+	}
+}
+
 func TestKeywordOverrideBeatsBias(t *testing.T) {
 	r := &Router{
 		skillCfg: config.SkillRouterConfig{

@@ -30,7 +30,7 @@ export const R_BY_MODE: Record<ClaudeMode, number> = {
 // model upgrade (e.g. opus-4-7 → opus-4-8) only touches this file.
 export const CLAUDE_HAIKU = 'claude-haiku-4-5';
 export const CLAUDE_SONNET = 'claude-sonnet-4-6';
-export const CLAUDE_OPUS = 'claude-opus-4-7';
+export const CLAUDE_OPUS = 'claude-opus-4-8';
 
 interface ModelMap {
   easy: string;

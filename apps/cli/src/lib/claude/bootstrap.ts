@@ -50,6 +50,7 @@ export async function ensureDefaultProfile(): Promise<string> {
     projectName: `brick-${profile}`,
     port: DEFAULT_CLAUDE_PORT,
     configPath: pp.config,
+    useLocalClassifier: true,   // default profile ships the local classifier sidecar
     image: defaultImage(),   // unused by this template but kept for parity
   });
   writeFileSync(pp.compose, composeRendered, { mode: 0o644 });

@@ -310,16 +310,52 @@ async function editClassifier(cfg: BrickConfig): Promise<boolean> {
 }
 
 async function editComplexity(cfg: BrickConfig): Promise<boolean> {
-  const enable = await p.confirm({ message: 'Enable Brick2 complexity service?', initialValue: !!cfg.complexity_service?.enabled });
-  if (isCancel(enable)) abort();
-  if (!enable) {
+  const mode = await p.select({
+    message: 'Complexity classifier:',
+    options: [
+      { value: 'local', label: 'Local (Docker sidecar)', hint: 'bundled classifier container (brick claude on)' },
+      { value: 'remote', label: 'Remote (OpenAI-compatible API)', hint: 'custom /v1/chat/completions endpoint' },
+      { value: 'off', label: 'Disable', hint: 'no complexity signal' },
+    ],
+    initialValue: cfg.complexity_service?.enabled
+      ? (cfg.complexity_service?.protocol === 'openai' ? 'remote' : 'local')
+      : 'off',
+  });
+  if (isCancel(mode)) abort();
+
+  if (mode === 'off') {
     if (!cfg.complexity_service?.enabled) return false;
     cfg.complexity_service = undefined as any;
     return true;
   }
-  const baseUrl = await p.text({ message: 'Base URL:', defaultValue: cfg.complexity_service?.base_url ?? 'http://127.0.0.1:8094' });
-  if (isCancel(baseUrl)) abort();
-  cfg.complexity_service = { enabled: true, base_url: String(baseUrl).trim(), timeout_seconds: 8, auto_spawn: false };
+
+  if (mode === 'remote') {
+    const baseUrl = await p.text({ message: 'Remote base_url:', defaultValue: cfg.complexity_service?.base_url ?? '' });
+    if (isCancel(baseUrl)) abort();
+    const modelName = await p.text({ message: 'Model name (sent to the API):', defaultValue: cfg.complexity_service?.model_name ?? 'brick-complexity' });
+    if (isCancel(modelName)) abort();
+    const token = await p.password({ message: 'Bearer token (blank to keep current / skip):' });
+    if (isCancel(token)) abort();
+    const keepToken = cfg.complexity_service?.bearer_token;
+    cfg.complexity_service = {
+      enabled: true,
+      protocol: 'openai',
+      base_url: String(baseUrl).trim(),
+      model_name: String(modelName || 'brick-complexity').trim(),
+      ...(token ? { bearer_token: String(token) } : (keepToken ? { bearer_token: keepToken } : {})),
+      timeout_seconds: 8,
+      auto_spawn: false,
+    };
+  } else {
+    // Local Docker sidecar reached via the compose service DNS name.
+    cfg.complexity_service = {
+      enabled: true,
+      base_url: 'http://classifier:8094',
+      bearer_token: '${BRICK_CLASSIFIER_TOKEN}',
+      timeout_seconds: 8,
+      auto_spawn: false,
+    };
+  }
   if (cfg.skill_router) {
     cfg.skill_router.complexity_model.base_url = cfg.complexity_service.base_url;
   }

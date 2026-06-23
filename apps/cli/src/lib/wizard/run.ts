@@ -64,10 +64,45 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   const defaultModel = String(defaultModelChoice);
 
   // complexity service — always enabled (it is essential to Brick routing); the
-  // wizard no longer asks whether to enable it, only where it lives.
-  const complexityBaseUrl = await p.text({ message: 'complexity_service base_url:', placeholder: 'http://127.0.0.1:8094', defaultValue: 'http://127.0.0.1:8094' });
-  if (p.isCancel(complexityBaseUrl)) { p.cancel('aborted'); process.exit(0); }
-  const complexityService = { enabled: true, base_url: String(complexityBaseUrl || 'http://127.0.0.1:8094'), timeout_seconds: 8, auto_spawn: false };
+  // wizard asks where the difficulty classifier lives: bundled local Docker
+  // sidecar, or a remote OpenAI-compatible endpoint (vLLM / hosted API).
+  const complexityMode = await p.select({
+    message: 'complexity classifier:',
+    options: [
+      { value: 'local', label: 'Local (Docker sidecar)', hint: 'bundled classifier container, runs on this host' },
+      { value: 'remote', label: 'Remote (OpenAI-compatible API)', hint: 'custom /v1/chat/completions endpoint' },
+    ],
+    initialValue: 'local',
+  });
+  if (p.isCancel(complexityMode)) { p.cancel('aborted'); process.exit(0); }
+
+  let complexityService: any;
+  if (complexityMode === 'remote') {
+    const url = await p.text({ message: 'remote base_url:', placeholder: 'https://api.example.com', defaultValue: '' });
+    if (p.isCancel(url)) { p.cancel('aborted'); process.exit(0); }
+    const modelName = await p.text({ message: 'model name (sent to the API):', placeholder: 'brick-complexity', defaultValue: 'brick-complexity' });
+    if (p.isCancel(modelName)) { p.cancel('aborted'); process.exit(0); }
+    const token = await p.password({ message: 'bearer token (optional, blank to skip):' });
+    if (p.isCancel(token)) { p.cancel('aborted'); process.exit(0); }
+    complexityService = {
+      enabled: true,
+      protocol: 'openai',
+      base_url: String(url).trim(),
+      model_name: String(modelName || 'brick-complexity').trim(),
+      ...(token ? { bearer_token: String(token) } : {}),
+      timeout_seconds: 8,
+      auto_spawn: false,
+    };
+  } else {
+    // Local Docker sidecar reached via the compose service DNS name.
+    complexityService = {
+      enabled: true,
+      base_url: 'http://classifier:8094',
+      bearer_token: '${BRICK_CLASSIFIER_TOKEN}',
+      timeout_seconds: 8,
+      auto_spawn: false,
+    };
+  }
 
   // routing mode — quantized preset of the continuous r knob
   // (skill_router.math.routing_preference, honored by the Go router).
@@ -245,6 +280,16 @@ const KNOWN_COST_WEIGHTS: Record<string, number> = {
   'qwen3.5-9b': 0.1,
   'deepseek-v4-flash': 0.4,
   'kimi2.6': 0.6,
+  // Anthropic Claude pool (relative cost, opus highest).
+  'claude-haiku-4-5': 0.1,
+  'claude-sonnet-4-6': 0.4,
+  'claude-opus-4-8': 1.0,
+  // OpenAI / Codex pool.
+  'gpt-5.4-mini': 0.1,
+  'o3-mini': 0.2,
+  'gpt-5.4': 0.5,
+  o3: 0.7,
+  'gpt-5.5': 1.0,
 };
 
 function buildSkillRouter(

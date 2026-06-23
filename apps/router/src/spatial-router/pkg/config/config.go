@@ -2763,6 +2763,30 @@ type ComplexityServiceConfig struct {
 	// Device passed to the spawned classifier server (auto|cpu|cuda).
 	// Default: "auto".
 	Device string `yaml:"device,omitempty"`
+
+	// Protocol selects how the router talks to the classifier:
+	//   - "brick" (default, or empty): the custom POST /classify endpoint
+	//     served by brick-complexity-server (returns {label, confidence}).
+	//   - "openai": an OpenAI-compatible POST /v1/chat/completions endpoint.
+	//     The router sends the complexity SYSTEM_PROMPT plus the query, reads
+	//     the label from the completion text, and derives confidence from
+	//     token logprobs when present. Lets a remote vLLM / hosted API act as
+	//     the difficulty classifier without the brick custom protocol.
+	Protocol string `yaml:"protocol,omitempty"`
+
+	// ModelName is the model identifier sent in the OpenAI request body
+	// (Protocol="openai" only). Ignored by the brick protocol.
+	ModelName string `yaml:"model_name,omitempty"`
+
+	// DefaultConfidence is the confidence used by the OpenAI protocol when the
+	// endpoint returns no usable token logprobs (so the router cannot derive a
+	// calibrated confidence over easy/medium/hard). The router blends the label
+	// toward "medium" by this amount: tau = c*tau_label + (1-c)*tau_medium, so a
+	// value near 1.0 fully trusts the label and a value near 0.5 hedges. Without
+	// this the router would assume full certainty (1.0) and overstate the label.
+	// Pointer so an absent field is distinguishable from 0.0. Default 0.5.
+	// Ignored by the brick protocol and when logprobs are available.
+	DefaultConfidence *float64 `yaml:"default_confidence,omitempty"`
 }
 
 // SkillRouterConfig configures Brick2's native Skill-Vector router.
@@ -2776,6 +2800,13 @@ type SkillRouterConfig struct {
 	CapabilityModel SkillRouterCapabilityModelConfig `yaml:"capability_model,omitempty"`
 	ComplexityModel SkillRouterComplexityModelConfig `yaml:"complexity_model,omitempty"`
 	Math            SkillRouterMathConfig            `yaml:"math,omitempty"`
+
+	// DynamicEffort, when true, derives the reasoning/thinking effort per query
+	// from the prompt complexity label, clamped by the routing-preference window
+	// (eco..max), instead of the fixed per-model ReasoningEffort. Opt-in so
+	// existing profiles keep their current fixed-effort behavior. See
+	// pkg/proxy/effort.go.
+	DynamicEffort bool `yaml:"dynamic_effort,omitempty"`
 
 	// Models is the candidate set for text routing. Models used only for
 	// multimodal direct forwarding can remain in model_config without being
@@ -2805,6 +2836,20 @@ type SkillRouterComplexityModelConfig struct {
 	AutoSpawn       *bool  `yaml:"auto_spawn,omitempty"`
 	ScriptPath      string `yaml:"script_path,omitempty"`
 	Device          string `yaml:"device,omitempty"`
+
+	// Protocol mirrors ComplexityServiceConfig.Protocol ("brick" default, or
+	// "openai" for an OpenAI-compatible /v1/chat/completions endpoint). When
+	// set here it takes precedence over the ComplexityService value.
+	Protocol string `yaml:"protocol,omitempty"`
+
+	// ModelName is the model id sent in the OpenAI request body when
+	// Protocol="openai". Falls back to ModelID when empty.
+	ModelName string `yaml:"model_name,omitempty"`
+
+	// DefaultConfidence mirrors ComplexityServiceConfig.DefaultConfidence and,
+	// when set here, takes precedence. Used by the OpenAI protocol when the
+	// endpoint returns no usable logprobs. Default 0.5.
+	DefaultConfidence *float64 `yaml:"default_confidence,omitempty"`
 }
 
 type SkillRouterMathConfig struct {

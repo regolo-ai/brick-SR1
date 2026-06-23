@@ -41,6 +41,49 @@ func TestExtractAnthropicPromptText_UsesLastUserOnly(t *testing.T) {
 	}
 }
 
+func TestExtractAnthropicContextText_LastKTurns(t *testing.T) {
+	body := []byte(`{"system":"sys","messages":[` +
+		`{"role":"user","content":"u1"},` +
+		`{"role":"assistant","content":"a1"},` +
+		`{"role":"user","content":"u2"},` +
+		`{"role":"assistant","content":"a2"},` +
+		`{"role":"user","content":"u3"}]}`)
+	got := extractAnthropicContextText(body, 3)
+	// Last 3 turns: a1, u2, a2, u3 -> trimmed to 3 most recent: u2, a2, u3.
+	for _, want := range []string{"sys", "u2", "a2", "u3"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in context window, got %q", want, got)
+		}
+	}
+	if strings.Contains(got, "u1") || strings.Contains(got, "a1") {
+		t.Fatalf("turns beyond k should be excluded, got %q", got)
+	}
+	// Chronological order: u2 before a2 before u3.
+	if !(strings.Index(got, "u2") < strings.Index(got, "a2") && strings.Index(got, "a2") < strings.Index(got, "u3")) {
+		t.Fatalf("turns should be chronological, got %q", got)
+	}
+}
+
+func TestExtractAnthropicContextText_FallsBackForSmallK(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"a"},{"role":"user","content":"second"}]}`)
+	got := extractAnthropicContextText(body, 1)
+	if !strings.Contains(got, "second") || strings.Contains(got, "first") {
+		t.Fatalf("k<=1 should fall back to last-user-only, got %q", got)
+	}
+}
+
+func TestExtractAnthropicContextText_TruncatesTail(t *testing.T) {
+	long := strings.Repeat("x", maxContextClassifyChars+5000)
+	body := []byte(`{"messages":[{"role":"user","content":"` + long + `"},{"role":"user","content":"tail-marker"}]}`)
+	got := extractAnthropicContextText(body, 4)
+	if len([]rune(got)) > maxContextClassifyChars {
+		t.Fatalf("context window not truncated: %d runes", len([]rune(got)))
+	}
+	if !strings.Contains(got, "tail-marker") {
+		t.Fatalf("truncation should keep the trailing (most recent) text, got tail missing")
+	}
+}
+
 func TestRewriteModelInBodyPreservesUnknownFields(t *testing.T) {
 	body := []byte(`{"model":"old","max_tokens":100,"thinking":{"type":"enabled","budget_tokens":1000},"tools":[{"name":"x"}],"messages":[{"role":"user","content":"hi"}]}`)
 	out := rewriteModelInBody(body, "claude-haiku-4-5")

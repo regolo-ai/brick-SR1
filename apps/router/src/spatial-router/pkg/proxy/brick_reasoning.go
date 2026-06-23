@@ -6,7 +6,13 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 )
 
-func applyBrickReasoning(body []byte, cfg *config.RouterConfig, modelName string) []byte {
+// applyBrickReasoning injects (or strips) reasoning controls on the
+// OpenAI-compatible brick forward path. When skill_router.dynamic_effort is set,
+// the effort is derived per query from complexityLabel and clamped by the
+// routing-preference window; otherwise it uses the fixed per-model
+// ReasoningEffort (legacy behavior). A model with use_reasoning=false has all
+// reasoning fields stripped (this is the OpenAI-pool "supports reasoning" guard).
+func applyBrickReasoning(body []byte, cfg *config.RouterConfig, modelName, complexityLabel string) []byte {
 	if cfg == nil {
 		return body
 	}
@@ -38,7 +44,12 @@ func applyBrickReasoning(body []byte, cfg *config.RouterConfig, modelName string
 	}
 
 	family := cfg.GetModelReasoningFamily(modelName)
-	effort := selected.ReasoningEffort
+	var effort string
+	if cfg.SkillRouter.DynamicEffort {
+		effort = vocabAt(brickEffortVocab, resolveEffortLevel(complexityLabel, routingPreferenceOf(cfg)))
+	} else {
+		effort = selected.ReasoningEffort
+	}
 	if effort == "" {
 		effort = cfg.DefaultReasoningEffort
 	}

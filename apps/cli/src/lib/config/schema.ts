@@ -80,7 +80,16 @@ export const ComplexityServiceSchema = z.object({
   enabled: z.boolean(),
   address: z.string().optional(),
   port: z.number().optional(),
+  // protocol: "brick" (custom /classify, default) or "openai"
+  // (/v1/chat/completions). "openai" lets a remote vLLM / hosted API serve as
+  // the difficulty classifier.
+  protocol: z.enum(['brick', 'openai']).optional(),
   base_url: z.string().url().optional(),
+  // model_name is sent in the OpenAI request body (protocol "openai" only).
+  model_name: z.string().optional(),
+  // default_confidence (protocol "openai" only): confidence used when the
+  // endpoint returns no usable logprobs, instead of assuming full certainty.
+  default_confidence: z.number().min(0).max(1).optional(),
   bearer_token: z.string().optional(),
   bearer_token_file: z.string().optional(),
   timeout_seconds: z.number().default(5),
@@ -147,6 +156,10 @@ export const SkillRouterKeywordRuleSchema = z.object({
 
 export const SkillRouterSchema = z.object({
   enabled: z.boolean().default(true),
+  // When true the Go router derives reasoning/thinking effort per query from the
+  // prompt complexity label, clamped by routing_preference (eco..max), instead of
+  // the fixed per-model reasoning_effort. See apps/router pkg/proxy/effort.go.
+  dynamic_effort: z.boolean().optional(),
   capabilities: z.array(z.string()).min(1),
   capability_model: z.object({
     model_id: z.string().optional(),

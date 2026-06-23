@@ -1,0 +1,97 @@
+import { Command, Flags } from '@oclif/core';
+import { loadConfig } from '../../lib/config/load.js';
+import { readState } from '../../lib/config/paths.js';
+import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
+import { ensureDefaultCodexProfile, DEFAULT_CODEX_PROFILE } from '../../lib/codex/bootstrap.js';
+import { wireCodex, codexConfigPath } from '../../lib/codex/config-toml.js';
+import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
+import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
+
+export default class CodexOn extends Command {
+  static description =
+    'Wire OpenAI Codex through the local Brick router (adds a brick model_provider/profile in ~/.codex/config.toml, wire_api=chat). Auto-starts the router if it is down.';
+
+  static examples = [
+    '<%= config.bin %> codex on',
+    '<%= config.bin %> codex on --no-start',
+  ];
+
+  static flags = {
+    'no-start': Flags.boolean({ description: 'do not auto-start the router; fail if it is not already healthy' }),
+  };
+
+  async run(): Promise<void> {
+    const { flags } = await this.parse(CodexOn);
+    banner();
+
+    // Materialize the dedicated Codex profile (OpenAI pool skill router) if absent.
+    const profile = await ensureDefaultCodexProfile();
+    const cfg = await loadConfig(profile);
+    const port = cfg.server_port;
+
+    // The Claude and Codex router stacks both bind host 8000 (mutually exclusive).
+    const running = readState().runningProfile;
+    if (running && running !== profile && (await isHealthy(port))) {
+      warn(`a different Brick router ('${running}') is already serving port ${port}.`);
+      warn(`stop it first (\`brick claude off --stop\` or \`brick stop\`) before wiring Codex.`);
+      this.exit(1);
+    }
+
+    // 1. Ensure the router is up and healthy before pointing Codex at it.
+    if (!(await isHealthy(port))) {
+      if (flags['no-start']) {
+        err(`router not healthy on http://localhost:${port} and --no-start given. run \`brick serve\` first.`);
+        this.exit(1);
+      }
+      info('router not responding — starting the Codex stack');
+      try {
+        const r = await ensureServing(profile);
+        if (!r.healthy) {
+          err(`router did not become healthy on http://localhost:${port}. check \`brick logs\`.`);
+          this.exit(1);
+        }
+      } catch (e: any) {
+        err(e?.message ?? String(e));
+        this.exit(1);
+      }
+    } else {
+      ok(`router healthy on http://localhost:${port}`);
+    }
+
+    const baseUrl = `http://localhost:${port}`;
+
+    // 2. Idempotent: already wired to the same URL → nothing to do.
+    const existing = readCodexWiring();
+    if (existing?.wired && existing.baseUrl === baseUrl) {
+      ok(`already wired to ${baseUrl}`);
+      print();
+      this.printHint();
+      return;
+    }
+
+    // 3. Patch ~/.codex/config.toml. Back up the prior top-level profile only on
+    // the first `on`.
+    let result: { previousProfile: string | null; createdFile: boolean };
+    try {
+      result = wireCodex(baseUrl);
+    } catch (e: any) {
+      err(e?.message ?? String(e));
+      this.exit(1);
+    }
+    const previousProfile = existing?.wired ? existing.previousProfile : result!.previousProfile;
+    const createdFile = existing?.wired ? existing.createdFile : result!.createdFile;
+
+    writeCodexWiring({ wired: true, baseUrl, previousProfile, createdFile });
+
+    ok(`Codex wired to Brick → ${baseUrl} (provider+profile "brick", wire_api=chat)`);
+    info(`patched ${codexConfigPath()}`);
+    print();
+    this.printHint();
+  }
+
+  private printHint(): void {
+    print('Codex now defaults to the "brick" profile → the local Brick router routes among the OpenAI pool.');
+    print('Your OpenAI API key is forwarded verbatim to api.openai.com. Undo with `brick codex off`.');
+    print('Check wiring with `brick codex status`.');
+  }
+}

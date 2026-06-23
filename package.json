@@ -1,7 +1,7 @@
 {
   "name": "brick-monorepo",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Brick: multimodal LLM routing gateway. Monorepo containing router (Go+Rust), CLI (TypeScript), evals, training, paper.",
   "homepage": "https://github.com/regolo-ai/brick-SR1",
   "repository": {

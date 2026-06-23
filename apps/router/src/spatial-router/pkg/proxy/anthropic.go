@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
@@ -50,8 +51,18 @@ var hopByHopHeaders = map[string]struct{}{
 // handleAnthropicMessages implements a transparent pass-through for the
 // Anthropic /v1/messages endpoint. The request body and headers (including
 // Authorization, anthropic-version, anthropic-beta, User-Agent) are forwarded
-// verbatim to the configured upstream — only the `model` field is rewritten
-// based on the difficulty classification of the prompt.
+// verbatim to the configured upstream.
+//
+// Model selection logic:
+//   - If the client sends model="brick-claude" (or any "brick-*" prefix), Brick
+//     runs the full skill router. The client's output_config.effort is mapped to
+//     a routing preference r that drives ONLY model selection (RouteWithPreference),
+//     letting the Claude Code effort picker act as the Brick mode selector. The
+//     reasoning effort injected into the request is then computed autonomously by
+//     the router's own signals (autonomousEffortLevel), independent of the mode.
+//   - If the client sends a native Claude model (haiku/sonnet/opus), Brick
+//     forwards the request verbatim to that model — no skill routing, no effort
+//     override. This preserves the user's explicit model choice.
 func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -86,10 +97,47 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	prompt := extractAnthropicPromptText(body)
-	if prompt == "" {
-		logging.Warnf("AnthropicPassthrough: could not extract prompt text, falling back to medium")
+	requestedModel := extractRequestedModel(body)
+	clientEffort := extractClientEffort(body)
+
+	// Classify the request as "brick-routed" vs "native-model passthrough".
+	// brick-routed: model field is empty, "brick-*", or "brick" (all the names
+	//   we publish in /v1/models for the virtual router entry).
+	// native: any recognized claude-* model; forwarded verbatim.
+	isBrick := requestedModel == "" ||
+		strings.HasPrefix(strings.ToLower(requestedModel), "brick")
+
+	if isBrick {
+		s.handleBrickRouted(w, r, cfg, apCfg, body, clientEffort)
+	} else {
+		s.handleNativeModel(w, r, cfg, apCfg, body, requestedModel)
 	}
+}
+
+// handleBrickRouted processes a /v1/messages request whose model field maps to
+// the Brick virtual router. It derives a routing preference from the client's
+// effort level (which selects the MODEL via RouteWithPreference), then injects a
+// reasoning effort computed autonomously from the router's own signals (query
+// difficulty + how stretched the chosen model is), independent of the mode.
+func (s *Server) handleBrickRouted(
+	w http.ResponseWriter, r *http.Request,
+	cfg *config.RouterConfig, apCfg *config.AnthropicPassthroughConfig,
+	body []byte, clientEffort string,
+) {
+	var prompt string
+	if apCfg.ContextWindow.Enabled {
+		prompt = extractAnthropicContextText(body, apCfg.EffectiveContextWindowK())
+	} else {
+		prompt = extractAnthropicPromptText(body)
+	}
+	if prompt == "" {
+		logging.Warnf("AnthropicPassthrough[brick]: could not extract prompt text, falling back to medium")
+	}
+
+	// Derive routing preference from the client's effort selection (or default to
+	// mid). This drives ONLY model selection; the effort injected below is computed
+	// autonomously and does not depend on the mode.
+	preference := clientEffortToPreference(clientEffort)
 
 	label := "medium"
 	if prompt != "" {
@@ -99,20 +147,116 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 	clientWants1M := requestRequestsContext1M(r.Header.Values("Anthropic-Beta"))
 	use1M := clientWants1M && apCfg.ExtraUsageEnabled && len(body) > apCfg.EffectiveContext1MThresholdBytes()
 
+	// Model selection: full Brick skill router with per-request preference override.
+	// tauQuery and under capture the autonomous-effort signals from the route.
 	var selectedModel string
-	if use1M {
-		selectedModel = apCfg.Resolve1M(label)
-	} else {
-		selectedModel = apCfg.Resolve(label)
+	var complexityLabel string
+	var tauQuery, under float64
+	routedViaSkill := false
+	if apCfg.UseSkillRouter && cfg.SkillRouter.Enabled && prompt != "" {
+		if router, rerr := s.getBrickRouter(cfg); rerr != nil {
+			logging.Warnf("AnthropicPassthrough[brick]: skill router init failed, falling back to model_map: %v", rerr)
+		} else if route, rerr := router.RouteWithPreference(r.Context(), prompt, preference); rerr != nil {
+			logging.Warnf("AnthropicPassthrough[brick]: skill router failed, falling back to model_map: %v", rerr)
+		} else {
+			selectedModel = route.Model
+			complexityLabel = route.ComplexityLabel
+			if complexityLabel == "easy" || complexityLabel == "medium" || complexityLabel == "hard" {
+				label = complexityLabel
+			}
+			tauQuery = route.TauQuery
+			under = underCapacityForModel(route, route.Model)
+			routedViaSkill = true
+		}
+	}
+	if selectedModel == "" {
+		if use1M {
+			selectedModel = apCfg.Resolve1M(label)
+		} else {
+			selectedModel = apCfg.Resolve(label)
+		}
 	}
 
 	metrics.BrickCCRequests.WithLabelValues(label, selectedModel).Inc()
 
+	// Strip the 1M-context beta when the account lacks the extra-usage tier, OR
+	// whenever the selected model has no 1M variant (Haiku) — forwarding it would
+	// trigger an "Extra usage is required for 1M context" upstream error.
+	stripBeta := !use1M || strings.Contains(strings.ToLower(selectedModel), "haiku")
+
 	rewritten := rewriteModelInBody(body, selectedModel)
+	effortStr := ""
+	if routedViaSkill && cfg.SkillRouter.DynamicEffort {
+		// Autonomous effort: difficulty + chosen-model headroom, NO mode window.
+		level := autonomousEffortLevel(tauQuery, under)
+		rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
+		effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
+	}
 	rewritten = stripUnsupportedFieldsForModel(rewritten, selectedModel)
 
+	logging.Infof("AnthropicPassthrough[brick]: mode_effort=%s preference=%.2f complexity=%s tau=%.3f under=%.3f auto_effort=%s model=%s use_1m=%t bytes=%d",
+		clientEffort, preference, label, tauQuery, under, effortStr, selectedModel, use1M, len(rewritten))
+
+	s.forwardAnthropicRequest(w, r, apCfg, rewritten, selectedModel, label, effortStr, routedViaSkill, stripBeta)
+}
+
+// underCapacityForModel returns the under-capacity residual of the named model
+// from the route's score list (how far its skill falls short of the lifted
+// query requirement). Falls back to the top-ranked model's residual, then 0,
+// when the model is not present (e.g. a keyword override outside the scored set).
+func underCapacityForModel(route *brickrouting.Result, model string) float64 {
+	for _, s := range route.Scores {
+		if s.Model == model {
+			return s.UnderCapacity
+		}
+	}
+	if len(route.Scores) > 0 {
+		return route.Scores[0].UnderCapacity
+	}
+	return 0
+}
+
+// handleNativeModel forwards a /v1/messages request to the exact Claude model
+// the client specified. Skill routing is bypassed; effort is forwarded verbatim
+// (haiku gets effort stripped by stripUnsupportedFieldsForModel). This path
+// preserves the user's explicit model choice from the Claude Code model picker.
+func (s *Server) handleNativeModel(
+	w http.ResponseWriter, r *http.Request,
+	cfg *config.RouterConfig, apCfg *config.AnthropicPassthroughConfig,
+	body []byte, requestedModel string,
+) {
+	clientWants1M := requestRequestsContext1M(r.Header.Values("Anthropic-Beta"))
+	use1M := clientWants1M && apCfg.ExtraUsageEnabled && len(body) > apCfg.EffectiveContext1MThresholdBytes()
+	stripBeta := !use1M || strings.Contains(strings.ToLower(requestedModel), "haiku")
+
+	// rewriteModelInBody is a no-op here (model already correct) but ensures the
+	// body is re-serialised cleanly if Brick ever needs to normalise the field.
+	rewritten := rewriteModelInBody(body, requestedModel)
+	rewritten = stripUnsupportedFieldsForModel(rewritten, requestedModel)
+
+	// Count native-model traffic under label="native" so status shows both paths.
+	metrics.BrickCCRequests.WithLabelValues("native", requestedModel).Inc()
+
+	logging.Infof("AnthropicPassthrough[native]: model=%s use_1m=%t upstream=%s bytes=%d",
+		requestedModel, use1M, apCfg.EffectiveUpstreamURL(), len(rewritten))
+
+	s.forwardAnthropicRequest(w, r, apCfg, rewritten, requestedModel, "native", "", false, stripBeta)
+}
+
+// forwardAnthropicRequest sends the (possibly rewritten) body to the Anthropic
+// upstream and streams the response back to the client. It is shared by
+// handleBrickRouted and handleNativeModel. effortStr, when non-empty, is the
+// autonomously-computed reasoning effort and is surfaced as X-Brick-Effort.
+func (s *Server) forwardAnthropicRequest(
+	w http.ResponseWriter, r *http.Request,
+	apCfg *config.AnthropicPassthroughConfig,
+	body []byte,
+	selectedModel, label, effortStr string,
+	routedViaSkill bool,
+	stripBeta bool,
+) {
 	upstreamURL := apCfg.EffectiveUpstreamURL() + "/v1/messages"
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(rewritten))
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("building upstream request: %v", err))
 		return
@@ -121,7 +265,7 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 		if _, hop := hopByHopHeaders[http.CanonicalHeaderKey(name)]; hop {
 			continue
 		}
-		if http.CanonicalHeaderKey(name) == "Anthropic-Beta" && !use1M {
+		if http.CanonicalHeaderKey(name) == "Anthropic-Beta" && stripBeta {
 			for _, v := range values {
 				stripped := stripContext1MBeta(v)
 				if stripped != "" {
@@ -134,10 +278,7 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 			upstreamReq.Header.Add(name, v)
 		}
 	}
-	upstreamReq.ContentLength = int64(len(rewritten))
-
-	logging.Infof("AnthropicPassthrough: complexity=%s model=%s use_1m=%t client_1m=%t upstream=%s bytes=%d",
-		label, selectedModel, use1M, clientWants1M, upstreamURL, len(rewritten))
+	upstreamReq.ContentLength = int64(len(body))
 
 	resp, err := anthropicHTTPClient.Do(upstreamReq)
 	if err != nil {
@@ -157,6 +298,14 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 	}
 	w.Header().Set("X-Brick-Selected-Model", selectedModel)
 	w.Header().Set("X-Brick-Complexity", label)
+	if effortStr != "" {
+		w.Header().Set("X-Brick-Effort", effortStr)
+	}
+	if routedViaSkill {
+		w.Header().Set("x-brick-route-reason", "skill_vector")
+	} else {
+		w.Header().Set("x-brick-route-reason", "model_map")
+	}
 	w.WriteHeader(resp.StatusCode)
 
 	flusher, _ := w.(http.Flusher)
@@ -329,6 +478,61 @@ func extractAnthropicPromptText(body []byte) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+// maxContextClassifyChars bounds the size of the context-aware classification
+// input so the small complexity classifier stays fast. Validated empirically:
+// a 16000-char trailing window adds roughly 47ms median classifier latency.
+const maxContextClassifyChars = 16000
+
+// extractAnthropicContextText is the context-aware variant of
+// extractAnthropicPromptText. Instead of only the latest user message, it
+// concatenates the system prompt with the text of the last k conversation
+// turns (user and assistant) in chronological order, so the classifier reflects
+// accumulated context rather than a single short follow-up. Only text blocks
+// are considered (same as decodeAnthropicContent); turns with no text content
+// (pure tool_use / tool_result) are skipped. The result is truncated to the
+// trailing maxContextClassifyChars to bound latency. Falls back to the
+// single-turn extraction when k <= 1.
+func extractAnthropicContextText(body []byte, k int) string {
+	if k <= 1 {
+		return extractAnthropicPromptText(body)
+	}
+	var raw struct {
+		System   json.RawMessage `json:"system"`
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+
+	// Walk backwards collecting up to k turns with non-empty text.
+	var turns []string
+	for i := len(raw.Messages) - 1; i >= 0 && len(turns) < k; i-- {
+		txt := decodeAnthropicContent(raw.Messages[i].Content)
+		if txt == "" {
+			continue
+		}
+		turns = append(turns, raw.Messages[i].Role+": "+txt)
+	}
+	// Reverse to chronological order.
+	for l, r := 0, len(turns)-1; l < r; l, r = l+1, r-1 {
+		turns[l], turns[r] = turns[r], turns[l]
+	}
+
+	var parts []string
+	if sys := decodeAnthropicContent(raw.System); sys != "" {
+		parts = append(parts, sys)
+	}
+	parts = append(parts, turns...)
+	out := strings.TrimSpace(strings.Join(parts, "\n"))
+	if r := []rune(out); len(r) > maxContextClassifyChars {
+		out = string(r[len(r)-maxContextClassifyChars:])
+	}
+	return out
 }
 
 // decodeAnthropicContent handles the polymorphic Anthropic content field:

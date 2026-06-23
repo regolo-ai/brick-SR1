@@ -1,0 +1,92 @@
+# Default Brick profile for OpenAI Codex — materialized automatically by `brick codex on`.
+# Two-container stack: complexity classifier + Brick router. Codex talks to the
+# router over /v1/chat/completions (wire_api = "chat") with model = "brick"; the
+# full skill router selects among the OpenAI pool and forwards each pick to
+# api.openai.com using the client's own OpenAI bearer (forwarded verbatim).
+
+model:
+  name: brick-codex
+  description: Default Brick router for OpenAI Codex (chat/completions)
+
+server_port: 8000
+auto_model_name: brick
+
+providers:
+  openai:
+    type: openai_compatible
+    base_url: https://api.openai.com/v1
+provider_profiles:
+  openai:
+    type: openai_compatible
+    base_url: https://api.openai.com/v1
+provider_endpoints:
+  - name: openai
+    provider_profile: openai
+    weight: 1
+default_model: gpt-5.4
+model_config:
+  gpt-5.5: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  gpt-5.4: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  gpt-5.4-mini: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  o3: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  o3-mini: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+
+reasoning_families:
+  openai_reasoning: { type: reasoning_effort, parameter: reasoning_effort }
+default_reasoning_effort: medium
+
+complexity_service:
+  enabled: true
+  base_url: http://classifier:8094
+  bearer_token: "${BRICK_CLASSIFIER_TOKEN}"
+  timeout_seconds: 8
+  auto_spawn: false
+
+# Full skill router over the OpenAI pool. dynamic_effort derives the per-query
+# reasoning_effort from complexity, clamped by routing_preference (eco..max).
+skill_router:
+  enabled: true
+  dynamic_effort: true
+  capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    repo_id: massaindustries/modernbert-capability-classifier
+    labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+    use_cpu: true
+  complexity_model:
+    model_id: regolo/brick-complexity-2-eco
+    base_model_id: Qwen/Qwen3.5-0.8B
+    timeout_seconds: 8
+    auto_spawn: false
+  math:
+    routing_preference: 0
+    tau: { easy: 0.55, medium: 0.72, hard: 0.88 }
+  models:
+    - model: gpt-5.4-mini
+      skill_vector: [0.55, 0.45, 0.66, 0.78, 0.58, 0.74]
+      cost_weight: 0.1
+      use_reasoning: true
+      base_url: https://api.openai.com/v1
+    - model: o3-mini
+      skill_vector: [0.55, 0.45, 0.60, 0.90, 0.66, 0.80]
+      cost_weight: 0.2
+      use_reasoning: true
+      base_url: https://api.openai.com/v1
+    - model: gpt-5.4
+      skill_vector: [0.80, 0.62, 0.70, 0.89, 0.78, 0.90]
+      cost_weight: 0.5
+      use_reasoning: true
+      base_url: https://api.openai.com/v1
+    - model: o3
+      skill_vector: [0.74, 0.52, 0.64, 0.96, 0.74, 0.89]
+      cost_weight: 0.7
+      use_reasoning: true
+      base_url: https://api.openai.com/v1
+    - model: gpt-5.5
+      skill_vector: [0.88, 0.70, 0.74, 0.93, 0.85, 0.93]
+      cost_weight: 1.0
+      use_reasoning: true
+      base_url: https://api.openai.com/v1
+  keyword_rules: []
+
+decisions: []

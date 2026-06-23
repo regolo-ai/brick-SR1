@@ -6,6 +6,7 @@ import {
   routingRows,
   totalRequests,
   classifierPercentiles,
+  classifierMean,
   fallbackPct,
   formatLatency,
   type ParsedMetrics,
@@ -154,9 +155,14 @@ export default class ClaudeStatus extends Command {
     }
     this.log(`  Total requests        ${total}`);
 
+    const mean = classifierMean(m);
     const { p50, p95 } = classifierPercentiles(m);
-    if (p50 !== null && p95 !== null) {
-      this.log(`  Classifier p50/p95    ${formatLatency(p50)} / ${formatLatency(p95)}`);
+    if (mean !== null && p50 !== null && p95 !== null) {
+      this.log(
+        `  Classifier latency    avg ${formatLatency(mean)} ${COLORS.dim}·${COLORS.reset} p50 ${formatLatency(
+          p50
+        )} ${COLORS.dim}·${COLORS.reset} p95 ${formatLatency(p95)}`
+      );
     }
 
     const pct = fallbackPct(m);

@@ -5,6 +5,7 @@ import {
   routingRows,
   totalRequests,
   classifierPercentiles,
+  classifierMean,
   fallbackPct,
   formatLatency,
   type Snapshot,
@@ -126,6 +127,7 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
 
   const total = totalRequests(m);
   const rows = routingRows(m);
+  const mean = classifierMean(m);
   const { p50, p95 } = classifierPercentiles(m);
   const fb = fallbackPct(m);
   const fbColor = fb > 5 ? 'red' : fb > 1 ? 'yellow' : 'green';
@@ -145,8 +147,8 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
               <Text>{`  ${r.count} (${r.pct.toFixed(0)}%)`}</Text>
             </Box>
           ))}
-          {p50 !== null && p95 !== null && (
-            <Row label="classifier p50/p95">{`${formatLatency(p50)} / ${formatLatency(p95)}`}</Row>
+          {mean !== null && p50 !== null && p95 !== null && (
+            <Row label="classifier latency">{`avg ${formatLatency(mean)} · p50 ${formatLatency(p50)} · p95 ${formatLatency(p95)}`}</Row>
           )}
           <Row label="fallback rate">
             <Text color={fbColor}>{`${fb.toFixed(1)}% (${m.fallbackTotal})`}</Text>

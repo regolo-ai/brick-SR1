@@ -7,7 +7,7 @@
     "planning_agentic",
     "world_knowledge"
   ],
-  "date": "2026-06-11",
+  "date": "2026-06-13",
   "models": [
     {
       "model": "claude-opus-4-8",

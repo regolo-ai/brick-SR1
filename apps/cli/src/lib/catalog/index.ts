@@ -1,5 +1,6 @@
 import { regoloCatalog } from './regolo.js';
 import { openaiCatalog } from './openai.js';
+import { anthropicCatalog } from './anthropic.js';
 import { localCatalog } from './local.js';
 
 export interface CatalogModel {
@@ -31,10 +32,12 @@ export interface CatalogProvider {
 export const catalog: Record<string, CatalogProvider> = {
   regolo: regoloCatalog,
   openai: openaiCatalog,
+  anthropic: anthropicCatalog,
   local: localCatalog,
 };
 
 export const reasoningFamiliesDefault = {
   qwen3: { type: 'chat_template_kwargs', parameter: 'enable_thinking' },
   minimax: { type: 'reasoning_effort', parameter: 'reasoning_effort' },
+  openai_reasoning: { type: 'reasoning_effort', parameter: 'reasoning_effort' },
 };

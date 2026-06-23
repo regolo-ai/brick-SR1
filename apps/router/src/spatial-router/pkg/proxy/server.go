@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
@@ -50,6 +51,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/v1/routing/test", s.handleRoutingTest)
 	mux.HandleFunc("/api/v1/diag/classifier", s.handleDiagClassifier)
+	// Also expose Prometheus metrics on the main proxy port so `brick claude status`
+	// can read routing stats without publishing the dedicated metrics port (9190).
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Wrap with CORS middleware
 	handler := corsMiddleware(mux)
@@ -95,54 +99,28 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleModels returns the list of available models.
+// The order matches what is most useful in Claude Code's model picker:
+// brick-claude first (the smart router), then the three Claude models in
+// descending capability order so users can still pick a model explicitly.
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	cfg := s.cfg
-	if cfg == nil {
-		writeError(w, http.StatusInternalServerError, "router config not loaded")
-		return
-	}
-
-	// Build model list from backend models configuration
 	type modelEntry struct {
 		ID      string `json:"id"`
 		Object  string `json:"object"`
 		OwnedBy string `json:"owned_by"`
 	}
 
-	var models []modelEntry
-
-	// When brick is enabled, expose only "brick" as the virtual model
-	if cfg.Brick.Enabled {
-		models = append(models, modelEntry{
-			ID:      "brick",
-			Object:  "model",
-			OwnedBy: "regolo",
-		})
-	} else {
-		// Add auto/virtual model names
-		for _, name := range cfg.GetAutoModelNames() {
-			models = append(models, modelEntry{
-				ID:      name,
-				Object:  "model",
-				OwnedBy: "brick",
-			})
-		}
-
-		// Add backend model names
-		if cfg.BackendModels.ModelConfig != nil {
-			for modelName := range cfg.BackendModels.ModelConfig {
-				models = append(models, modelEntry{
-					ID:      modelName,
-					Object:  "model",
-					OwnedBy: "backend",
-				})
-			}
-		}
+	models := []modelEntry{
+		// Virtual Brick router — effort level controls routing mode (eco→max).
+		{ID: "brick-claude", Object: "model", OwnedBy: "brick"},
+		// Native Claude models: forwarded verbatim, no skill routing.
+		{ID: "claude-opus-4-8", Object: "model", OwnedBy: "anthropic"},
+		{ID: "claude-sonnet-4-6", Object: "model", OwnedBy: "anthropic"},
+		{ID: "claude-haiku-4-5", Object: "model", OwnedBy: "anthropic"},
 	}
 
 	resp := map[string]interface{}{

@@ -10,11 +10,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	candle "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
+	candle "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 const (
@@ -24,6 +26,13 @@ const (
 	defaultClipMax           = 0.98
 	defaultCapabilityModelID = "models/modernbert-capability-classifier"
 	defaultComplexityBaseURL = "http://127.0.0.1:8094"
+
+	// defaultOpenAINoLogprobConfidence is the confidence used by the OpenAI
+	// complexity protocol when the endpoint returns no usable token logprobs.
+	// 0.5 is neutral: tauQueryFrom blends the label and "medium" equally instead
+	// of assuming full certainty. Overridable via complexity_service
+	// (or skill complexity_model) default_confidence.
+	defaultOpenAINoLogprobConfidence = 0.5
 
 	// Locked production math configuration (paper Table 7). These are the
 	// calibrated base parameters and preference-knob anchors; the same values
@@ -61,6 +70,9 @@ type Router struct {
 	capability   *capabilityClassifier
 	complexity   *complexityClient
 	mathCfg      mathConfig
+	// kp stores the resolved base knob parameters so that RouteWithPreference
+	// can derive a per-request mathConfig without touching the singleton mathCfg.
+	kp knobParams
 }
 
 type mathConfig struct {
@@ -114,6 +126,12 @@ type ModelScore struct {
 	// Selection minimizes Score, not Distance.
 	Score           float64 `json:"score"`
 	ExpectedSuccess float64 `json:"expected_success"`
+	// UnderCapacity is the pure under-capacity residual sqrt(underSum) in
+	// log-odds space: how far the model's skill falls SHORT of the query
+	// requirement (over-capacity excluded). Observability-only — it does not
+	// affect selection. The proxy uses it to set reasoning effort: a stretched
+	// model (high under-capacity) is told to think harder to close the gap.
+	UnderCapacity float64 `json:"under_capacity"`
 }
 
 func New(cfg *config.RouterConfig) (*Router, error) {
@@ -144,6 +162,7 @@ func New(cfg *config.RouterConfig) (*Router, error) {
 		capability:   capability,
 		complexity:   newComplexityClient(cfg, skillCfg.ComplexityModel),
 		mathCfg:      newMathConfig(skillCfg.Math),
+		kp:           resolveKnobParams(skillCfg.Math),
 	}, nil
 }
 
@@ -157,6 +176,29 @@ func (r *Router) Route(ctx context.Context, text string) (*Result, error) {
 // handle the raw modalities present in the request. A nil allowlist means all
 // configured models are eligible (identical to Route).
 func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map[string]bool) (*Result, error) {
+	return r.routeCore(ctx, text, allow, r.mathCfg)
+}
+
+// RouteWithPreference is like Route but overrides the routing-preference knob r
+// for this single call, recomputing the effective math parameters on the fly.
+// This lets the proxy apply a per-request mode (derived from the client's effort
+// field) without mutating the singleton Router or restarting the container.
+// r must be in [-1, 1]; values outside the range are clamped.
+func (r *Router) RouteWithPreference(ctx context.Context, text string, preference float64) (*Result, error) {
+	mu, bias, beta, lambda := effectiveParams(r.kp, preference)
+	mc := r.mathCfg
+	mc.routingPreference = preference
+	mc.mu = mu
+	mc.bias = bias
+	mc.beta = beta
+	mc.lambdaOver = lambda
+	return r.routeCore(ctx, text, nil, mc)
+}
+
+// routeCore is the shared implementation used by RouteWithCandidates and
+// RouteWithPreference. It runs keyword matching, capability + complexity
+// classification in parallel, then selects a model via scoreModels.
+func (r *Router) routeCore(ctx context.Context, text string, allow map[string]bool, mc mathConfig) (*Result, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, fmt.Errorf("no text available for Brick routing")
@@ -175,7 +217,7 @@ func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map
 			MatchedKeyword:  best.rule.Name,
 			Capability:      uniformCapabilities(r.capabilities),
 			ComplexityLabel: "skipped",
-			TauQuery:        r.mathCfg.tau["medium"],
+			TauQuery:        mc.tau["medium"],
 		}, nil
 	}
 
@@ -197,8 +239,8 @@ func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map
 	probabilities := r.applyKeywordBiases(capRes.probabilities, matches)
 
 	complexityRes := <-complexityCh
-	tauQuery := r.tauQuery(complexityRes.label, complexityRes.confidence)
-	scores := r.scoreModels(probabilities, tauQuery, allow)
+	tauQuery := tauQueryFrom(mc, complexityRes.label, complexityRes.confidence)
+	scores := r.scoreModelsWithConfig(probabilities, tauQuery, allow, mc)
 	if len(scores) == 0 {
 		if allow != nil {
 			return nil, fmt.Errorf("no eligible skill_router.models for the request modalities")
@@ -225,9 +267,13 @@ func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map
 }
 
 func (r *Router) scoreModels(probabilities []float64, tauQuery float64, allow map[string]bool) []ModelScore {
+	return r.scoreModelsWithConfig(probabilities, tauQuery, allow, r.mathCfg)
+}
+
+func (r *Router) scoreModelsWithConfig(probabilities []float64, tauQuery float64, allow map[string]bool, mc mathConfig) []ModelScore {
 	// Difficulty lift in log-odds space (paper sec. brick-math):
 	//   z_q = bias + mu * logit(tau_query)
-	zq := r.mathCfg.bias + r.mathCfg.mu*logit(clamp(tauQuery, r.mathCfg.clipMin, r.mathCfg.clipMax))
+	zq := mc.bias + mc.mu*logit(clamp(tauQuery, mc.clipMin, mc.clipMax))
 	scores := make([]ModelScore, 0, len(r.skillCfg.Models))
 	for _, model := range r.skillCfg.Models {
 		if !modelAllowed(allow, model.Model) {
@@ -236,26 +282,27 @@ func (r *Router) scoreModels(probabilities []float64, tauQuery float64, allow ma
 		var underSum, overSum, expected float64
 		for i, p := range probabilities {
 			requirement := p * zq
-			modelValue := p * logit(clamp(model.SkillVector[i], r.mathCfg.clipMin, r.mathCfg.clipMax))
+			modelValue := p * logit(clamp(model.SkillVector[i], mc.clipMin, mc.clipMax))
 			under := math.Max(0, requirement-modelValue)
 			over := math.Max(0, modelValue-requirement)
 			underSum += under * under
 			overSum += over * over
 			expected += p * model.SkillVector[i]
 		}
-		distance := math.Sqrt(underSum + r.mathCfg.lambdaOver*overSum)
+		distance := math.Sqrt(underSum + mc.lambdaOver*overSum)
 		// Cost-penalized routing objective: J_m = D_m + beta * a_m, where a_m is
 		// the model's normalized cost (cost_weight).
-		score := distance + r.mathCfg.beta*model.CostWeight
+		score := distance + mc.beta*model.CostWeight
 		scores = append(scores, ModelScore{
 			Model:           model.Model,
 			Distance:        distance,
 			Score:           score,
 			ExpectedSuccess: expected,
+			UnderCapacity:   math.Sqrt(underSum),
 		})
 	}
 	sort.SliceStable(scores, func(i, j int) bool {
-		if math.Abs(scores[i].Score-scores[j].Score) < r.mathCfg.tieEps {
+		if math.Abs(scores[i].Score-scores[j].Score) < mc.tieEps {
 			if math.Abs(scores[i].ExpectedSuccess-scores[j].ExpectedSuccess) > 1e-9 {
 				return scores[i].ExpectedSuccess > scores[j].ExpectedSuccess
 			}
@@ -276,6 +323,21 @@ func modelAllowed(allow map[string]bool, model string) bool {
 }
 
 func (r *Router) tauQuery(label string, confidence float64) float64 {
+	return tauQueryFrom(r.mathCfg, label, confidence)
+}
+
+// tauQueryFrom computes the complexity interpolation parameter from the
+// mathConfig, complexity label and classifier confidence. It is a pure function
+// so that routeCore can use any mathConfig (including an on-the-fly one built by
+// RouteWithPreference) without accessing r.mathCfg directly.
+//
+// This is where the difficulty signal is consumed: the classifier (local brick
+// or remote OpenAI endpoint) supplies ONLY (label, confidence); everything else
+// in the routing decision — keyword rules, the capability classifier
+// (ModernBERT), per-model skill vectors and cost — is computed locally. The
+// label picks tau_label and the confidence shrinks it toward tau_medium when the
+// classifier is unsure, so confidence is a real input, not cosmetic.
+func tauQueryFrom(mc mathConfig, label string, confidence float64) float64 {
 	label = strings.ToLower(strings.TrimSpace(label))
 	if confidence < 0 {
 		confidence = 0
@@ -283,12 +345,12 @@ func (r *Router) tauQuery(label string, confidence float64) float64 {
 	if confidence > 1 {
 		confidence = 1
 	}
-	tauLabel, ok := r.mathCfg.tau[label]
+	tauLabel, ok := mc.tau[label]
 	if !ok {
-		tauLabel = r.mathCfg.tau["medium"]
+		tauLabel = mc.tau["medium"]
 		confidence = 0
 	}
-	return confidence*tauLabel + (1-confidence)*r.mathCfg.tau["medium"]
+	return confidence*tauLabel + (1-confidence)*mc.tau["medium"]
 }
 
 func applyDefaults(cfg *config.SkillRouterConfig) {
@@ -331,34 +393,13 @@ func newMathConfig(cfg config.SkillRouterMathConfig) mathConfig {
 		clipMax = defaultClipMax
 	}
 
-	// Resolve base parameters and anchors: absent (zero / nil) -> locked
-	// production defaults, mirroring the TS schema defaults in brick init.
-	floatOr := func(v, def float64) float64 {
-		if v == 0 {
-			return def
-		}
-		return v
-	}
+	kp := resolveKnobParams(cfg)
+
 	ptrOr := func(v *float64, def float64) float64 {
 		if v == nil {
 			return def
 		}
 		return *v
-	}
-	kp := knobParams{
-		complexityMu:      floatOr(cfg.ComplexityMu, defaultComplexityMu),
-		complexityBias:    ptrOr(cfg.ComplexityBias, defaultComplexityBias),
-		costPenaltyBeta:   floatOr(cfg.CostPenaltyBeta, defaultCostPenaltyBeta),
-		overPenaltyLambda: floatOr(cfg.OverPenaltyLambda, defaultOverPenaltyLambda),
-		preferencePower:   floatOr(cfg.PreferencePower, defaultPreferencePower),
-		maxMuMultiplier:   floatOr(cfg.MaxMuMultiplier, defaultMaxMuMultiplier),
-		maxBiasShift:      ptrOr(cfg.MaxBiasShift, defaultMaxBiasShift),
-		maxCostRelief:     floatOr(cfg.MaxCostRelief, defaultMaxCostRelief),
-		maxOverRelief:     floatOr(cfg.MaxOverRelief, defaultMaxOverRelief),
-		minMuMultiplier:   floatOr(cfg.MinMuMultiplier, defaultMinMuMultiplier),
-		minBiasShift:      ptrOr(cfg.MinBiasShift, defaultMinBiasShift),
-		minCostBoost:      floatOr(cfg.MinCostBoost, defaultMinCostBoost),
-		minOverBoost:      floatOr(cfg.MinOverBoost, defaultMinOverBoost),
 	}
 	preference := ptrOr(cfg.RoutingPreference, 0)
 
@@ -373,6 +414,40 @@ func newMathConfig(cfg config.SkillRouterMathConfig) mathConfig {
 		bias:              bias,
 		beta:              beta,
 		lambdaOver:        lambda,
+	}
+}
+
+// resolveKnobParams builds the knobParams from a SkillRouterMathConfig,
+// filling in locked production defaults for any absent field. It is extracted
+// from newMathConfig so that the Router can store kp once and reuse it in
+// RouteWithPreference without re-parsing the config.
+func resolveKnobParams(cfg config.SkillRouterMathConfig) knobParams {
+	floatOr := func(v, def float64) float64 {
+		if v == 0 {
+			return def
+		}
+		return v
+	}
+	ptrOr := func(v *float64, def float64) float64 {
+		if v == nil {
+			return def
+		}
+		return *v
+	}
+	return knobParams{
+		complexityMu:      floatOr(cfg.ComplexityMu, defaultComplexityMu),
+		complexityBias:    ptrOr(cfg.ComplexityBias, defaultComplexityBias),
+		costPenaltyBeta:   floatOr(cfg.CostPenaltyBeta, defaultCostPenaltyBeta),
+		overPenaltyLambda: floatOr(cfg.OverPenaltyLambda, defaultOverPenaltyLambda),
+		preferencePower:   floatOr(cfg.PreferencePower, defaultPreferencePower),
+		maxMuMultiplier:   floatOr(cfg.MaxMuMultiplier, defaultMaxMuMultiplier),
+		maxBiasShift:      ptrOr(cfg.MaxBiasShift, defaultMaxBiasShift),
+		maxCostRelief:     floatOr(cfg.MaxCostRelief, defaultMaxCostRelief),
+		maxOverRelief:     floatOr(cfg.MaxOverRelief, defaultMaxOverRelief),
+		minMuMultiplier:   floatOr(cfg.MinMuMultiplier, defaultMinMuMultiplier),
+		minBiasShift:      ptrOr(cfg.MinBiasShift, defaultMinBiasShift),
+		minCostBoost:      floatOr(cfg.MinCostBoost, defaultMinCostBoost),
+		minOverBoost:      floatOr(cfg.MinOverBoost, defaultMinOverBoost),
 	}
 }
 
@@ -456,9 +531,13 @@ func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
 }
 
 type complexityClient struct {
-	baseURL     string
-	bearerToken string
-	httpClient  *http.Client
+	baseURL           string
+	bearerToken       string
+	protocol          string
+	modelName         string
+	defaultConfidence float64
+	noLogprobWarn     sync.Once
+	httpClient        *http.Client
 }
 
 type complexityResult struct {
@@ -501,14 +580,69 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 		}
 	}
 
+	// Protocol: skill-router value wins, else the ComplexityService value,
+	// else "brick" (the legacy custom /classify endpoint).
+	protocol := strings.ToLower(strings.TrimSpace(skillCfg.Protocol))
+	if protocol == "" && cfg.ComplexityService != nil {
+		protocol = strings.ToLower(strings.TrimSpace(cfg.ComplexityService.Protocol))
+	}
+	if protocol == "" {
+		protocol = "brick"
+	}
+
+	// ModelName (OpenAI protocol only): skill-router model_name, else its
+	// model_id, else the ComplexityService model_name.
+	modelName := strings.TrimSpace(skillCfg.ModelName)
+	if modelName == "" {
+		modelName = strings.TrimSpace(skillCfg.ModelID)
+	}
+	if modelName == "" && cfg.ComplexityService != nil {
+		modelName = strings.TrimSpace(cfg.ComplexityService.ModelName)
+	}
+
+	// DefaultConfidence (OpenAI protocol, used only when the endpoint returns no
+	// usable logprobs): skill value wins, else ComplexityService, else 0.5.
+	defaultConfidence := defaultOpenAINoLogprobConfidence
+	if skillCfg.DefaultConfidence != nil {
+		defaultConfidence = *skillCfg.DefaultConfidence
+	} else if cfg.ComplexityService != nil && cfg.ComplexityService.DefaultConfidence != nil {
+		defaultConfidence = *cfg.ComplexityService.DefaultConfidence
+	}
+	if defaultConfidence < 0 {
+		defaultConfidence = 0
+	}
+	if defaultConfidence > 1 {
+		defaultConfidence = 1
+	}
+
 	return &complexityClient{
-		baseURL:     baseURL,
-		bearerToken: token,
-		httpClient:  &http.Client{Timeout: timeout},
+		baseURL:           baseURL,
+		bearerToken:       token,
+		protocol:          protocol,
+		modelName:         modelName,
+		defaultConfidence: defaultConfidence,
+		httpClient:        &http.Client{Timeout: timeout},
 	}
 }
 
+// Classify returns the complexity label ("easy"/"medium"/"hard") and a
+// confidence in [0,1]. It dispatches on the configured protocol and always
+// degrades to ("medium", 1.0) on any transport or decode error so routing
+// keeps working when the classifier is unavailable. Wall time of the call is
+// recorded into the brick_cc_classify_duration_seconds histogram (success and
+// fallback both count), which `brick claude status` reads for avg/p50/p95.
 func (c *complexityClient) Classify(ctx context.Context, text string) (string, float64) {
+	start := time.Now()
+	defer func() { metrics.BrickCCClassifyDuration.Observe(time.Since(start).Seconds()) }()
+	if c.protocol == "openai" {
+		return c.classifyOpenAI(ctx, text)
+	}
+	return c.classifyBrick(ctx, text)
+}
+
+// classifyBrick calls the custom brick-complexity-server POST /classify endpoint
+// ({"text":...} -> {"label","confidence"}).
+func (c *complexityClient) classifyBrick(ctx context.Context, text string) (string, float64) {
 	body, _ := json.Marshal(map[string]string{"text": text})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/classify", bytes.NewReader(body))
 	if err != nil {
@@ -544,4 +678,98 @@ func (c *complexityClient) Classify(ctx context.Context, text string) (string, f
 		decoded.Confidence = 1.0
 	}
 	return label, decoded.Confidence
+}
+
+// classifyOpenAI calls an OpenAI-compatible POST /v1/chat/completions endpoint.
+// It sends the complexity SYSTEM_PROMPT plus the query, reads the label from the
+// first completion token, and derives confidence by softmaxing the easy/medium/
+// hard token logprobs when the server returns them (else 1.0).
+func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (string, float64) {
+	reqBody := map[string]any{
+		"model": c.modelName,
+		"messages": []map[string]string{
+			{"role": "system", "content": complexitySystemPrompt},
+			{"role": "user", "content": "Classify: " + text},
+		},
+		"max_tokens":   1,
+		"temperature":  0,
+		"logprobs":     true,
+		"top_logprobs": 20,
+	}
+	body, _ := json.Marshal(reqBody)
+	url := strings.TrimRight(c.baseURL, "/") + "/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		return "medium", 1.0
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		return "medium", 1.0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		logging.Warnf("[Brick2] complexity fallback: status=%d", resp.StatusCode)
+		return "medium", 1.0
+	}
+
+	var decoded struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			Logprobs *struct {
+				Content []struct {
+					Token       string  `json:"token"`
+					Logprob     float64 `json:"logprob"`
+					TopLogprobs []struct {
+						Token   string  `json:"token"`
+						Logprob float64 `json:"logprob"`
+					} `json:"top_logprobs"`
+				} `json:"content"`
+			} `json:"logprobs"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		return "medium", 1.0
+	}
+	if len(decoded.Choices) == 0 {
+		logging.Warnf("[Brick2] complexity fallback: empty choices")
+		return "medium", 1.0
+	}
+
+	label := normalizeComplexityLabel(decoded.Choices[0].Message.Content)
+
+	// Confidence from logprobs of the first generated token, when present.
+	if lp := decoded.Choices[0].Logprobs; lp != nil && len(lp.Content) > 0 {
+		alts := map[string]float64{}
+		// Include the chosen token itself plus its alternatives.
+		alts[lp.Content[0].Token] = lp.Content[0].Logprob
+		for _, t := range lp.Content[0].TopLogprobs {
+			if cur, ok := alts[t.Token]; !ok || t.Logprob > cur {
+				alts[t.Token] = t.Logprob
+			}
+		}
+		if conf, ok := confidenceFromLogprobs(label, alts); ok {
+			return label, conf
+		}
+	}
+	// No usable logprobs: the endpoint did not return per-label token logprobs,
+	// so we cannot derive a calibrated confidence. Fall back to the configured
+	// default_confidence (default 0.5) instead of assuming full certainty, and
+	// warn once so the operator can enable logprobs or tune the default.
+	c.noLogprobWarn.Do(func() {
+		logging.Warnf("[Brick2] complexity openai endpoint returned no usable logprobs; "+
+			"using default_confidence=%.2f for routing (enable logprobs/top_logprobs on the "+
+			"endpoint for calibrated confidence, or set complexity_service.default_confidence)",
+			c.defaultConfidence)
+	})
+	return label, c.defaultConfidence
 }

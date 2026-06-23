@@ -13,6 +13,13 @@ type AnthropicPassthroughConfig struct {
 	UpstreamURL string                       `yaml:"upstream_url,omitempty"`
 	ModelMap    AnthropicPassthroughModelMap `yaml:"model_map,omitempty"`
 
+	// UseSkillRouter, when true, selects the backend model via the full Brick
+	// skill router (capability classifier + skill vectors + argmin J_m over
+	// skill_router.models) instead of the static complexity->ModelMap. The
+	// ModelMap remains the fallback when the skill router is disabled, errors,
+	// or the prompt text is empty. See pkg/proxy/anthropic.go.
+	UseSkillRouter bool `yaml:"use_skill_router,omitempty"`
+
 	// ExtraUsageEnabled signals that the upstream account has the paid
 	// "extra-usage" tier required to use the 1M-token context window. When
 	// false (default), Brick strips any "context-1m-*" anthropic-beta flag
@@ -32,6 +39,28 @@ type AnthropicPassthroughConfig struct {
 	// ModelMap1M maps complexity → model when the 1M context window is in
 	// use. Haiku has no 1M variant so easy should map to Sonnet 1M.
 	ModelMap1M AnthropicPassthroughModelMap `yaml:"model_map_1m,omitempty"`
+
+	// ContextWindow, when enabled, feeds the complexity/skill classifier the
+	// last K conversation turns (user + assistant) instead of only the latest
+	// user message, so routing reflects accumulated context rather than a
+	// single short follow-up. Default disabled (opt-in). See pkg/proxy/anthropic.go.
+	ContextWindow ContextWindowConfig `yaml:"context_window,omitempty"`
+}
+
+// ContextWindowConfig controls the context-aware classification input.
+type ContextWindowConfig struct {
+	Enabled bool `yaml:"enabled,omitempty"`
+	// K is the number of trailing conversation turns fed to the classifier.
+	// Defaults to 8 when zero (see EffectiveContextWindowK).
+	K int `yaml:"k,omitempty"`
+}
+
+// EffectiveContextWindowK returns the configured K or the default of 8.
+func (c *AnthropicPassthroughConfig) EffectiveContextWindowK() int {
+	if c.ContextWindow.K > 0 {
+		return c.ContextWindow.K
+	}
+	return 8
 }
 
 // AnthropicPassthroughModelMap maps complexity labels to Anthropic model IDs.
@@ -52,13 +81,13 @@ func (c *AnthropicPassthroughConfig) EffectiveUpstreamURL() string {
 // Resolve maps a complexity label (e.g. "complexity:hard" or bare "hard") to a
 // Anthropic model ID. Falls back to medium model for unknown labels.
 func (c *AnthropicPassthroughConfig) Resolve(label string) string {
-	return resolveFromMap(label, c.ModelMap, "claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7")
+	return resolveFromMap(label, c.ModelMap, "claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8")
 }
 
 // Resolve1M maps a complexity label to a model that supports the 1M-token
 // context window. Defaults upgrade easy → Sonnet 1M (Haiku has no 1M variant).
 func (c *AnthropicPassthroughConfig) Resolve1M(label string) string {
-	return resolveFromMap(label, c.ModelMap1M, "claude-sonnet-4-6", "claude-sonnet-4-6", "claude-opus-4-7")
+	return resolveFromMap(label, c.ModelMap1M, "claude-sonnet-4-6", "claude-sonnet-4-6", "claude-opus-4-8")
 }
 
 // EffectiveContext1MThresholdBytes returns the configured threshold or 600000.

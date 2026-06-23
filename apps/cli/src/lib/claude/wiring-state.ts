@@ -12,6 +12,10 @@ export interface WiringState {
   createdEnvBlock: boolean;
   /** Last mode the user selected via `brick claude <eco|lite|mid|pro|max>`. Optional for backward compat. */
   mode?: ClaudeMode;
+  /** Whether context-awareness (classify on last-K-turns window) is enabled. Optional for backward compat. */
+  contextAwareness?: boolean;
+  /** Where the complexity classifier runs: 'local' (auto-spawned server) or 'api' (remote endpoint). */
+  computeMode?: 'local' | 'api';
 }
 
 function wiringPath(): string {
@@ -27,12 +31,17 @@ export function readWiring(): WiringState | null {
       const mode = typeof parsed.mode === 'string' && (MODES as readonly string[]).includes(parsed.mode)
         ? (parsed.mode as ClaudeMode)
         : undefined;
+      const computeMode = parsed.computeMode === 'local' || parsed.computeMode === 'api'
+        ? (parsed.computeMode as 'local' | 'api')
+        : undefined;
       return {
         wired: true,
         baseUrl: parsed.baseUrl,
         previousBaseUrl: typeof parsed.previousBaseUrl === 'string' ? parsed.previousBaseUrl : null,
         createdEnvBlock: parsed.createdEnvBlock === true,
         ...(mode ? { mode } : {}),
+        ...(typeof parsed.contextAwareness === 'boolean' ? { contextAwareness: parsed.contextAwareness } : {}),
+        ...(computeMode ? { computeMode } : {}),
       };
     }
     return null;

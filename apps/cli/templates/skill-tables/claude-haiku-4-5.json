@@ -10,12 +10,12 @@
     "world_knowledge"
   ],
   "skill_vector": [
-    0.73,
-    0.65,
     0.7,
-    0.81,
-    0.5,
-    0.77
+    0.66,
+    0.72,
+    0.78,
+    0.54,
+    0.76
   ],
   "source": "benchmark",
   "confidence": [
@@ -26,9 +26,11 @@
     "medium",
     "medium"
   ],
-  "imputed_capabilities": [],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
   "support": null,
   "subset_hash": null,
-  "date": "2026-06-11",
-  "notes": "Derived from published AI-lab benchmarks (SWE-bench, AIME, GPQA, MMLU-Pro, tau-bench, etc.), normalized to [0,1] and mapped onto the 6 capabilities. Cold-start prior: a `measured` extraction on the frozen probe set overrides this. See README.md."
+  "date": "2026-06-13",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-06-13 from recent public AI-lab benchmarks, normalized to [0,1] on the 6 canonical capabilities. Sourcing per dimension: coding=SWE-bench Verified; instruction_following=IFEval + MMLU-Pro; math_reasoning=AIME + MATH; world_knowledge=GPQA Diamond; planning_agentic=tau-bench / agentic harness pass-rate; creative_synthesis=imputed (no clean public benchmark), estimated from instruction_following plus a lab-style writing prior. Haiku 4.5 does not support reasoning effort. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }

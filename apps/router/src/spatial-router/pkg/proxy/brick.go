@@ -116,7 +116,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 				logging.Warnf("Brick multimodal passthrough routing failed, falling back to preprocessing: %v", rerr)
 			} else {
 				forwardBody := rewriteModelInBody(body, route.Model)
-				forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model)
+				forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model, route.ComplexityLabel)
 				forwardBody = adaptForRegoloAPI(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
 				w.Header().Set(headers.VSRSelectedModel, route.Model)
@@ -187,7 +187,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, route.Model)
-	forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model)
+	forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model, route.ComplexityLabel)
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
 	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)

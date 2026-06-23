@@ -10,12 +10,12 @@
     "world_knowledge"
   ],
   "skill_vector": [
-    0.89,
-    0.65,
-    0.71,
-    0.92,
-    0.83,
-    0.94
+    0.88,
+    0.7,
+    0.74,
+    0.93,
+    0.85,
+    0.93
   ],
   "source": "benchmark",
   "confidence": [
@@ -26,9 +26,11 @@
     "medium",
     "high"
   ],
-  "imputed_capabilities": [],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
   "support": null,
   "subset_hash": null,
-  "date": "2026-06-11",
-  "notes": "Derived from published AI-lab benchmarks (SWE-bench, AIME, GPQA, MMLU-Pro, tau-bench, etc.), normalized to [0,1] and mapped onto the 6 capabilities. Cold-start prior: a `measured` extraction on the frozen probe set overrides this. See README.md."
+  "date": "2026-06-13",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-06-13 from recent public AI-lab benchmarks, normalized to [0,1] on the 6 canonical capabilities. Sourcing per dimension: coding=SWE-bench Verified; instruction_following=IFEval + MMLU-Pro; math_reasoning=AIME + MATH; world_knowledge=GPQA Diamond; planning_agentic=tau-bench / agentic harness pass-rate; creative_synthesis=imputed (no clean public benchmark), estimated from instruction_following plus a lab-style writing prior. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }
