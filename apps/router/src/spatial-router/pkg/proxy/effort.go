@@ -95,11 +95,11 @@ func vocabAt(vocab []string, level int) string {
 // Autonomous effort tuning constants (log-odds space). under-capacity is the
 // selected model's sqrt(underSum): how far its skill falls short of the lifted
 // query requirement. Above stretchHigh the model is stretched and gets a +1
-// effort bump; below stretchLow it has comfortable headroom and gets a -1 cut.
-const (
-	stretchHigh = 0.80
-	stretchLow  = 0.15
-)
+// effort bump. There is intentionally no symmetric -1 cut: the router already
+// picks the best-fitting model, so under-capacity is ~0 for nearly every
+// request; a low-headroom decrement would therefore fire on every query and
+// pin the effort one rung below the complexity ladder. Headroom baseline = 0.
+const stretchHigh = 0.80
 
 // ladderFromTau maps the continuous query difficulty tau_query in [0,1] (the
 // confidence-weighted complexity signal from the router) to an effort ordinal
@@ -125,18 +125,17 @@ func ladderFromTau(tau float64) int {
 
 // autonomousEffortLevel derives the reasoning-effort ordinal purely from the
 // router's own signals, independent of the routing mode (eco/lite/mid/pro/max).
-// It blends absolute query difficulty (tauQuery) with how stretched the chosen
-// model is for that query (underCapacity): a model selected with little spare
-// capacity is told to think harder to close the gap, while a model picked with
-// ample headroom can spend less. The result is clamped to the 0..5 ladder with
-// NO mode window — the mode only governs which model was selected upstream.
+// It starts from absolute query difficulty (tauQuery) and bumps +1 only when the
+// chosen model is stretched (underCapacity >= stretchHigh) for that query. There
+// is no headroom decrement: the router selects the best-fitting model, so
+// underCapacity is ~0 on nearly every request, and a -1 cut would pin effort one
+// rung below the complexity ladder universally. The result is clamped to the
+// 0..5 ladder with NO mode window — the mode only governs which model was
+// selected upstream.
 func autonomousEffortLevel(tauQuery, underCapacity float64) int {
 	level := ladderFromTau(tauQuery)
-	switch {
-	case underCapacity >= stretchHigh:
+	if underCapacity >= stretchHigh {
 		level++
-	case underCapacity <= stretchLow:
-		level--
 	}
 	if level < 0 {
 		level = 0

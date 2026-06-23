@@ -179,9 +179,9 @@ func TestAutonomousEffortLevel(t *testing.T) {
 		{"easy-neutral", 0.55, 0.4, 1},
 		{"medium-neutral", 0.72, 0.4, 2},
 		{"hard-neutral", 0.88, 0.4, 4},
-		// Comfortable headroom (under <= stretchLow): -1.
-		{"easy-headroom", 0.55, 0.10, 0},
-		{"hard-headroom", 0.88, 0.05, 3},
+		// Comfortable headroom (under <= old stretchLow): no decrement, pure ladder.
+		{"easy-headroom", 0.55, 0.10, 1},
+		{"hard-headroom", 0.88, 0.05, 4},
 		// Stretched model (under >= stretchHigh): +1.
 		{"medium-stretched", 0.72, 0.90, 3},
 		{"hard-stretched", 0.88, 1.50, 5},
