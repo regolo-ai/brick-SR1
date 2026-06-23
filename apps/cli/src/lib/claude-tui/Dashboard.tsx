@@ -226,7 +226,7 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
           {native.length > 0 && (
             <>
               <Text> </Text>
-              <Text dimColor>native (router bypass)</Text>
+              <Text dimColor>subagents (native model, router bypass)</Text>
               {native.map((r) => (
                 <Box key={`native|${r.model}`} paddingLeft={2}>
                   <Box width={22}><Text dimColor>{shortModel(r.model)}</Text></Box>

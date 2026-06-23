@@ -89,6 +89,9 @@ skill_router:
 anthropic_passthrough:
   enabled: true
   use_skill_router: true
+  # route_subagents: when true, requests arriving with an explicit native model
+  # (Claude Code subagents) go through the skill router instead of bypassing it.
+  route_subagents: false
   upstream_url: https://api.anthropic.com
   extra_usage_enabled: false
   context_1m_threshold_bytes: 600000

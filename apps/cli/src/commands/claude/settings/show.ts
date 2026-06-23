@@ -7,7 +7,7 @@ import { DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
 import { banner, err, print } from '../../../lib/ui/banners.js';
 
 export default class ClaudeSettingsShow extends Command {
-  static description = 'Show the current Brick Claude settings (context-awareness, compute).';
+  static description = 'Show the current Brick Claude settings (context-awareness, compute, subagent routing).';
 
   static examples = ['<%= config.bin %> claude settings show'];
 
@@ -34,9 +34,11 @@ export default class ClaudeSettingsShow extends Command {
     const cs = obj?.complexity_service ?? {};
     const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost/.test(cs.base_url);
     const compute = wiring?.computeMode ?? (isRemote ? 'api' : 'local');
+    const subagents = obj?.anthropic_passthrough?.route_subagents ? 'on (routed through Brick)' : 'off (bypass)';
 
     print(`profile:            ${profile}`);
     print(`context-awareness:  ${ctx}`);
     print(`compute:            ${compute}${cs.base_url ? `  (${cs.base_url})` : ''}`);
+    print(`subagent routing:   ${subagents}`);
   }
 }

@@ -16,6 +16,8 @@ export interface WiringState {
   contextAwareness?: boolean;
   /** Where the complexity classifier runs: 'local' (auto-spawned server) or 'api' (remote endpoint). */
   computeMode?: 'local' | 'api';
+  /** Whether native-model subagent traffic is routed through Brick. Optional for backward compat. */
+  routeSubagents?: boolean;
 }
 
 function wiringPath(): string {

@@ -171,7 +171,7 @@ export default class ClaudeStatus extends Command {
     const native = nativeRowsByModel(m);
     if (native.length > 0) {
       this.log('');
-      this.log(`  ${COLORS.dim}native (router bypass)${COLORS.reset}`);
+      this.log(`  ${COLORS.dim}subagents (native model, router bypass)${COLORS.reset}`);
       for (const row of native) {
         const pct = row.pct.toFixed(0).padStart(2);
         this.log(`    ${row.model.padEnd(22)}  ${String(row.count).padStart(4)}  (${pct}%)`);

@@ -20,6 +20,14 @@ type AnthropicPassthroughConfig struct {
 	// or the prompt text is empty. See pkg/proxy/anthropic.go.
 	UseSkillRouter bool `yaml:"use_skill_router,omitempty"`
 
+	// RouteSubagents, when true, sends requests that arrive with an explicit
+	// native Claude model (haiku/sonnet/opus, typical of Claude Code subagents)
+	// through the skill router instead of forwarding them verbatim. The Brick
+	// router then picks the model by capability + complexity, the same way it
+	// does for "brick-claude" traffic. Default false preserves the historic
+	// passthrough behavior (native models bypass routing). See pkg/proxy/anthropic.go.
+	RouteSubagents bool `yaml:"route_subagents,omitempty"`
+
 	// ExtraUsageEnabled signals that the upstream account has the paid
 	// "extra-usage" tier required to use the 1M-token context window. When
 	// false (default), Brick strips any "context-1m-*" anthropic-beta flag

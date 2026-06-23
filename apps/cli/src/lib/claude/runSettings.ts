@@ -7,6 +7,7 @@ import { readWiring, writeWiring } from './wiring-state.js';
 import {
   applyContextAwareness,
   applyCompute,
+  applySubagentRouting,
   type SettingsApplyResult,
   type ComputeMode,
 } from './settings-apply.js';
@@ -44,6 +45,34 @@ export async function runContext(
     reportRestart(res);
     const w = readWiring();
     if (w) writeWiring({ ...w, contextAwareness: enabled });
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+}
+
+export async function runSubagents(
+  enabled: boolean,
+  exit: (code: number) => never,
+): Promise<void> {
+  banner();
+  let profile: string;
+  try {
+    profile = resolveProfile();
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+  try {
+    const res = await applySubagentRouting(profile, enabled);
+    ok(
+      enabled
+        ? `subagent routing ON for profile '${profile}': native-model subagents now go through Brick.`
+        : `subagent routing OFF for profile '${profile}': native-model subagents bypass Brick.`,
+    );
+    reportRestart(res);
+    const w = readWiring();
+    if (w) writeWiring({ ...w, routeSubagents: enabled });
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);

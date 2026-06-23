@@ -142,3 +142,20 @@ func TestStripUnsupportedFieldsForModel_SonnetUntouched(t *testing.T) {
 		t.Fatalf("sonnet body should be untouched, got: %s", out)
 	}
 }
+
+func TestIsNativeClaudeModel(t *testing.T) {
+	cases := map[string]bool{
+		"claude-haiku-4-5":  true,
+		"claude-sonnet-4-6": true,
+		"claude-opus-4-8":   true,
+		"brick-claude":      false,
+		"brick":             false,
+		"":                  false,
+		"gpt-5.5":           false,
+	}
+	for model, want := range cases {
+		if got := isNativeClaudeModel(model); got != want {
+			t.Errorf("isNativeClaudeModel(%q) = %v, want %v", model, got, want)
+		}
+	}
+}

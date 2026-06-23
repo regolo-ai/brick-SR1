@@ -103,15 +103,26 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 	// Classify the request as "brick-routed" vs "native-model passthrough".
 	// brick-routed: model field is empty, "brick-*", or "brick" (all the names
 	//   we publish in /v1/models for the virtual router entry).
-	// native: any recognized claude-* model; forwarded verbatim.
+	// native: any recognized claude-* model; forwarded verbatim, UNLESS
+	//   RouteSubagents is on, in which case explicit native models (typical of
+	//   Claude Code subagents) are also sent through the skill router.
 	isBrick := requestedModel == "" ||
-		strings.HasPrefix(strings.ToLower(requestedModel), "brick")
+		strings.HasPrefix(strings.ToLower(requestedModel), "brick") ||
+		(apCfg.RouteSubagents && isNativeClaudeModel(requestedModel))
 
 	if isBrick {
 		s.handleBrickRouted(w, r, cfg, apCfg, body, clientEffort)
 	} else {
 		s.handleNativeModel(w, r, cfg, apCfg, body, requestedModel)
 	}
+}
+
+// isNativeClaudeModel reports whether the requested model is an explicit Claude
+// model name (e.g. "claude-haiku-4-5"). Used to decide whether subagent traffic
+// that arrives with a concrete model should be pulled into the skill router when
+// RouteSubagents is enabled.
+func isNativeClaudeModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "claude-")
 }
 
 // handleBrickRouted processes a /v1/messages request whose model field maps to

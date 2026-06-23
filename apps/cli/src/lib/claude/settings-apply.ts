@@ -89,6 +89,29 @@ export async function applyContextAwareness(
 }
 
 /**
+ * Toggle subagent routing: writes anthropic_passthrough.route_subagents. When on,
+ * requests that arrive with an explicit native Claude model (Claude Code
+ * subagents) are pulled through the skill router instead of bypassing it.
+ * Requires an anthropic_passthrough block (created by `brick claude on`).
+ */
+export async function applySubagentRouting(
+  profile: string,
+  enabled: boolean
+): Promise<SettingsApplyResult> {
+  const obj = loadObj(await loadConfigText(profile), profile);
+  if (!obj.anthropic_passthrough || typeof obj.anthropic_passthrough !== 'object') {
+    throw new SettingsError(
+      `profile '${profile}' has no anthropic_passthrough block; run \`brick claude on\` first`
+    );
+  }
+  const changed = obj.anthropic_passthrough.route_subagents !== enabled;
+  if (changed) {
+    obj.anthropic_passthrough.route_subagents = enabled;
+  }
+  return saveAndRestart(obj, profile, changed);
+}
+
+/**
  * Switch the classifier compute location. 'local' points at the auto-spawned
  * server.py; 'api' points at a user-supplied remote endpoint with a bearer token.
  * Mirrors the change onto skill_router.complexity_model when present, because the

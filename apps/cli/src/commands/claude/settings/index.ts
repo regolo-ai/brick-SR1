@@ -4,13 +4,13 @@ import yaml from 'js-yaml';
 import { resolveProfile } from '../../../lib/config/paths.js';
 import { loadConfigText } from '../../../lib/config/load.js';
 import { readWiring } from '../../../lib/claude/wiring-state.js';
-import { runContext, runCompute } from '../../../lib/claude/runSettings.js';
+import { runContext, runCompute, runSubagents } from '../../../lib/claude/runSettings.js';
 import { LOCAL_DISCLAIMER, DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
 import { banner, err } from '../../../lib/ui/banners.js';
 
 export default class ClaudeSettings extends Command {
   static description =
-    'Brick Claude settings: context-awareness and classifier compute location.';
+    'Brick Claude settings: context-awareness, classifier compute location, and subagent routing.';
 
   static examples = ['<%= config.bin %> claude settings'];
 
@@ -40,12 +40,15 @@ export default class ClaudeSettings extends Command {
       const cs = obj?.complexity_service ?? {};
       const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost/.test(cs.base_url);
       const computeLabel = wiring?.computeMode ?? (isRemote ? 'api' : 'local');
+      const subagentsOn = !!obj?.anthropic_passthrough?.route_subagents;
+      const subagentsLabel = subagentsOn ? 'on (routed)' : 'off (bypass)';
 
       const section = await p.select({
         message: `Brick Claude settings  (profile: ${profile})`,
         options: [
           { value: 'context', label: `Context-awareness: ${ctxLabel}`, hint: 'classify on recent turns' },
           { value: 'compute', label: `Compute: ${computeLabel}`, hint: 'local vs API classifier' },
+          { value: 'subagents', label: `Subagent routing: ${subagentsLabel}`, hint: 'route native-model subagents through Brick' },
           { value: 'exit', label: 'Exit' },
         ],
       });
@@ -97,6 +100,16 @@ export default class ClaudeSettings extends Command {
           if (p.isCancel(token)) continue;
           await runCompute('api', { baseUrl: String(baseUrl), token: String(token ?? '') }, (c) => process.exit(c));
         }
+      } else if (section === 'subagents') {
+        const onoff = await p.select({
+          message: 'Route native-model subagents through Brick',
+          options: [
+            { value: 'on', label: 'On (routed)' },
+            { value: 'off', label: 'Off (bypass)' },
+          ],
+        });
+        if (p.isCancel(onoff)) continue;
+        await runSubagents(onoff === 'on', (c) => process.exit(c));
       }
     }
   }
