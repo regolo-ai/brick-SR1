@@ -238,7 +238,7 @@ The dashboard reports, since the last router restart:
 
 It also shows connection/wiring state, classifier latency (avg, p50, p95), and fallback rate.
 
-<img width="286" height="440" alt="image" src="https://github.com/user-attachments/assets/5e06562b-85c2-45c6-b4e5-fb75fcc47fcb" />
+<img width="286" height="440" alt="image" src="https://github.com/user-attachments/assets/d7741efa-0d63-45f3-83f3-39d16bca5dab" />
 
 ### Works with workflows and subagents
 
