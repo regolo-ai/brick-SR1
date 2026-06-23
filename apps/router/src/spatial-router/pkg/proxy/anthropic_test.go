@@ -101,3 +101,44 @@ func TestRewriteModelInBodyPreservesUnknownFields(t *testing.T) {
 		t.Fatalf("tools field dropped")
 	}
 }
+
+// TestStripUnsupportedFieldsForModel_HaikuRemovesThinkingControls verifies that
+// for Haiku (no thinking/effort support) the router strips effort,
+// output_config.effort, thinking, and the clear_thinking_20251015 context edit,
+// regardless of who set them, while leaving sonnet/opus untouched.
+func TestStripUnsupportedFieldsForModel_HaikuRemovesThinkingControls(t *testing.T) {
+	body := []byte(`{"model":"claude-haiku-4-5","thinking":{"type":"enabled"},"output_config":{"effort":"high"},"context_management":{"edits":[{"type":"clear_thinking_20251015","keep":"all"},{"type":"clear_tool_uses_20250919"}]},"messages":[{"role":"user","content":"hi"}]}`)
+	out := stripUnsupportedFieldsForModel(body, "claude-haiku-4-5")
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("stripped body invalid JSON: %v", err)
+	}
+	if _, ok := parsed["thinking"]; ok {
+		t.Fatalf("thinking should be stripped for haiku")
+	}
+	if _, ok := parsed["output_config"]; ok {
+		t.Fatalf("emptied output_config should be dropped for haiku")
+	}
+	cm, ok := parsed["context_management"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("context_management dropped but other edits remained")
+	}
+	edits, _ := cm["edits"].([]interface{})
+	if len(edits) != 1 {
+		t.Fatalf("expected 1 surviving edit, got %d", len(edits))
+	}
+	first, _ := edits[0].(map[string]interface{})
+	if first["type"] != "clear_tool_uses_20250919" {
+		t.Fatalf("clear_thinking edit was not the one removed: %v", first["type"])
+	}
+}
+
+// TestStripUnsupportedFieldsForModel_SonnetUntouched ensures models that support
+// thinking keep all fields, including the clear_thinking context edit.
+func TestStripUnsupportedFieldsForModel_SonnetUntouched(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-4-6","context_management":{"edits":[{"type":"clear_thinking_20251015","keep":"all"}]},"messages":[{"role":"user","content":"hi"}]}`)
+	out := stripUnsupportedFieldsForModel(body, "claude-sonnet-4-6")
+	if string(out) != string(body) {
+		t.Fatalf("sonnet body should be untouched, got: %s", out)
+	}
+}

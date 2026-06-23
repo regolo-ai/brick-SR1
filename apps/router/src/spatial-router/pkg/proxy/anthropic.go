@@ -617,6 +617,39 @@ func stripUnsupportedFieldsForModel(body []byte, model string) []byte {
 		}
 	}
 
+	// context_management.edits may contain clear_thinking_20251015 entries which
+	// require thinking to be enabled. Strip those edits when the model does not
+	// support thinking (e.g. Haiku), or drop the entire context_management block
+	// if no edits remain.
+	if cm, ok := raw["context_management"].(map[string]interface{}); ok {
+		if edits, ok := cm["edits"].([]interface{}); ok {
+			var kept []interface{}
+			for _, e := range edits {
+				entry, _ := e.(map[string]interface{})
+				if entry == nil {
+					kept = append(kept, e)
+					continue
+				}
+				t, _ := entry["type"].(string)
+				if t == "clear_thinking_20251015" {
+					changed = true
+					continue
+				}
+				kept = append(kept, e)
+			}
+			if len(kept) == 0 {
+				delete(cm, "edits")
+			} else {
+				cm["edits"] = kept
+			}
+		}
+		if len(cm) == 0 {
+			delete(raw, "context_management")
+		} else {
+			raw["context_management"] = cm
+		}
+	}
+
 	if !changed {
 		return body
 	}
