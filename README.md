@@ -9,14 +9,19 @@ Brick is a **Mixture-of-Models (MoM) routing gateway**. It reads each prompt's
 open- and closed-weight LLMs, matching the strongest single model's quality at a
 fraction of its cost. No cascades. No wasted calls. Drop-in `model: "brick"`.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/regolo-ai/brick-SR1/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/regolo-ai/brick-SR1/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/regolo-ai/brick-SR1?style=flat-square&logo=git&logoColor=white)](https://github.com/regolo-ai/brick-SR1/commits)
+[![Stars](https://img.shields.io/github/stars/regolo-ai/brick-SR1?style=flat-square&logo=github)](https://github.com/regolo-ai/brick-SR1/stargazers)
+[![Issues](https://img.shields.io/github/issues/regolo-ai/brick-SR1?style=flat-square&logo=github)](https://github.com/regolo-ai/brick-SR1/issues)
+
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Rust](https://img.shields.io/badge/Rust-1.90-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](#-datasets--models)
 
-**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [Paper](#-paper) · [CLI](#b-cli-self-host-in-one-command)**
+**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [FAQ](#-faq) · [Paper](#-paper) · [Contributing](#-contributing)**
 
 </div>
 
@@ -326,6 +331,65 @@ Per-component docs: [router](apps/router/README.md) · [CLI](apps/cli/README.md)
 | Docker Hub mirror (`docker.io/regolo/brick`) | pending Docker Hub secrets |
 
 </details>
+
+---
+
+## ❓ FAQ
+
+<details>
+<summary><b>How is Brick different from a cascade router like FrugalGPT?</b></summary>
+
+A cascade calls models in sequence (cheap first, escalate on low confidence) and pays for every miss in tokens and latency. Brick makes a single forward decision per query from a capability vector and a complexity score, so there is no wasted call. See [Why Brick](#-why-brick).
+</details>
+
+<details>
+<summary><b>Which backend did Brick pick for my request?</b></summary>
+
+Read the `x-selected-model` response header. Every `/v1/chat/completions` and `/v1/messages` response carries it.
+</details>
+
+<details>
+<summary><b>How do I trade cost against quality?</b></summary>
+
+Slide the `r` knob in `r ∈ [-1, 1]`. At `r = -1` Brick favors the cheapest capable model (max-saving), at `r = 1` it favors the strongest (max-quality). For Claude Code the same idea is exposed as 5 named modes, see [the 5 modes](#the-5-modes).
+</details>
+
+<details>
+<summary><b>Do I need GPUs to run the gateway?</b></summary>
+
+No. The router and both classifiers run on CPU. GPUs only matter if you self-host the backend LLMs; with a hosted pool (Regolo, Anthropic, etc.) a CPU box is enough.
+</details>
+
+<details>
+<summary><b>Can I use my own model pool?</b></summary>
+
+Yes. The pool, per-model skill vectors, costs, and the `model_map` live in `config.yaml` (`skill_router.models`). Add or swap any OpenAI-compatible backend. See [apps/router/README.md](apps/router/README.md).
+</details>
+
+<details>
+<summary><b>What is the upstream for the OpenAI-compatible endpoint failing with 401/insufficient_quota?</b></summary>
+
+That error comes from the backend provider, not Brick. Check the credential you forward (`REGOLO_API_KEY` or your own key); Brick passes Authorization through unchanged.
+</details>
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome. The short loop:
+
+```bash
+make install   # deps for CLI + Python workspaces
+make test      # Go + pytest + vitest, run before opening a PR
+make lint      # pre-commit run --all-files
+```
+
+1. Open an [issue](https://github.com/regolo-ai/brick-SR1/issues) to discuss non-trivial changes first.
+2. Branch from `main`, keep commits focused, follow the existing style of the files you touch.
+3. Make sure `make test` and `make lint` pass.
+4. Open a PR with a clear description of the what and the why.
+
+For architecture and per-component conventions, start from [What's in the repo](#-whats-in-the-repo) and the component READMEs linked under [Develop](#-develop).
 
 ---
 
