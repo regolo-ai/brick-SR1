@@ -245,7 +245,7 @@ It also shows connection/wiring state, classifier latency (avg, p50, p95), and f
 
 <div align="center">
   <img width="286" height="440" alt="image" src="https://github.com/user-attachments/assets/d7741efa-0d63-45f3-83f3-39d16bca5dab" />
-<div/>
+</div>
   
 ### Works with workflows and subagents
 
