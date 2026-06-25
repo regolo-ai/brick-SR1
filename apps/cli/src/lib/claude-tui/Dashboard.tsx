@@ -61,13 +61,105 @@ function colorForEffort(effort: string): string {
   return EFFORT_COLORS[effort] ?? 'gray';
 }
 
+// Palette cycled by the shimmer banner: the dashboard's accent plus the three
+// model hues, so the wave sweeps through every brand colour.
+const SHIMMER_PALETTE = ['#00d4aa', '#7aa2f7', '#bb9af7', '#f7768e'];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const c = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+// Colour of one banner character: a palette gradient scrolling along the text,
+// modulated by a travelling brightness wave (the "ultrathink" sweep). `pos` is
+// the char index in [0,1), `phase` advances every animation frame.
+function shimmerColorAt(pos: number, phase: number): string {
+  // Gradient: map (pos + phase) onto the palette, interpolating between stops.
+  const t = ((pos * 2 + phase) % 1 + 1) % 1;
+  const scaled = t * SHIMMER_PALETTE.length;
+  const i = Math.floor(scaled) % SHIMMER_PALETTE.length;
+  const j = (i + 1) % SHIMMER_PALETTE.length;
+  const f = scaled - Math.floor(scaled);
+  const [r1, g1, b1] = hexToRgb(SHIMMER_PALETTE[i]);
+  const [r2, g2, b2] = hexToRgb(SHIMMER_PALETTE[j]);
+  let r = r1 + (r2 - r1) * f;
+  let g = g1 + (g2 - g1) * f;
+  let b = b1 + (b2 - b1) * f;
+  // Brightness wave: a soft peak travelling left→right lifts a band to full,
+  // the rest sits dimmed, giving the shimmer that runs along the text.
+  const dist = Math.abs(((pos - phase) % 1 + 1) % 1 - 0.5); // 0 at the peak, 0.5 farthest
+  const lift = 0.45 + 0.55 * (1 - dist / 0.5); // 0.45..1.0
+  r *= lift; g *= lift; b *= lift;
+  return rgbToHex(r, g, b);
+}
+
+// Full-width animated banner shown while Brick is live: a field of Braille dot
+// matrices whose fill density ripples left→right while a colour wave sweeps the
+// dashboard palette across them (the Claude Code "ultrathink" effect). Purely
+// decorative, driven by its own ~12fps timer.
+//
+// Braille ramp from empty to full (each glyph is a 2x4 dot matrix), so the wave
+// reads as dots lighting up and dying down rather than a flat bar.
+const DOT_RAMP = ['⠀', '⢀', '⢠', '⢤', '⢴', '⢶', '⣶', '⣷', '⣿'];
+
+function ShimmerBanner() {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setPhase((p) => (p + 0.02) % 1), 100);
+    return () => clearInterval(id);
+  }, []);
+
+  const cols = process.stdout.columns ?? 80;
+  const inner = Math.max(20, Math.min(120, cols - 6));
+  const label = ' brick is routing requests ';
+  // Centre the phrase; the dot matrices fill the rest of the full-width banner.
+  const pad = Math.max(0, Math.floor((inner - label.length) / 2));
+  const leftLen = pad;
+  const rightLen = Math.max(0, inner - pad - label.length);
+
+  // A run of Braille dot cells whose density follows a travelling wave; `offset`
+  // keeps the wave continuous across the left field, label gap and right field.
+  const dotCell = (i: number, offset: number) => {
+    const pos = (i + offset) / inner;
+    // Distance from the moving wave crest → 0 at crest (full), 0.5 farthest (empty).
+    const dist = Math.abs(((pos - phase) % 1 + 1) % 1 - 0.5);
+    const level = Math.round((1 - dist / 0.5) * (DOT_RAMP.length - 1));
+    return (
+      <Text key={`d${offset}-${i}`} color={shimmerColorAt(pos, phase)}>
+        {DOT_RAMP[Math.max(0, Math.min(DOT_RAMP.length - 1, level))]}
+      </Text>
+    );
+  };
+
+  const labelChars = [...label];
+  return (
+    <Box>
+      <Text>
+        {Array.from({ length: leftLen }, (_, i) => dotCell(i, 0))}
+        {labelChars.map((ch, i) => (
+          <Text key={`l${i}`} color={shimmerColorAt((leftLen + i) / inner, phase)} bold>
+            {ch}
+          </Text>
+        ))}
+        {Array.from({ length: rightLen }, (_, i) => dotCell(i, leftLen + label.length))}
+      </Text>
+    </Box>
+  );
+}
+
 export interface DashboardProps {
   baseUrl: string;
   envUrl?: string;
   intervalMs: number;
+  mode?: string;
 }
 
-export function Dashboard({ baseUrl, envUrl, intervalMs }: DashboardProps) {
+export function Dashboard({ baseUrl, envUrl, intervalMs, mode }: DashboardProps) {
   const { exit } = useApp();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tick, setTick] = useState(0);
@@ -91,15 +183,10 @@ export function Dashboard({ baseUrl, envUrl, intervalMs }: DashboardProps) {
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Box marginTop={1}>
-        <Text color={ACCENT} bold>{'▸ brick'}</Text>
-        <Text dimColor>{'  ·  claude routing dashboard'}</Text>
-      </Box>
-
-      <ConnectionBox snap={snap} loading={loading} />
-      <ClassifierBox snap={snap} />
       <RoutingBox snap={snap} />
       <EconomyBox snap={snap} />
+      <ConnectionBox snap={snap} loading={loading} mode={mode} />
+      <ClassifierBox snap={snap} />
 
       <Box marginTop={1}>
         <Text dimColor>{`↻ ${(intervalMs / 1000).toFixed(0)}s  ·  r refresh  ·  q quit`}</Text>
@@ -117,7 +204,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function ConnectionBox({ snap, loading }: { snap: Snapshot | null; loading: boolean }) {
+function ConnectionBox({ snap, loading, mode }: { snap: Snapshot | null; loading: boolean; mode?: string }) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>Connection</Text>
@@ -136,6 +223,9 @@ function ConnectionBox({ snap, loading }: { snap: Snapshot | null; loading: bool
               {snap?.baseUrl} {snap?.health ? '✓ healthy' : '✗ unreachable'}
             </Text>
           </Row>
+          {mode && (
+            <Row label="mode"><Text color={ACCENT} bold>{mode}</Text></Row>
+          )}
         </>
       )}
     </Box>
@@ -193,6 +283,8 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
         <>
           <Row label="total requests"><Text bold>{String(total)}</Text></Row>
           <Text> </Text>
+          <ShimmerBanner />
+          <Text> </Text>
           <Text dimColor>routed by model</Text>
           {routed.length > 0 && (
             <>
@@ -207,15 +299,15 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
           {routed.map((r) => {
             const efforts = effortRowsForModel(m, r.model);
             return (
-              <Box key={`routed|${r.model}`} flexDirection="column" paddingLeft={2}>
+              <Box key={`routed|${r.model}`} flexDirection="column" marginTop={1}>
                 <Box>
-                  <Box width={22}><Text color={colorForModel(r.model)}>{shortModel(r.model)}</Text></Box>
+                  <Box width={22} flexShrink={0}><Text color={colorForModel(r.model)} bold>{shortModel(r.model)}</Text></Box>
                   <ColoredBar pct={r.pct} color={colorForModel(r.model)} />
                   <Text>{`  ${r.count} (${r.pct.toFixed(0)}%)`}</Text>
                 </Box>
                 {efforts.map((e) => (
                   <Box key={`eff|${r.model}|${e.label}`} paddingLeft={2}>
-                    <Box width={20}><Text color={colorForEffort(e.label)} dimColor>{`└ ${e.label}`}</Text></Box>
+                    <Box width={20} flexShrink={0}><Text color={colorForEffort(e.label)} dimColor>{`└ ${e.label}`}</Text></Box>
                     <ColoredBar pct={e.pct} color={colorForEffort(e.label)} width={10} />
                     <Text dimColor>{`  ${e.count} (${e.pct.toFixed(0)}%)`}</Text>
                   </Box>
@@ -330,13 +422,13 @@ function StackedBar({ segments, width = 28 }: { segments: Array<{ pct: number; c
   );
 }
 
-function Legend({ items }: { items: Array<{ label: string; color: string; pct: number }> }) {
+function Legend({ items, hidePct }: { items: Array<{ label: string; color: string; pct: number }>; hidePct?: boolean }) {
   return (
     <Box flexWrap="wrap">
       {items.map((it, i) => (
         <Box key={i} marginRight={2}>
           <Text color={it.color}>■ </Text>
-          <Text dimColor>{`${it.label} ${it.pct.toFixed(0)}%`}</Text>
+          <Text dimColor>{hidePct ? it.label : `${it.label} ${it.pct.toFixed(0)}%`}</Text>
         </Box>
       ))}
     </Box>

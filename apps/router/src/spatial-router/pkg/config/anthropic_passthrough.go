@@ -28,6 +28,27 @@ type AnthropicPassthroughConfig struct {
 	// passthrough behavior (native models bypass routing). See pkg/proxy/anthropic.go.
 	RouteSubagents bool `yaml:"route_subagents,omitempty"`
 
+	// UseModelRouting controls whether brick-routed traffic picks the backend
+	// model dynamically (skill router / model_map) or always uses FixedModel.
+	// It is a pointer so an absent key defaults to true (historic behavior:
+	// model routing on). When explicitly false, every brick-routed request is
+	// sent to FixedModel regardless of complexity. See ModelRoutingEnabled and
+	// pkg/proxy/anthropic.go.
+	UseModelRouting *bool `yaml:"use_model_routing,omitempty"`
+
+	// UseThinkingRouting controls whether Brick injects an autonomously-computed
+	// reasoning effort into brick-routed requests. It is a pointer so an absent
+	// key defaults to true (historic behavior: thinking routing on). When
+	// explicitly false, the client's own effort (output_config.effort) is
+	// forwarded unchanged and Brick never overrides it. See
+	// ThinkingRoutingEnabled and pkg/proxy/anthropic.go.
+	UseThinkingRouting *bool `yaml:"use_thinking_routing,omitempty"`
+
+	// FixedModel is the Anthropic model ID used for every brick-routed request
+	// when UseModelRouting is false (e.g. "claude-opus-4-8"). Empty falls back
+	// to Sonnet. Ignored when UseModelRouting is true/absent.
+	FixedModel string `yaml:"fixed_model,omitempty"`
+
 	// ExtraUsageEnabled signals that the upstream account has the paid
 	// "extra-usage" tier required to use the 1M-token context window. When
 	// false (default), Brick strips any "context-1m-*" anthropic-beta flag
@@ -104,6 +125,29 @@ func (c *AnthropicPassthroughConfig) EffectiveContext1MThresholdBytes() int {
 		return c.Context1MThresholdBytes
 	}
 	return 600000
+}
+
+// ModelRoutingEnabled reports whether dynamic model selection is on. An absent
+// (nil) UseModelRouting key defaults to true, preserving the historic behavior
+// where Brick always routes the model.
+func (c *AnthropicPassthroughConfig) ModelRoutingEnabled() bool {
+	return c.UseModelRouting == nil || *c.UseModelRouting
+}
+
+// ThinkingRoutingEnabled reports whether autonomous reasoning-effort injection
+// is on. An absent (nil) UseThinkingRouting key defaults to true, preserving the
+// historic behavior where Brick computes and injects the effort.
+func (c *AnthropicPassthroughConfig) ThinkingRoutingEnabled() bool {
+	return c.UseThinkingRouting == nil || *c.UseThinkingRouting
+}
+
+// EffectiveFixedModel returns the configured FixedModel or the Sonnet fallback
+// when empty. Only meaningful when ModelRoutingEnabled() is false.
+func (c *AnthropicPassthroughConfig) EffectiveFixedModel() string {
+	if c.FixedModel != "" {
+		return c.FixedModel
+	}
+	return "claude-sonnet-4-6"
 }
 
 func resolveFromMap(label string, m AnthropicPassthroughModelMap, easyDefault, mediumDefault, hardDefault string) string {

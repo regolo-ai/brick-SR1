@@ -112,6 +112,59 @@ export async function applySubagentRouting(
 }
 
 /**
+ * Toggle model routing: writes anthropic_passthrough.use_model_routing. When off,
+ * every brick-routed request is pinned to fixed_model instead of being chosen by
+ * complexity. When a fixedModel is supplied it is written to
+ * anthropic_passthrough.fixed_model; pass undefined to leave the existing value.
+ * Requires an anthropic_passthrough block (created by `brick claude on`).
+ */
+export async function applyModelRouting(
+  profile: string,
+  enabled: boolean,
+  fixedModel?: string
+): Promise<SettingsApplyResult> {
+  const obj = loadObj(await loadConfigText(profile), profile);
+  if (!obj.anthropic_passthrough || typeof obj.anthropic_passthrough !== 'object') {
+    throw new SettingsError(
+      `profile '${profile}' has no anthropic_passthrough block; run \`brick claude on\` first`
+    );
+  }
+  const ap = obj.anthropic_passthrough;
+  let changed = ap.use_model_routing !== enabled;
+  if (ap.use_model_routing !== enabled) {
+    ap.use_model_routing = enabled;
+  }
+  if (!enabled && fixedModel !== undefined && ap.fixed_model !== fixedModel) {
+    ap.fixed_model = fixedModel;
+    changed = true;
+  }
+  return saveAndRestart(obj, profile, changed);
+}
+
+/**
+ * Toggle thinking routing: writes anthropic_passthrough.use_thinking_routing.
+ * When off, Brick forwards the client's own output_config.effort unchanged
+ * instead of injecting an autonomously-computed reasoning effort.
+ * Requires an anthropic_passthrough block (created by `brick claude on`).
+ */
+export async function applyThinkingRouting(
+  profile: string,
+  enabled: boolean
+): Promise<SettingsApplyResult> {
+  const obj = loadObj(await loadConfigText(profile), profile);
+  if (!obj.anthropic_passthrough || typeof obj.anthropic_passthrough !== 'object') {
+    throw new SettingsError(
+      `profile '${profile}' has no anthropic_passthrough block; run \`brick claude on\` first`
+    );
+  }
+  const changed = obj.anthropic_passthrough.use_thinking_routing !== enabled;
+  if (changed) {
+    obj.anthropic_passthrough.use_thinking_routing = enabled;
+  }
+  return saveAndRestart(obj, profile, changed);
+}
+
+/**
  * Switch the classifier compute location. 'local' points at the auto-spawned
  * server.py; 'api' points at a user-supplied remote endpoint with a bearer token.
  * Mirrors the change onto skill_router.complexity_model when present, because the

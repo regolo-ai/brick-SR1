@@ -17,6 +17,7 @@ export type DiagClassifier = {
 export type ParsedMetrics = {
   requestsByLabelModel: Map<string, number>;
   effortByModelEffort: Map<string, number>;
+  routingByDiffEffortModel: Map<string, number>;
   fallbackTotal: number;
   classifyDurationCount: number;
   classifyDurationSum: number;
@@ -84,6 +85,7 @@ export function parsePromExposition(body: string): ParsedMetrics {
   const out: ParsedMetrics = {
     requestsByLabelModel: new Map(),
     effortByModelEffort: new Map(),
+    routingByDiffEffortModel: new Map(),
     fallbackTotal: 0,
     classifyDurationCount: 0,
     classifyDurationSum: 0,
@@ -100,6 +102,12 @@ export function parsePromExposition(body: string): ParsedMetrics {
       const labels = parseLabels(m[1]);
       const key = `${labels.model ?? 'unknown'}|${labels.effort ?? 'unknown'}`;
       out.effortByModelEffort.set(key, (out.effortByModelEffort.get(key) ?? 0) + Number(m[2]));
+    } else if (line.startsWith('brick_cc_routing_total')) {
+      const m = line.match(/^brick_cc_routing_total\{([^}]*)\}\s+([0-9.eE+-]+)$/);
+      if (!m) continue;
+      const labels = parseLabels(m[1]);
+      const key = `${labels.difficulty ?? 'unknown'}|${labels.effort ?? 'unknown'}|${labels.model ?? 'unknown'}`;
+      out.routingByDiffEffortModel.set(key, (out.routingByDiffEffortModel.get(key) ?? 0) + Number(m[2]));
     } else if (line.startsWith('brick_cc_requests_total')) {
       const m = line.match(/^brick_cc_requests_total\{([^}]*)\}\s+([0-9.eE+-]+)$/);
       if (!m) continue;
@@ -136,7 +144,7 @@ export function parseLabels(s: string): Record<string, string> {
   return out;
 }
 
-const LABEL_ORDER = ['easy', 'medium', 'hard'];
+export const LABEL_ORDER = ['easy', 'medium', 'hard'];
 
 // Label emitted by the router for requests that bypass the skill router entirely
 // (client picked a native model explicitly, so the complexity classifier never ran).
@@ -208,7 +216,7 @@ export function difficultyDistribution(m: ParsedMetrics): RoutingRow[] {
   return rows;
 }
 
-const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+export const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 // Distribution of autonomous reasoning effort for a single model: one row per
 // effort level, pct over that model's own routed requests. Empty when the model
@@ -229,6 +237,127 @@ export function effortRowsForModel(m: ParsedMetrics, model: string): RoutingRow[
   }
   rows.sort((a, b) => EFFORT_ORDER.indexOf(a.label) - EFFORT_ORDER.indexOf(b.label));
   return rows;
+}
+
+// Cross-product of classifier verdict and autonomous effort for Brick-routed
+// traffic, one cell per (difficulty, effort) pair. Both axes are decisions Brick
+// makes on the same request, so pairing them is meaningful (unlike difficulty x
+// final-model, see routedRowsByModel). topModel is the model that won the most
+// requests in that cell, used only to tint the heatmap cell.
+export type HeatCell = { difficulty: string; effort: string; count: number; topModel: string };
+
+export function routingHeatmap(m: ParsedMetrics): { cells: HeatCell[]; max: number; estimated: boolean } {
+  // Exact path: the 3-label counter directly carries the (difficulty, effort,
+  // model) cross-product. Available once the router emitting brick_cc_routing_total
+  // is running.
+  if (m.routingByDiffEffortModel.size > 0) {
+    return buildHeatmap(m.routingByDiffEffortModel, false);
+  }
+  // Fallback for routers that only expose the two marginal counters: reconstruct
+  // an estimate by spreading each model's difficulty distribution across its own
+  // effort distribution (per-model outer product). Not the true joint, but it
+  // lights up the same diagonal so the heatmap works without a router restart.
+  const synth = synthesizeRoutingFromMarginals(m);
+  return buildHeatmap(synth, true);
+}
+
+// Shared aggregation: a (difficulty|effort|model) -> count map into per-cell
+// totals plus the busiest model per cell (for the tint).
+function buildHeatmap(
+  byKey: Map<string, number>,
+  estimated: boolean
+): { cells: HeatCell[]; max: number; estimated: boolean } {
+  const cellCount = new Map<string, number>();
+  const cellModels = new Map<string, Map<string, number>>();
+  for (const [key, count] of byKey.entries()) {
+    const [difficulty, effort, model] = key.split('|');
+    const cellKey = `${difficulty}|${effort}`;
+    cellCount.set(cellKey, (cellCount.get(cellKey) ?? 0) + count);
+    let models = cellModels.get(cellKey);
+    if (!models) {
+      models = new Map();
+      cellModels.set(cellKey, models);
+    }
+    models.set(model, (models.get(model) ?? 0) + count);
+  }
+
+  const cells: HeatCell[] = [];
+  let max = 0;
+  for (const [cellKey, count] of cellCount.entries()) {
+    const [difficulty, effort] = cellKey.split('|');
+    let topModel = '';
+    let topCount = -1;
+    for (const [model, c] of cellModels.get(cellKey)!.entries()) {
+      if (c > topCount) {
+        topCount = c;
+        topModel = model;
+      }
+    }
+    cells.push({ difficulty, effort, count, topModel });
+    if (count > max) max = count;
+  }
+  return { cells, max, estimated };
+}
+
+// Approximate the (difficulty, effort, model) joint from the two marginal
+// counters when the exact one is absent. For each model we know how its routed
+// requests split by difficulty (requestsByLabelModel) and by effort
+// (effortByModelEffort); the per-model outer product, normalised by the model's
+// total, is the maximum-entropy estimate of the joint that respects both margins.
+function synthesizeRoutingFromMarginals(m: ParsedMetrics): Map<string, number> {
+  const diffByModel = new Map<string, Map<string, number>>();
+  const modelTotal = new Map<string, number>();
+  for (const [key, count] of m.requestsByLabelModel.entries()) {
+    const [label, model] = key.split('|');
+    if (label === NATIVE_LABEL) continue;
+    let d = diffByModel.get(model);
+    if (!d) { d = new Map(); diffByModel.set(model, d); }
+    d.set(label, (d.get(label) ?? 0) + count);
+    modelTotal.set(model, (modelTotal.get(model) ?? 0) + count);
+  }
+
+  const effByModel = new Map<string, Map<string, number>>();
+  for (const [key, count] of m.effortByModelEffort.entries()) {
+    const [model, effort] = key.split('|');
+    let e = effByModel.get(model);
+    if (!e) { e = new Map(); effByModel.set(model, e); }
+    e.set(effort, (e.get(effort) ?? 0) + count);
+  }
+
+  const out = new Map<string, number>();
+  for (const [model, diffs] of diffByModel.entries()) {
+    const total = modelTotal.get(model) ?? 0;
+    if (total === 0) continue;
+    const efforts = effByModel.get(model);
+    // No effort samples for this model (e.g. effort tracking just started): fall
+    // back to attributing all of its difficulty mass to the medium effort lane so
+    // the model still shows up on the grid.
+    const effEntries = efforts && efforts.size > 0 ? [...efforts.entries()] : [['medium', total]] as Array<[string, number]>;
+    const effTotal = effEntries.reduce((a, [, c]) => a + c, 0) || 1;
+    for (const [label, dCount] of diffs.entries()) {
+      for (const [effort, eCount] of effEntries) {
+        const joint = (dCount * eCount) / effTotal; // share of this model's diff mass at this effort
+        if (joint <= 0) continue;
+        const key = `${label}|${effort}|${model}`;
+        out.set(key, (out.get(key) ?? 0) + joint);
+      }
+    }
+  }
+  return out;
+}
+
+// Block character for a cell whose count is `count` against the busiest cell's
+// `max`. Any cell with traffic gets at least the second shade so a smart-but-rare
+// decision (e.g. hard+max on opus) still lights up next to a dominant cell;
+// empty cells stay at the lightest shade so the grid keeps its shape.
+const SHADES = ['░', '▒', '▓', '█'];
+
+export function shadeFor(count: number, max: number): string {
+  if (max <= 0 || count <= 0) return SHADES[0];
+  const ratio = count / max;
+  if (ratio > 0.66) return SHADES[3];
+  if (ratio > 0.33) return SHADES[2];
+  return SHADES[1];
 }
 
 export type Economy = {

@@ -4,9 +4,16 @@ import yaml from 'js-yaml';
 import { resolveProfile } from '../../../lib/config/paths.js';
 import { loadConfigText } from '../../../lib/config/load.js';
 import { readWiring } from '../../../lib/claude/wiring-state.js';
-import { runContext, runCompute, runSubagents } from '../../../lib/claude/runSettings.js';
+import { runContext, runCompute, runSubagents, runModelRouting, runThinkingRouting } from '../../../lib/claude/runSettings.js';
 import { LOCAL_DISCLAIMER, DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
 import { banner, err } from '../../../lib/ui/banners.js';
+
+/** Models offered when model routing is off and a fixed model must be picked. */
+const FIXED_MODEL_OPTIONS = [
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'fastest, cheapest' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', hint: 'balanced' },
+  { value: 'claude-opus-4-8', label: 'Opus 4.8', hint: 'most capable' },
+] as const;
 
 export default class ClaudeSettings extends Command {
   static description =
@@ -43,12 +50,27 @@ export default class ClaudeSettings extends Command {
       const subagentsOn = !!obj?.anthropic_passthrough?.route_subagents;
       const subagentsLabel = subagentsOn ? 'on (routed)' : 'off (bypass)';
 
+      // Absent key defaults to on (matches the Go pointer-nil default).
+      const ap = obj?.anthropic_passthrough ?? {};
+      const modelRoutingOn = ap.use_model_routing !== false;
+      const thinkingRoutingOn = ap.use_thinking_routing !== false;
+      const fixedModel = typeof ap.fixed_model === 'string' && ap.fixed_model ? ap.fixed_model : 'claude-sonnet-4-6';
+      const modelRoutingLabel = modelRoutingOn ? 'on (by complexity)' : `off (fixed: ${fixedModel})`;
+      const thinkingRoutingLabel = thinkingRoutingOn ? 'on (autonomous)' : 'off (client effort)';
+      // The fixed-model picker is only relevant when the model is pinned.
+      const showFixedModel = !modelRoutingOn;
+
       const section = await p.select({
         message: `Brick Claude settings  (profile: ${profile})`,
         options: [
           { value: 'context', label: `Context-awareness: ${ctxLabel}`, hint: 'classify on recent turns' },
           { value: 'compute', label: `Compute: ${computeLabel}`, hint: 'local vs API classifier' },
           { value: 'subagents', label: `Subagent routing: ${subagentsLabel}`, hint: 'route native-model subagents through Brick' },
+          { value: 'modelrouting', label: `Model routing: ${modelRoutingLabel}`, hint: 'pick model by complexity vs fixed model' },
+          { value: 'thinkingrouting', label: `Thinking routing: ${thinkingRoutingLabel}`, hint: 'autonomous effort vs client effort' },
+          ...(showFixedModel
+            ? [{ value: 'fixedmodel', label: `Fixed model: ${fixedModel}`, hint: 'model used when routing is off' }]
+            : []),
           { value: 'exit', label: 'Exit' },
         ],
       });
@@ -110,6 +132,46 @@ export default class ClaudeSettings extends Command {
         });
         if (p.isCancel(onoff)) continue;
         await runSubagents(onoff === 'on', (c) => process.exit(c));
+      } else if (section === 'modelrouting') {
+        const onoff = await p.select({
+          message: 'Model routing',
+          options: [
+            { value: 'on', label: 'On', hint: 'Brick picks the model by complexity' },
+            { value: 'off', label: 'Off', hint: 'pin every request to a fixed model' },
+          ],
+        });
+        if (p.isCancel(onoff)) continue;
+        if (onoff === 'off') {
+          // When turning routing off, pick the fixed model in the same step so the
+          // user is never left with model routing off and no model chosen.
+          const picked = await p.select({
+            message: 'Fixed model (used for every request)',
+            options: FIXED_MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.label, hint: m.hint })),
+            initialValue: fixedModel,
+          });
+          if (p.isCancel(picked)) continue;
+          await runModelRouting(false, String(picked), (c) => process.exit(c));
+        } else {
+          await runModelRouting(true, undefined, (c) => process.exit(c));
+        }
+      } else if (section === 'thinkingrouting') {
+        const onoff = await p.select({
+          message: 'Thinking routing',
+          options: [
+            { value: 'on', label: 'On', hint: 'Brick computes the reasoning effort per query' },
+            { value: 'off', label: 'Off', hint: "forward the client's own effort unchanged" },
+          ],
+        });
+        if (p.isCancel(onoff)) continue;
+        await runThinkingRouting(onoff === 'on', (c) => process.exit(c));
+      } else if (section === 'fixedmodel') {
+        const picked = await p.select({
+          message: 'Fixed model (used when model routing is off)',
+          options: FIXED_MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.label, hint: m.hint })),
+          initialValue: fixedModel,
+        });
+        if (p.isCancel(picked)) continue;
+        await runModelRouting(false, String(picked), (c) => process.exit(c));
       }
     }
   }

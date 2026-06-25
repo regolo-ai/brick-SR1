@@ -83,7 +83,7 @@ export default class ClaudeStatus extends Command {
     const wantsLive = !flags.once && process.stdout.isTTY;
     if (wantsLive) {
       const { waitUntilExit } = render(
-        React.createElement(Dashboard, { baseUrl, envUrl: displayUrl, intervalMs: Math.max(500, flags.interval * 1000) })
+        React.createElement(Dashboard, { baseUrl, envUrl: displayUrl, intervalMs: Math.max(500, flags.interval * 1000), mode: wiring?.mode })
       );
       await waitUntilExit();
       return;

@@ -18,6 +18,12 @@ export interface WiringState {
   computeMode?: 'local' | 'api';
   /** Whether native-model subagent traffic is routed through Brick. Optional for backward compat. */
   routeSubagents?: boolean;
+  /** Whether dynamic model routing is on. When false, traffic is pinned to fixedModel. Optional for backward compat. */
+  modelRouting?: boolean;
+  /** Whether autonomous thinking-effort routing is on. Optional for backward compat. */
+  thinkingRouting?: boolean;
+  /** Model pinned when modelRouting is off (e.g. "claude-opus-4-8"). Optional. */
+  fixedModel?: string;
 }
 
 function wiringPath(): string {

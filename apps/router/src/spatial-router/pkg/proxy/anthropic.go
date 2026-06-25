@@ -160,9 +160,13 @@ func (s *Server) handleBrickRouted(
 
 	// Model selection: full Brick skill router with per-request preference override.
 	// tauQuery and under capture the autonomous-effort signals from the route.
+	// The router runs even when model routing is disabled, because its signals
+	// (query difficulty, model headroom) drive the autonomous thinking effort;
+	// only its model *choice* is overridden by FixedModel further down.
 	var selectedModel string
 	var complexityLabel string
 	var tauQuery, under float64
+	var routeResult *brickrouting.Result
 	routedViaSkill := false
 	if apCfg.UseSkillRouter && cfg.SkillRouter.Enabled && prompt != "" {
 		if router, rerr := s.getBrickRouter(cfg); rerr != nil {
@@ -170,6 +174,7 @@ func (s *Server) handleBrickRouted(
 		} else if route, rerr := router.RouteWithPreference(r.Context(), prompt, preference); rerr != nil {
 			logging.Warnf("AnthropicPassthrough[brick]: skill router failed, falling back to model_map: %v", rerr)
 		} else {
+			routeResult = route
 			selectedModel = route.Model
 			complexityLabel = route.ComplexityLabel
 			if complexityLabel == "easy" || complexityLabel == "medium" || complexityLabel == "hard" {
@@ -188,6 +193,18 @@ func (s *Server) handleBrickRouted(
 		}
 	}
 
+	// Model-routing override: when model routing is disabled, pin every request
+	// to the configured fixed model. The skill router's signals (tau, complexity)
+	// are preserved so autonomous thinking effort still adapts per query; only the
+	// model choice is replaced. Headroom is recomputed against the pinned model so
+	// the effort bump reflects how stretched THIS model is, not the routed one.
+	if !apCfg.ModelRoutingEnabled() {
+		selectedModel = apCfg.EffectiveFixedModel()
+		if routeResult != nil {
+			under = underCapacityForModel(routeResult, selectedModel)
+		}
+	}
+
 	metrics.BrickCCRequests.WithLabelValues(label, selectedModel).Inc()
 
 	// Strip the 1M-context beta when the account lacks the extra-usage tier, OR
@@ -197,13 +214,16 @@ func (s *Server) handleBrickRouted(
 
 	rewritten := rewriteModelInBody(body, selectedModel)
 	effortStr := ""
-	if routedViaSkill && cfg.SkillRouter.DynamicEffort {
+	if routedViaSkill && cfg.SkillRouter.DynamicEffort && apCfg.ThinkingRoutingEnabled() {
 		// Autonomous effort: query difficulty + chosen-model headroom, shifted by
-		// the Brick mode bias (additive, preserves per-query granularity).
+		// the Brick mode bias (additive, preserves per-query granularity). Skipped
+		// when thinking routing is disabled, so the client's own effort is forwarded
+		// unchanged.
 		level := autonomousEffortLevel(tauQuery, under, preference)
 		rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
 		effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
 		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
+		metrics.BrickCCRouting.WithLabelValues(label, effortStr, selectedModel).Inc()
 	}
 	rewritten = stripUnsupportedFieldsForModel(rewritten, selectedModel)
 

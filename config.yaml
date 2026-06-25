@@ -103,6 +103,16 @@ complexity_service:
 anthropic_passthrough:
   enabled: true
   upstream_url: "https://api.anthropic.com"
+  # use_model_routing / use_thinking_routing: controlli indipendenti del routing.
+  #   use_model_routing (default true): se false, ogni richiesta brick va a
+  #     fixed_model invece di scegliere il modello per complessita'.
+  #   use_thinking_routing (default true): se false, l'effort del client
+  #     (output_config.effort) viene inoltrato invariato, Brick non lo sovrascrive.
+  #   fixed_model: modello usato quando use_model_routing=false (vuoto → Sonnet).
+  # Caso d'uso: modello fisso (es. Opus) con solo routing del thinking effort.
+  use_model_routing: true
+  use_thinking_routing: true
+  fixed_model: ""
   # extra_usage_enabled: metti true SOLO se il tuo account Anthropic ha il
   # tier "extra-usage" pagato (necessario per 1M context). Default false →
   # Brick rimuove l'header context-1m-* e tutto resta su contesto 200K.

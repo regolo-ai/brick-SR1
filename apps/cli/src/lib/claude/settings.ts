@@ -10,8 +10,15 @@ const ENV_KEY = 'ANTHROPIC_BASE_URL';
 // essential: the "brick-claude" id does not match Claude Code's known model
 // patterns, so without it the effort slider would be hidden — and the effort
 // level IS the Brick routing-mode control (low=eco … max=max).
+//
+// The id carries a "[1m]" suffix so Claude Code's context-window meter sizes the
+// bar to 1M tokens instead of defaulting to 200K (which made Brick read "100%
+// context used" immediately). Claude Code parses "[1m]" off the raw id for the
+// meter and strips it before sending the model upstream, so the router still
+// receives a clean "brick-claude" (and matches it via its "brick" prefix). The
+// suffix is display-only; it does NOT force a real 1M upstream call.
 const CUSTOM_MODEL_ENV: Record<string, string> = {
-  ANTHROPIC_CUSTOM_MODEL_OPTION: 'brick-claude',
+  ANTHROPIC_CUSTOM_MODEL_OPTION: 'brick-claude[1m]',
   ANTHROPIC_CUSTOM_MODEL_OPTION_NAME: 'Brick (auto-routing)',
   ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION:
     'Effort sets routing mode: low eco, medium lite, high mid, xhigh pro, max max',

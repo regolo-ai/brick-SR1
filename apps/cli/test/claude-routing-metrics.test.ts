@@ -5,6 +5,8 @@ import {
   nativeRowsByModel,
   difficultyDistribution,
   effortRowsForModel,
+  routingHeatmap,
+  shadeFor,
   economy,
   totalRequests,
 } from '../src/lib/claude/metrics.js';
@@ -130,5 +132,99 @@ describe('economy estimate', () => {
   it('is safe with no routed traffic', () => {
     const e = economy(parsePromExposition(''));
     expect(e).toEqual({ actualUnits: 0, opusUnits: 0, savedPct: 0, totalRoutedReqs: 0 });
+  });
+});
+
+// difficulty x effort x model cross-product: easy traffic spread over haiku at
+// two efforts, hard traffic on opus. sonnet edges haiku in one mixed cell so we
+// can assert topModel resolves to the busiest model in that cell.
+const HEAT_EXPO = `
+# TYPE brick_cc_routing_total counter
+brick_cc_routing_total{difficulty="easy",effort="low",model="claude-haiku-4-5"} 8
+brick_cc_routing_total{difficulty="easy",effort="medium",model="claude-haiku-4-5"} 2
+brick_cc_routing_total{difficulty="medium",effort="medium",model="claude-haiku-4-5"} 1
+brick_cc_routing_total{difficulty="medium",effort="medium",model="claude-sonnet-4-6"} 3
+brick_cc_routing_total{difficulty="hard",effort="max",model="claude-opus-4-8"} 5
+`.trim();
+
+describe('routing heatmap', () => {
+  const m = parsePromExposition(HEAT_EXPO);
+
+  it('parses the 3-label routing counter into its own map', () => {
+    expect(m.routingByDiffEffortModel.get('easy|low|claude-haiku-4-5')).toBe(8);
+    expect(m.routingByDiffEffortModel.get('hard|max|claude-opus-4-8')).toBe(5);
+  });
+
+  it('aggregates per difficulty x effort cell with the busiest cell as max', () => {
+    const { cells, max, estimated } = routingHeatmap(m);
+    expect(estimated).toBe(false); // exact counter present
+    expect(max).toBe(8); // easy|low is the busiest
+    const easyLow = cells.find((c) => c.difficulty === 'easy' && c.effort === 'low');
+    expect(easyLow?.count).toBe(8);
+    expect(easyLow?.topModel).toBe('claude-haiku-4-5');
+  });
+
+  it('picks the model with the most requests in a mixed cell', () => {
+    const { cells } = routingHeatmap(m);
+    const medMed = cells.find((c) => c.difficulty === 'medium' && c.effort === 'medium');
+    expect(medMed?.count).toBe(4); // 1 haiku + 3 sonnet
+    expect(medMed?.topModel).toBe('claude-sonnet-4-6'); // sonnet wins 3 vs 1
+  });
+
+  it('is empty when no routing counter is present', () => {
+    const { cells, max } = routingHeatmap(parsePromExposition(''));
+    expect(cells).toEqual([]);
+    expect(max).toBe(0);
+  });
+});
+
+// When the router only exposes the two marginal counters (no brick_cc_routing_total),
+// the heatmap reconstructs an estimate from requestsByLabelModel x effortByModelEffort.
+describe('routing heatmap fallback from marginal counters', () => {
+  // haiku: all easy, all low effort. opus: all hard, all max effort. The
+  // per-model outer product must land each model's mass on a single cell.
+  const MARGINALS = `
+brick_cc_requests_total{label="easy",model="claude-haiku-4-5"} 10
+brick_cc_requests_total{label="hard",model="claude-opus-4-8"} 4
+brick_cc_requests_total{label="native",model="claude-opus-4-8"} 3
+brick_cc_effort_total{model="claude-haiku-4-5",effort="low"} 10
+brick_cc_effort_total{model="claude-opus-4-8",effort="max"} 4
+`.trim();
+  const m = parsePromExposition(MARGINALS);
+
+  it('flags the result as estimated', () => {
+    expect(routingHeatmap(m).estimated).toBe(true);
+  });
+
+  it('places each model mass on its difficulty x effort cell, excluding native', () => {
+    const { cells } = routingHeatmap(m);
+    const easyLow = cells.find((c) => c.difficulty === 'easy' && c.effort === 'low');
+    const hardMax = cells.find((c) => c.difficulty === 'hard' && c.effort === 'max');
+    expect(easyLow?.count).toBeCloseTo(10);
+    expect(easyLow?.topModel).toBe('claude-haiku-4-5');
+    expect(hardMax?.count).toBeCloseTo(4); // native 3 not counted
+    expect(hardMax?.topModel).toBe('claude-opus-4-8');
+  });
+
+  it('attributes a model with no effort samples to the medium lane', () => {
+    const noEffort = parsePromExposition('brick_cc_requests_total{label="medium",model="claude-sonnet-4-6"} 6');
+    const { cells, estimated } = routingHeatmap(noEffort);
+    expect(estimated).toBe(true);
+    const cell = cells.find((c) => c.difficulty === 'medium' && c.effort === 'medium');
+    expect(cell?.count).toBeCloseTo(6);
+  });
+});
+
+describe('shadeFor', () => {
+  it('returns the lightest shade for empty or zero-max cells', () => {
+    expect(shadeFor(0, 10)).toBe('░');
+    expect(shadeFor(5, 0)).toBe('░');
+  });
+
+  it('lights up any cell with traffic, scaling shade with intensity', () => {
+    expect(shadeFor(1, 10)).toBe('▒');  // 10% — rare but visible
+    expect(shadeFor(4, 10)).toBe('▓');  // 40%
+    expect(shadeFor(7, 10)).toBe('█');  // 70%
+    expect(shadeFor(10, 10)).toBe('█'); // 100%
   });
 });

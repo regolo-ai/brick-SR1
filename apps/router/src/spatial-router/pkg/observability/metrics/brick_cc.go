@@ -34,6 +34,18 @@ var (
 		[]string{"model", "effort"},
 	)
 
+	// BrickCCRouting correlates the classifier verdict, the autonomous effort, and
+	// the selected model on a single routed request: the cross-product the two
+	// marginal counters above cannot reconstruct. Feeds the status heatmap. Like
+	// BrickCCEffort it is only emitted on the skill-routed + dynamic-effort path.
+	BrickCCRouting = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "brick_cc_routing_total",
+			Help: "Brick-routed /v1/messages requests labelled by complexity verdict, autonomous effort, and selected model.",
+		},
+		[]string{"difficulty", "effort", "model"},
+	)
+
 	// BrickCCClassifyDuration measures wall time of a single /classify call.
 	BrickCCClassifyDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{

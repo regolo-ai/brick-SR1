@@ -8,6 +8,8 @@ import {
   applyContextAwareness,
   applyCompute,
   applySubagentRouting,
+  applyModelRouting,
+  applyThinkingRouting,
   type SettingsApplyResult,
   type ComputeMode,
 } from './settings-apply.js';
@@ -73,6 +75,63 @@ export async function runSubagents(
     reportRestart(res);
     const w = readWiring();
     if (w) writeWiring({ ...w, routeSubagents: enabled });
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+}
+
+export async function runModelRouting(
+  enabled: boolean,
+  fixedModel: string | undefined,
+  exit: (code: number) => never,
+): Promise<void> {
+  banner();
+  let profile: string;
+  try {
+    profile = resolveProfile();
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+  try {
+    const res = await applyModelRouting(profile, enabled, fixedModel);
+    ok(
+      enabled
+        ? `model routing ON for profile '${profile}': Brick picks the model by complexity.`
+        : `model routing OFF for profile '${profile}': all traffic pinned to ${fixedModel ?? 'the configured fixed model'}.`,
+    );
+    reportRestart(res);
+    const w = readWiring();
+    if (w) writeWiring({ ...w, modelRouting: enabled, ...(fixedModel !== undefined ? { fixedModel } : {}) });
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+}
+
+export async function runThinkingRouting(
+  enabled: boolean,
+  exit: (code: number) => never,
+): Promise<void> {
+  banner();
+  let profile: string;
+  try {
+    profile = resolveProfile();
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+  try {
+    const res = await applyThinkingRouting(profile, enabled);
+    ok(
+      enabled
+        ? `thinking routing ON for profile '${profile}': Brick computes the reasoning effort per query.`
+        : `thinking routing OFF for profile '${profile}': the client's own effort is forwarded unchanged.`,
+    );
+    reportRestart(res);
+    const w = readWiring();
+    if (w) writeWiring({ ...w, thinkingRouting: enabled });
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);
