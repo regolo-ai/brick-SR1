@@ -48,6 +48,33 @@ var hopByHopHeaders = map[string]struct{}{
 	"Accept-Encoding":     {},
 }
 
+// anthropicUsage is the token-usage shape of the Anthropic Messages API. Both
+// non-streaming responses (top-level "usage") and streaming events carry these
+// fields; only input/output tokens are needed for economics tracking.
+type anthropicUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+}
+
+// anthropicNonStreamEnvelope is the minimal shape of a non-streaming
+// /v1/messages response body, used to extract token usage.
+type anthropicNonStreamEnvelope struct {
+	Usage anthropicUsage `json:"usage"`
+}
+
+// anthropicStreamEvent is the minimal shape of a streaming SSE event payload.
+// message_start carries usage.input_tokens (and a small initial output_tokens);
+// message_delta carries the cumulative usage.output_tokens for the response.
+// Both nest usage differently: message_start under "message.usage",
+// message_delta under a top-level "usage".
+type anthropicStreamEvent struct {
+	Type    string `json:"type"`
+	Message *struct {
+		Usage anthropicUsage `json:"usage"`
+	} `json:"message"`
+	Usage *anthropicUsage `json:"usage"`
+}
+
 // handleAnthropicMessages implements a transparent pass-through for the
 // Anthropic /v1/messages endpoint. The request body and headers (including
 // Authorization, anthropic-version, anthropic-beta, User-Agent) are forwarded
@@ -349,25 +376,108 @@ func (s *Server) forwardAnthropicRequest(
 	}
 	w.WriteHeader(resp.StatusCode)
 
+	contentType := resp.Header.Get("Content-Type")
+	isSSE := strings.Contains(contentType, "text/event-stream")
+
 	flusher, _ := w.(http.Flusher)
 	buf := make([]byte, 32*1024)
+
+	// Side-channel accumulators for usage observation. These NEVER influence
+	// what is written to the client — every chunk read from upstream is
+	// written to w unchanged, at the same cadence, before any accumulation
+	// happens below. sseLineBuf holds an in-progress SSE line across reads;
+	// nonStreamBuf accumulates the full non-streaming body (bounded, same
+	// spirit as the OpenAI-compatible non-streaming path in forward.go,
+	// which also buffers the whole response to extract usage).
+	var sseLineBuf bytes.Buffer
+	var nonStreamBuf bytes.Buffer
+	var usage anthropicUsage
+	const maxSideChannelBuf = 4 * 1024 * 1024 // defensive cap; parsing is best-effort
+
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+			chunk := buf[:n]
+			if _, writeErr := w.Write(chunk); writeErr != nil {
 				logging.Warnf("AnthropicPassthrough: client write failed: %v", writeErr)
 				return
 			}
 			if flusher != nil {
 				flusher.Flush()
 			}
+			if isSSE {
+				accumulateAnthropicSSEUsage(&sseLineBuf, chunk, maxSideChannelBuf, &usage)
+			} else if nonStreamBuf.Len() < maxSideChannelBuf {
+				nonStreamBuf.Write(chunk)
+			}
 		}
 		if readErr == io.EOF {
-			return
+			break
 		}
 		if readErr != nil {
 			logging.Warnf("AnthropicPassthrough: upstream read failed: %v", readErr)
+			break
+		}
+	}
+
+	if !isSSE && nonStreamBuf.Len() > 0 {
+		var env anthropicNonStreamEnvelope
+		if jsonErr := json.Unmarshal(nonStreamBuf.Bytes(), &env); jsonErr == nil {
+			usage = env.Usage
+		}
+	}
+	s.recordEconomicsUsage(selectedModel, usage.InputTokens, usage.OutputTokens)
+}
+
+// accumulateAnthropicSSEUsage feeds a raw chunk of an Anthropic SSE stream
+// into a rolling line buffer, extracting token usage from any complete
+// "data: {...}" lines it finds (message_start.message.usage.input_tokens and
+// message_delta.usage.output_tokens), and updates usage in place. The last
+// non-zero value observed for each field wins. buf is capped at maxBuf bytes
+// to bound memory on a malformed/never-terminated stream; parsing degrades
+// silently (no usage recorded) rather than growing unbounded.
+func accumulateAnthropicSSEUsage(buf *bytes.Buffer, chunk []byte, maxBuf int, usage *anthropicUsage) {
+	if buf.Len()+len(chunk) > maxBuf {
+		buf.Reset()
+		return
+	}
+	buf.Write(chunk)
+	for {
+		line, err := buf.ReadString('\n')
+		if err != nil {
+			// No complete line yet: err carries io.EOF and line holds the
+			// partial content already consumed from buf. Put it back for
+			// the next chunk to complete.
+			buf.Reset()
+			buf.WriteString(line)
 			return
+		}
+		trimmed := strings.TrimRight(line, "\r\n")
+		if !strings.HasPrefix(trimmed, "data: ") {
+			continue
+		}
+		payload := strings.TrimPrefix(trimmed, "data: ")
+		if payload == "[DONE]" || payload == "" {
+			continue
+		}
+		var ev anthropicStreamEvent
+		if jsonErr := json.Unmarshal([]byte(payload), &ev); jsonErr != nil {
+			continue
+		}
+		switch ev.Type {
+		case "message_start":
+			if ev.Message != nil {
+				if ev.Message.Usage.InputTokens != 0 {
+					usage.InputTokens = ev.Message.Usage.InputTokens
+				}
+				if ev.Message.Usage.OutputTokens != 0 {
+					usage.OutputTokens = ev.Message.Usage.OutputTokens
+				}
+			}
+		case "message_delta":
+			if ev.Usage != nil && ev.Usage.OutputTokens != 0 {
+				usage.OutputTokens = ev.Usage.OutputTokens
+			}
 		}
 	}
 }
