@@ -19,6 +19,51 @@ const (
 	upstreamRetryWait  = 5 * time.Second
 )
 
+// openAIUsage is the token usage envelope shared by OpenAI-compatible
+// non-streaming responses and streaming SSE chunks. Only prompt/completion
+// tokens are needed for economics tracking; other usage fields are ignored.
+type openAIUsage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+type openAIUsageEnvelope struct {
+	Usage openAIUsage `json:"usage"`
+}
+
+// injectStreamUsageOption ensures a streaming request body asks the
+// OpenAI-compatible backend to emit a final usage-bearing SSE chunk. If the
+// caller already set stream_options, it is left untouched. Non-JSON bodies
+// are returned unchanged (best-effort — never blocks forwarding).
+func injectStreamUsageOption(body []byte) []byte {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return body // leave untouched if not valid JSON
+	}
+	if _, exists := raw["stream_options"]; exists {
+		return body // caller already set it, don't override
+	}
+	raw["stream_options"] = map[string]bool{"include_usage": true}
+	if rewritten, err := json.Marshal(raw); err == nil {
+		return rewritten
+	}
+	return body
+}
+
+// recordEconomicsUsage records prompt/completion token usage for model into
+// the server's economics store, if both a store and a non-empty model are
+// available. Best-effort: never called when usage is entirely zero (an
+// upstream response with no usage field parses to a zero-value envelope).
+func (s *Server) recordEconomicsUsage(model string, usage openAIUsage) {
+	if s.economicsStore == nil || model == "" {
+		return
+	}
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+		return
+	}
+	s.economicsStore.RecordUsage(model, usage.PromptTokens, usage.CompletionTokens)
+}
+
 // forwardToBackend forwards the request to the selected backend and streams
 // the response back to the client. When maskModel is non-empty, the "model"
 // field in the JSON response body is rewritten to hide the real backend model.
@@ -26,6 +71,11 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	modelMask := ""
 	if len(maskModel) > 0 {
 		modelMask = maskModel[0]
+	}
+	// For streaming requests, ask the upstream to emit a final usage-bearing
+	// SSE chunk so token counts can be tracked for economics purposes.
+	if result.IsStreaming {
+		result.ForwardBody = injectStreamUsageOption(result.ForwardBody)
 	}
 	// Build the upstream URL
 	endpoint := result.ForwardEndpoint
@@ -139,17 +189,19 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
 	if isSSE {
-		s.streamSSEResponse(w, upstreamResp, modelMask)
+		s.streamSSEResponse(w, upstreamResp, modelMask, result.Model)
 	} else {
-		s.forwardNonStreamingResponse(w, upstreamResp, modelMask)
+		s.forwardNonStreamingResponse(w, upstreamResp, modelMask, result.Model)
 	}
 }
 
 // streamSSEResponse streams an SSE response from the backend to the client.
 // This is critical for chat completions with stream=true.
 // When maskModel is non-empty, the "model" field in each SSE data chunk is
-// rewritten to hide the real backend model name.
-func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel string) {
+// rewritten to hide the real backend model name. The model argument (the real
+// selected model) is used only to attribute token usage to the economics
+// store; it never alters what is streamed to the client.
+func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -172,14 +224,27 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		return
 	}
 
+	// Track the last usage seen across chunks; some backends emit usage in a
+	// dedicated final chunk, so the last non-zero usage wins.
+	var lastUsage openAIUsage
+
 	// Stream SSE line-by-line so we can rewrite the model field in each chunk
 	scanner := bufio.NewScanner(upstreamResp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // allow up to 1MB lines
 	for scanner.Scan() {
 		line := scanner.Text()
-		if maskModel != "" && strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
+		if strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
 			payload := strings.TrimPrefix(line, "data: ")
-			line = "data: " + string(rewriteModelInResponseBody([]byte(payload), maskModel))
+			// Observe usage as a side-channel without altering the streamed line.
+			var env openAIUsageEnvelope
+			if err := json.Unmarshal([]byte(payload), &env); err == nil {
+				if env.Usage.PromptTokens != 0 || env.Usage.CompletionTokens != 0 {
+					lastUsage = env.Usage
+				}
+			}
+			if maskModel != "" {
+				line = "data: " + string(rewriteModelInResponseBody([]byte(payload), maskModel))
+			}
 		}
 		fmt.Fprintf(w, "%s\n", line)
 		flusher.Flush()
@@ -187,11 +252,15 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 	if err := scanner.Err(); err != nil {
 		logging.Errorf("Error reading upstream SSE stream: %v", err)
 	}
+
+	s.recordEconomicsUsage(model, lastUsage)
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
 // When maskModel is non-empty, the "model" field in the JSON response is rewritten.
-func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel string) {
+// The model argument (the real selected model) is used only to attribute token
+// usage to the economics store; it never alters the forwarded body.
+func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
 	// Copy response headers (except Content-Length, which may change after rewrite)
 	for key, values := range upstreamResp.Header {
 		if maskModel != "" && strings.EqualFold(key, "Content-Length") {
@@ -208,6 +277,13 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 		logging.Errorf("Error reading upstream response body: %v", err)
 		w.WriteHeader(upstreamResp.StatusCode)
 		return
+	}
+
+	// Observe usage as a side-channel before any rewriting; never blocks or
+	// alters forwarding if the body has no usage field or isn't JSON.
+	var env openAIUsageEnvelope
+	if jsonErr := json.Unmarshal(bodyBytes, &env); jsonErr == nil {
+		s.recordEconomicsUsage(model, env.Usage)
 	}
 
 	if maskModel != "" {

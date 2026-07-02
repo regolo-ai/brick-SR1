@@ -26,6 +26,7 @@ type RoutingResult struct {
 	ForwardHeaders  map[string]string // headers to set on the upstream request
 	RemoveHeaders   []string          // headers to strip before forwarding
 	IsStreaming     bool              // whether the original request has stream=true
+	Model           string            // selected model name, used for economics tracking
 }
 
 // ProviderInfo holds provider details resolved during routing.

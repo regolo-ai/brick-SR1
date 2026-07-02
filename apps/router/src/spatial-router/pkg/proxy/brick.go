@@ -175,6 +175,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 				"Authorization": "Bearer " + apiKey,
 			},
 			IsStreaming: req.Stream,
+			Model:       preprocessResult.DirectModel,
 		}
 		w.Header().Set(headers.VSRSelectedModel, preprocessResult.DirectModel)
 		s.forwardToBackend(w, r, result, "brick")
@@ -416,7 +417,7 @@ func openAIContentText(content interface{}) string {
 // buildRegoloForwardResultWithKey creates a RoutingResult using the client-provided API key.
 // Legacy: forwards to the global "regoloai" provider. Kept as fallback when the
 // per-model BaseURL is not configured.
-func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.RouterConfig, isStreaming bool, apiKey string) *RoutingResult {
+func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.RouterConfig, isStreaming bool, apiKey string, modelName string) *RoutingResult {
 	baseURL, _ := getRegoloProviderInfo(cfg)
 
 	return &RoutingResult{
@@ -427,6 +428,7 @@ func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.Router
 			"Authorization": "Bearer " + apiKey,
 		},
 		IsStreaming: isStreaming,
+		Model:       modelName,
 	}
 }
 
@@ -442,7 +444,7 @@ func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.Router
 func (s *Server) buildForwardResultForModel(body []byte, cfg *config.RouterConfig, modelName string, isStreaming bool, clientKey string) *RoutingResult {
 	modelCfg := findSkillRouterModel(cfg, modelName)
 	if modelCfg == nil || modelCfg.BaseURL == "" {
-		return s.buildRegoloForwardResultWithKey(body, cfg, isStreaming, clientKey)
+		return s.buildRegoloForwardResultWithKey(body, cfg, isStreaming, clientKey, modelName)
 	}
 	mergedBody := mergeCustomParamsIntoBody(body, modelCfg.CustomParams)
 	key := modelCfg.ResolveAPIKey(clientKey)
@@ -454,6 +456,7 @@ func (s *Server) buildForwardResultForModel(body []byte, cfg *config.RouterConfi
 			"Authorization": "Bearer " + key,
 		},
 		IsStreaming: isStreaming,
+		Model:       modelName,
 	}
 }
 

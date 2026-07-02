@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
@@ -27,15 +28,23 @@ type Server struct {
 	brickRouterOnce sync.Once
 	brickRouter     *brickrouting.Router
 	brickRouterErr  error
+
+	economicsStore *economics.Store
 }
 
 // NewServer creates a new Brick proxy server.
 func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
 	return &Server{
-		cfg:        cfg,
-		configPath: configPath,
-		port:       port,
+		cfg:            cfg,
+		configPath:     configPath,
+		port:           port,
+		economicsStore: economics.NewStore(),
 	}
+}
+
+// EconomicsStore returns the server's economics usage store.
+func (s *Server) EconomicsStore() *economics.Store {
+	return s.economicsStore
 }
 
 // Start starts the HTTP server and blocks until shutdown.
