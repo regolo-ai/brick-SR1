@@ -220,8 +220,16 @@ func (s *Server) handleBrickRouted(
 		// when thinking routing is disabled, so the client's own effort is forwarded
 		// unchanged.
 		level := autonomousEffortLevel(tauQuery, under, preference)
-		rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
-		effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
+		// Enforce per-model allowlist: se il modello ha allowed_thinking_modes,
+		// il livello calcolato viene clampato al valore consentito più vicino.
+		// level == -1 è il sentinel per "off" (reasoning completamente disabilitato).
+		level = clampEffortLevelToAllowlist(level, selectedModel, cfg)
+		if level >= 0 {
+			rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
+			effortStr = vocabAt(claudeVocabForModel(selectedModel), level)
+		} else {
+			effortStr = "off"
+		}
 		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
 		metrics.BrickCCRouting.WithLabelValues(label, effortStr, selectedModel).Inc()
 	}

@@ -55,10 +55,16 @@ export const ProviderEndpointSchema = z.object({
   weight: z.number().default(1),
 });
 
+export const ThinkingModeSchema = z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']);
+export type ThinkingMode = z.infer<typeof ThinkingModeSchema>;
+
 export const ModelConfigSchema = z.object({
   preferred_endpoints: z.array(z.string()),
   param_size: z.string().optional(),
   reasoning_family: z.string().optional(),
+  /** When set, restricts which reasoning effort values the router may inject for this model.
+   *  'off' disables all reasoning injection. Empty/absent = no restriction. */
+  allowed_thinking_modes: z.array(ThinkingModeSchema).optional(),
 });
 
 export const ReasoningFamilySchema = z.object({
@@ -100,6 +106,12 @@ export const ComplexityServiceSchema = z.object({
 
 export const BrickSchema = z.object({
   enabled: z.boolean(),
+  use_model_routing: z.boolean().optional(),
+  fixed_model: z.string().optional(),
+  context_window: z.object({
+    enabled: z.boolean().optional(),
+    k: z.number().optional(),
+  }).optional(),
   stt_model: z.string().optional(),
   stt_endpoint: z.string().url().optional(),
   ocr_model: z.string().optional(),
@@ -201,8 +213,40 @@ export const SkillRouterSchema = z.object({
     clip_max: z.number().default(0.98),
   }),
   models: z.array(SkillRouterModelSchema).min(1),
+  // Subset of `models` that is eligible for text routing. When non-empty, only
+  // these models are candidates (their skill_vector enters the distance
+  // computation); absent/empty means all models are candidates. The Go router
+  // reads this as skill_router.active_models.
+  active_models: z.array(z.string()).optional(),
   keyword_rules: z.array(SkillRouterKeywordRuleSchema).default([]),
 });
+
+// AnthropicModelMapSchema: mappa complessità → ID modello per il passthrough Anthropic.
+export const AnthropicModelMapSchema = z.object({
+  easy: z.string().optional(),
+  medium: z.string().optional(),
+  hard: z.string().optional(),
+});
+
+// AnthropicPassthroughSchema: sottoinsieme del config Go anthropic_passthrough.
+// Solo i campi che il CLI configura direttamente; il resto è opaque (passthrough).
+export const AnthropicPassthroughSchema = z.object({
+  enabled: z.boolean().optional(),
+  upstream_url: z.string().optional(),
+  use_model_routing: z.boolean().optional(),
+  use_thinking_routing: z.boolean().optional(),
+  fixed_model: z.string().optional(),
+  route_subagents: z.boolean().optional(),
+  use_skill_router: z.boolean().optional(),
+  extra_usage_enabled: z.boolean().optional(),
+  context_1m_threshold_bytes: z.number().optional(),
+  model_map: AnthropicModelMapSchema.optional(),
+  model_map_1m: AnthropicModelMapSchema.optional(),
+  context_window: z.object({
+    enabled: z.boolean().optional(),
+    k: z.number().optional(),
+  }).optional(),
+}).passthrough();
 
 export const ConfigSchema = z.object({
   model: z.object({
@@ -225,6 +269,7 @@ export const ConfigSchema = z.object({
   keyword_rules: z.array(KeywordRuleSchema).default([]),
   decisions: z.array(DecisionSchema).default([]),
   plugins: z.record(PluginSchema).optional(),
+  anthropic_passthrough: AnthropicPassthroughSchema.optional(),
 });
 
 export type BrickConfig = z.infer<typeof ConfigSchema>;

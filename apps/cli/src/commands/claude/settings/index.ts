@@ -3,10 +3,13 @@ import * as p from '@clack/prompts';
 import yaml from 'js-yaml';
 import { resolveProfile } from '../../../lib/config/paths.js';
 import { loadConfigText } from '../../../lib/config/load.js';
+import { saveConfigText } from '../../../lib/config/save.js';
 import { readWiring } from '../../../lib/claude/wiring-state.js';
 import { runContext, runCompute, runSubagents, runModelRouting, runThinkingRouting } from '../../../lib/claude/runSettings.js';
+import { runModelsPoolWizard } from '../../../lib/wizard/steps/models-pool.js';
 import { LOCAL_DISCLAIMER, DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
 import { banner, err } from '../../../lib/ui/banners.js';
+import { ConfigSchema, type BrickConfig } from '../../../lib/config/schema.js';
 
 /** Models offered when model routing is off and a fixed model must be picked. */
 const FIXED_MODEL_OPTIONS = [
@@ -57,6 +60,12 @@ export default class ClaudeSettings extends Command {
       const fixedModel = typeof ap.fixed_model === 'string' && ap.fixed_model ? ap.fixed_model : 'claude-sonnet-4-6';
       const modelRoutingLabel = modelRoutingOn ? 'on (by complexity)' : `off (fixed: ${fixedModel})`;
       const thinkingRoutingLabel = thinkingRoutingOn ? 'on (autonomous)' : 'off (client effort)';
+      // Il pool è composto dai valori unici di model_map
+      const mm = ap.model_map ?? {};
+      const poolModels = [...new Set(Object.values(mm).filter(Boolean))] as string[];
+      const poolLabel = poolModels.length > 0
+        ? poolModels.map((m: string) => m.replace('claude-', '').replace(/-\d+.*/, '')).join(', ')
+        : 'all (unrestricted)';
       // The fixed-model picker is only relevant when the model is pinned.
       const showFixedModel = !modelRoutingOn;
 
@@ -68,6 +77,7 @@ export default class ClaudeSettings extends Command {
           { value: 'subagents', label: `Subagent routing: ${subagentsLabel}`, hint: 'route native-model subagents through Brick' },
           { value: 'modelrouting', label: `Model routing: ${modelRoutingLabel}`, hint: 'pick model by complexity vs fixed model' },
           { value: 'thinkingrouting', label: `Thinking routing: ${thinkingRoutingLabel}`, hint: 'autonomous effort vs client effort' },
+          { value: 'models', label: `Models: ${poolLabel}`, hint: 'pool di modelli Claude e thinking modes per modello' },
           ...(showFixedModel
             ? [{ value: 'fixedmodel', label: `Fixed model: ${fixedModel}`, hint: 'model used when routing is off' }]
             : []),
@@ -86,6 +96,7 @@ export default class ClaudeSettings extends Command {
             { value: 'on', label: 'On' },
             { value: 'off', label: 'Off' },
           ],
+          initialValue: cw?.enabled ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
         let k = cw?.k ?? DEFAULT_CONTEXT_K;
@@ -106,6 +117,7 @@ export default class ClaudeSettings extends Command {
             { value: 'local', label: 'Local (auto-spawned server)' },
             { value: 'api', label: 'API (remote endpoint)' },
           ],
+          initialValue: computeLabel === 'api' ? 'api' : 'local',
         });
         if (p.isCancel(cm)) continue;
         if (cm === 'local') {
@@ -129,6 +141,7 @@ export default class ClaudeSettings extends Command {
             { value: 'on', label: 'On (routed)' },
             { value: 'off', label: 'Off (bypass)' },
           ],
+          initialValue: subagentsOn ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
         await runSubagents(onoff === 'on', (c) => process.exit(c));
@@ -139,6 +152,7 @@ export default class ClaudeSettings extends Command {
             { value: 'on', label: 'On', hint: 'Brick picks the model by complexity' },
             { value: 'off', label: 'Off', hint: 'pin every request to a fixed model' },
           ],
+          initialValue: modelRoutingOn ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
         if (onoff === 'off') {
@@ -161,9 +175,29 @@ export default class ClaudeSettings extends Command {
             { value: 'on', label: 'On', hint: 'Brick computes the reasoning effort per query' },
             { value: 'off', label: 'Off', hint: "forward the client's own effort unchanged" },
           ],
+          initialValue: thinkingRoutingOn ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
         await runThinkingRouting(onoff === 'on', (c) => process.exit(c));
+      } else if (section === 'models') {
+        // Wizard: seleziona pool modelli Claude + thinking modes per modello.
+        // Carica il raw YAML come oggetto, modifica in-place, risalva.
+        let cfgForWizard: BrickConfig;
+        try {
+          cfgForWizard = ConfigSchema.parse(yaml.load(await loadConfigText(profile)) ?? {});
+        } catch (e: any) {
+          err(`cannot load config: ${e?.message ?? e}`);
+          continue;
+        }
+        const changed = await runModelsPoolWizard(cfgForWizard);
+        if (changed) {
+          try {
+            await saveConfigText(yaml.dump(cfgForWizard, { lineWidth: 120, noRefs: true, sortKeys: false }), profile);
+            p.note('model pool and thinking modes saved.', 'models');
+          } catch (e: any) {
+            err(`save failed: ${e?.message ?? e}`);
+          }
+        }
       } else if (section === 'fixedmodel') {
         const picked = await p.select({
           message: 'Fixed model (used when model routing is off)',

@@ -11,6 +11,21 @@ model:
 server_port: 8000
 auto_model_name: brick
 
+# Model download registry: maps the local model path used by the skill router's
+# capability classifier to its Hugging Face repo, so the router downloads ModernBERT
+# on first start. Required whenever skill_router.enabled is true.
+mom_registry:
+  models/modernbert-capability-classifier: "massaindustries/modernbert-capability-classifier"
+
+brick:
+  enabled: true
+  use_model_routing: true
+  fixed_model: gpt-5.4
+  context_window:
+    enabled: false
+    k: 8
+  ocr_min_text_length: 10
+
 providers:
   openai:
     type: openai_compatible

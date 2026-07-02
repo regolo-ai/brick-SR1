@@ -8,7 +8,7 @@ import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class CodexOff extends Command {
   static description =
-    'Unwire OpenAI Codex from Brick (removes the brick provider/profile block and restores the prior default profile in ~/.codex/config.toml).';
+    'Unwire OpenAI Codex from Brick (removes the managed brick provider and restores the prior model/model_provider in ~/.codex/config.toml).';
 
   static examples = [
     '<%= config.bin %> codex off',
@@ -33,17 +33,24 @@ export default class CodexOff extends Command {
 
     // 1. Restore the standard Codex config.
     try {
-      unwireCodex(wiring.previousProfile);
+      unwireCodex({
+        previousModel: wiring.previousModel,
+        previousModelProvider: wiring.previousModelProvider,
+        previousProfile: wiring.previousProfile,
+      });
     } catch (e: any) {
       err(e?.message ?? String(e));
       this.exit(1);
     }
     clearCodexWiring();
 
-    if (wiring.previousProfile !== null) {
-      ok(`restored default Codex profile → ${wiring.previousProfile}`);
+    if (wiring.previousModel !== null || wiring.previousModelProvider !== null) {
+      ok(
+        `restored Codex defaults → model ${wiring.previousModel ?? '(none)'}, ` +
+        `model_provider ${wiring.previousModelProvider ?? '(none)'}`
+      );
     } else {
-      ok('removed the brick provider/profile — back to standard Codex configuration');
+      ok('removed the brick provider and top-level brick model keys — back to standard Codex configuration');
     }
     info(`updated ${codexConfigPath()}`);
 

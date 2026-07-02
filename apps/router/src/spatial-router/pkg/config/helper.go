@@ -871,3 +871,36 @@ func (p *ProviderProfile) ResolveChatPath() (string, error) {
 
 	return suffix, nil
 }
+
+// GetAllowedThinkingModes restituisce la lista di effort values consentiti per
+// il modello modelName. Ritorna nil quando non è configurato alcun vincolo
+// (tutti i livelli sono permessi).
+func (c *RouterConfig) GetAllowedThinkingModes(modelName string) []string {
+	if c == nil || c.ModelConfig == nil {
+		return nil
+	}
+	params, ok := c.ModelConfig[modelName]
+	if !ok || len(params.AllowedThinkingModes) == 0 {
+		return nil
+	}
+	return params.AllowedThinkingModes
+}
+
+// IsThinkingModeAllowed indica se il livello di effort specificato è consentito
+// per il modello modelName. Quando non è configurato alcun vincolo, tutti i
+// livelli sono considerati permessi.
+// Il valore sentinel "off" nella allowlist blocca esplicitamente qualsiasi
+// reasoning injection, quindi IsThinkingModeAllowed restituisce false per
+// qualsiasi effort != "off".
+func (c *RouterConfig) IsThinkingModeAllowed(modelName, effort string) bool {
+	allowed := c.GetAllowedThinkingModes(modelName)
+	if len(allowed) == 0 {
+		return true // nessun vincolo
+	}
+	for _, a := range allowed {
+		if a == effort {
+			return true
+		}
+	}
+	return false
+}

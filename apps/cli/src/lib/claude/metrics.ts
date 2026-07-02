@@ -81,6 +81,24 @@ export async function fetchSnapshot(baseUrl: string, envUrl?: string): Promise<S
   return { baseUrl, envUrl, attached: envUrl === baseUrl, health, diag, metrics };
 }
 
+/**
+ * Clear the router's Brick routing counters (brick_cc_*) so the dashboard starts
+ * fresh without a restart. POSTs to the reset endpoint on the proxy port.
+ * Returns true on success. The endpoint lives on the main proxy port (unlike
+ * /metrics, which may be on a dedicated port), so we hit baseUrl directly.
+ */
+export async function resetMetrics(baseUrl: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${baseUrl}/api/v1/metrics/reset`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(4000),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function parsePromExposition(body: string): ParsedMetrics {
   const out: ParsedMetrics = {
     requestsByLabelModel: new Map(),

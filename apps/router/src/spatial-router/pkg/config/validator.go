@@ -216,6 +216,22 @@ func validateSkillRouterConfig(cfg *RouterConfig) error {
 		}
 	}
 
+	// active_models, when present, must reference models declared in
+	// skill_router.models (no duplicates). Empty is allowed and means "all
+	// models are candidates" (backward compatible).
+	if len(sr.ActiveModels) > 0 {
+		activeSeen := map[string]bool{}
+		for i, m := range sr.ActiveModels {
+			if !modelSeen[m] {
+				return fmt.Errorf("skill_router.active_models[%d] %q is not defined in skill_router.models", i, m)
+			}
+			if activeSeen[m] {
+				return fmt.Errorf("skill_router.active_models contains duplicate model %q", m)
+			}
+			activeSeen[m] = true
+		}
+	}
+
 	// Preference-knob math constraints (paper sec. brick-knob). Zero values mean
 	// "absent" and resolve to the locked production defaults at runtime.
 	m := sr.Math

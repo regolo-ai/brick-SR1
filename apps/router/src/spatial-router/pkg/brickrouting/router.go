@@ -174,9 +174,10 @@ func (r *Router) Route(ctx context.Context, text string) (*Result, error) {
 // allowlist when it is non-nil (an entry present and true is eligible). It is
 // used by the multimodal passthrough path to route only among models that can
 // handle the raw modalities present in the request. A nil allowlist means all
-// configured models are eligible (identical to Route).
+// configured models are eligible (identical to Route). The caller allowlist is
+// intersected with active_models: candidacy = handles_modality AND active.
 func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map[string]bool) (*Result, error) {
-	return r.routeCore(ctx, text, allow, r.mathCfg)
+	return r.routeCore(ctx, text, intersectAllow(allow, r.activeAllow()), r.mathCfg)
 }
 
 // RouteWithPreference is like Route but overrides the routing-preference knob r
@@ -192,7 +193,15 @@ func (r *Router) RouteWithPreference(ctx context.Context, text string, preferenc
 	mc.bias = bias
 	mc.beta = beta
 	mc.lambdaOver = lambda
-	return r.routeCore(ctx, text, nil, mc)
+	// Restrict candidacy to active_models (the pool the user configured). If the
+	// list somehow excludes every configured model (hand-edited config), fall
+	// back to the full pool: the text path must never fail to route.
+	allow := r.activeAllow()
+	if allow != nil && !anyAllowed(r.skillCfg.Models, allow) {
+		logging.Warnf("[Brick2] active_models excluded every configured model; using full pool")
+		allow = nil
+	}
+	return r.routeCore(ctx, text, allow, mc)
 }
 
 // routeCore is the shared implementation used by RouteWithCandidates and
@@ -320,6 +329,50 @@ func modelAllowed(allow map[string]bool, model string) bool {
 		return true
 	}
 	return allow[model]
+}
+
+// activeAllow returns the active_models allowlist as a map, or nil when the list
+// is empty (nil = admit all models, preserving backward compatibility).
+func (r *Router) activeAllow() map[string]bool {
+	if len(r.skillCfg.ActiveModels) == 0 {
+		return nil
+	}
+	allow := make(map[string]bool, len(r.skillCfg.ActiveModels))
+	for _, m := range r.skillCfg.ActiveModels {
+		allow[m] = true
+	}
+	return allow
+}
+
+// anyAllowed reports whether at least one configured model passes the allowlist.
+// Used by the text path to detect an active_models set that excludes every model
+// (a hand-edited misconfiguration) so it can fall back to the full pool.
+func anyAllowed(models []config.SkillRouterModelConfig, allow map[string]bool) bool {
+	for _, m := range models {
+		if modelAllowed(allow, m.Model) {
+			return true
+		}
+	}
+	return false
+}
+
+// intersectAllow returns the models present-and-true in both allowlists. A nil
+// operand means "all admitted", so nil ∩ x == x. Mirrors the helper in
+// pkg/proxy/brick.go, duplicated here to keep the router package self-contained.
+func intersectAllow(a, b map[string]bool) map[string]bool {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	out := make(map[string]bool)
+	for model, ok := range a {
+		if ok && b[model] {
+			out[model] = true
+		}
+	}
+	return out
 }
 
 func (r *Router) tauQuery(label string, confidence float64) float64 {
@@ -633,7 +686,7 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 // fallback both count), which `brick claude status` reads for avg/p50/p95.
 func (c *complexityClient) Classify(ctx context.Context, text string) (string, float64) {
 	start := time.Now()
-	defer func() { metrics.BrickCCClassifyDuration.Observe(time.Since(start).Seconds()) }()
+	defer func() { metrics.BrickCCClassifyDuration.WithLabelValues().Observe(time.Since(start).Seconds()) }()
 	if c.protocol == "openai" {
 		return c.classifyOpenAI(ctx, text)
 	}

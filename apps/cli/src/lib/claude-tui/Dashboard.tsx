@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import {
   fetchSnapshot,
+  resetMetrics,
   routedRowsByModel,
   nativeRowsByModel,
   difficultyDistribution,
@@ -24,6 +25,9 @@ const MODEL_COLORS: Array<[string, string]> = [
   ['claude-haiku', '#7aa2f7'],
   ['claude-sonnet', '#bb9af7'],
   ['claude-opus', '#f7768e'],
+  ['gpt-', '#7aa2f7'],
+  ['o3', '#bb9af7'],
+  ['o4', '#f7768e'],
 ];
 
 function colorForModel(model: string): string {
@@ -157,17 +161,51 @@ export interface DashboardProps {
   envUrl?: string;
   intervalMs: number;
   mode?: string;
+  connectionLabel?: string;
+  emptyRequestsLabel?: string;
+  nativeLabel?: string;
+  showEconomy?: boolean;
 }
 
-export function Dashboard({ baseUrl, envUrl, intervalMs, mode }: DashboardProps) {
+export function Dashboard({
+  baseUrl,
+  envUrl,
+  intervalMs,
+  mode,
+  connectionLabel = 'ANTHROPIC_BASE_URL',
+  emptyRequestsLabel = 'no /v1/messages requests served yet',
+  nativeLabel = 'subagents (native model, router bypass)',
+  showEconomy = true,
+}: DashboardProps) {
   const { exit } = useApp();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tick, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Single confirmation for clearing the routing cache: press `n` to arm, `n`
+  // again to execute. Any other key cancels. `flash` shows the outcome.
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
 
   useInput((input, key) => {
-    if (input === 'q' || key.escape || (key.ctrl && input === 'c')) exit();
+    // Ctrl-C always exits, even mid-confirmation.
+    if (key.ctrl && input === 'c') { exit(); return; }
+    if (confirmClear) {
+      if (input === 'n') {
+        setConfirmClear(false);
+        void (async () => {
+          const ok = await resetMetrics(baseUrl);
+          setFlash(ok ? '✓ routing cache cleared' : '✗ reset failed');
+          setTick((t) => t + 1); // refresh immediately
+          setTimeout(() => setFlash(null), 2500);
+        })();
+      } else {
+        setConfirmClear(false); // any other key cancels
+      }
+      return;
+    }
+    if (input === 'q' || key.escape) { exit(); return; }
     if (input === 'r') setTick((t) => t + 1); // manual refresh
+    if (input === 'n') { setFlash(null); setConfirmClear(true); } // arm clear-cache
   });
 
   useEffect(() => {
@@ -183,13 +221,21 @@ export function Dashboard({ baseUrl, envUrl, intervalMs, mode }: DashboardProps)
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <RoutingBox snap={snap} />
-      <EconomyBox snap={snap} />
-      <ConnectionBox snap={snap} loading={loading} mode={mode} />
+      <RoutingBox snap={snap} emptyRequestsLabel={emptyRequestsLabel} nativeLabel={nativeLabel} />
+      <EconomyBox snap={snap} enabled={showEconomy} />
+      <ConnectionBox snap={snap} loading={loading} mode={mode} connectionLabel={connectionLabel} />
       <ClassifierBox snap={snap} />
 
       <Box marginTop={1}>
-        <Text dimColor>{`↻ ${(intervalMs / 1000).toFixed(0)}s  ·  r refresh  ·  q quit`}</Text>
+        {confirmClear ? (
+          <Text color="yellow" bold>
+            Clear routing cache? Press <Text color="red" bold>n</Text> to confirm · any other key cancels
+          </Text>
+        ) : flash ? (
+          <Text color={flash.startsWith('✓') ? 'green' : 'red'} bold>{flash}</Text>
+        ) : (
+          <Text dimColor>{`↻ ${(intervalMs / 1000).toFixed(0)}s  ·  r refresh  ·  n clear cache  ·  q quit`}</Text>
+        )}
       </Box>
     </Box>
   );
@@ -204,7 +250,17 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function ConnectionBox({ snap, loading, mode }: { snap: Snapshot | null; loading: boolean; mode?: string }) {
+function ConnectionBox({
+  snap,
+  loading,
+  mode,
+  connectionLabel,
+}: {
+  snap: Snapshot | null;
+  loading: boolean;
+  mode?: string;
+  connectionLabel: string;
+}) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>Connection</Text>
@@ -212,7 +268,7 @@ function ConnectionBox({ snap, loading, mode }: { snap: Snapshot | null; loading
         <Text dimColor>probing…</Text>
       ) : (
         <>
-          <Row label="ANTHROPIC_BASE_URL">
+          <Row label={connectionLabel}>
             {snap?.envUrl ? (
               snap.attached ? <Text color="green">{snap.envUrl} ✓ attached</Text>
                 : <Text color="yellow">{snap.envUrl} ✗ not pointing at this router</Text>
@@ -253,7 +309,15 @@ function ClassifierBox({ snap }: { snap: Snapshot | null }) {
   );
 }
 
-function RoutingBox({ snap }: { snap: Snapshot | null }) {
+function RoutingBox({
+  snap,
+  emptyRequestsLabel,
+  nativeLabel,
+}: {
+  snap: Snapshot | null;
+  emptyRequestsLabel: string;
+  nativeLabel: string;
+}) {
   const m = snap?.metrics;
   if (snap?.health && !m) {
     return (
@@ -278,7 +342,7 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>◆ Routing</Text>
       {total === 0 ? (
-        <Text dimColor>no /v1/messages requests served yet</Text>
+        <Text dimColor>{emptyRequestsLabel}</Text>
       ) : (
         <>
           <Row label="total requests"><Text bold>{String(total)}</Text></Row>
@@ -318,7 +382,7 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
           {native.length > 0 && (
             <>
               <Text> </Text>
-              <Text dimColor>subagents (native model, router bypass)</Text>
+              <Text dimColor>{nativeLabel}</Text>
               {native.map((r) => (
                 <Box key={`native|${r.model}`} paddingLeft={2}>
                   <Box width={22}><Text dimColor>{shortModel(r.model)}</Text></Box>
@@ -353,7 +417,8 @@ function RoutingBox({ snap }: { snap: Snapshot | null }) {
   );
 }
 
-function EconomyBox({ snap }: { snap: Snapshot | null }) {
+function EconomyBox({ snap, enabled }: { snap: Snapshot | null; enabled: boolean }) {
+  if (!enabled) return null;
   const m = snap?.metrics;
   if (!m) return null;
   const e = economy(m);
@@ -434,4 +499,3 @@ function Legend({ items, hidePct }: { items: Array<{ label: string; color: strin
     </Box>
   );
 }
-

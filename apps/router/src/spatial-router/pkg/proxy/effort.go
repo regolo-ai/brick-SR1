@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
@@ -284,4 +285,36 @@ func applyEffortAnthropicLevel(body []byte, level int, model string) []byte {
 		return body
 	}
 	return out
+}
+
+// clampEffortLevelToAllowlist restituisce il livello di effort da usare per
+// selectedModel, rispettando l'eventuale allowlist configurata in model_config.
+// Se allowed_thinking_modes contiene "off", restituisce -1 come sentinel:
+// il sito di chiamata deve saltare l'iniezione dell'effort.
+// In tutti gli altri casi il livello viene clampato al valore consentito più
+// basso nella scala (5=max, 4=xhigh, 3=high, 2=medium, 1-0=low).
+func clampEffortLevelToAllowlist(level int, modelName string, cfg *config.RouterConfig) int {
+	allowed := cfg.GetAllowedThinkingModes(modelName)
+	if len(allowed) == 0 {
+		return level // nessun vincolo
+	}
+	// "off" in allowlist = blocca tutto il reasoning
+	if slices.Contains(allowed, "off") {
+		return -1 // sentinel: il chiamante deve saltare l'iniezione
+	}
+	// Mappa ladder ordinal → vocabolario condiviso per il confronto
+	effortVocabOrder := []string{"low", "low", "medium", "high", "xhigh", "max"}
+	// Scende dal livello richiesto finché trova un valore permesso
+	for i := level; i >= 0; i-- {
+		if i < len(effortVocabOrder) && slices.Contains(allowed, effortVocabOrder[i]) {
+			return i
+		}
+	}
+	// Nessun valore consentito uguale o inferiore: usa il minimo permesso
+	for i := 0; i < len(effortVocabOrder); i++ {
+		if slices.Contains(allowed, effortVocabOrder[i]) {
+			return i
+		}
+	}
+	return level // fallback conservativo
 }

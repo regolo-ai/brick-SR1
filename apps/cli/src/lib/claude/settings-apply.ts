@@ -180,6 +180,13 @@ export async function applyCompute(
   }
   const obj = loadObj(await loadConfigText(profile), profile);
 
+  // Snapshot the blocks we touch so a re-selection of the already-active mode is
+  // a no-op: no rewrite, no router restart ("if nothing changed, close it").
+  const before = JSON.stringify([
+    obj.complexity_service ?? null,
+    obj.skill_router?.complexity_model ?? null,
+  ]);
+
   const cs = (obj.complexity_service && typeof obj.complexity_service === 'object')
     ? obj.complexity_service
     : {};
@@ -205,5 +212,9 @@ export async function applyCompute(
     else delete cm.bearer_token;
   }
 
-  return saveAndRestart(obj, profile, true);
+  const after = JSON.stringify([
+    obj.complexity_service ?? null,
+    obj.skill_router?.complexity_model ?? null,
+  ]);
+  return saveAndRestart(obj, profile, after !== before);
 }

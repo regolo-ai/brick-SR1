@@ -10,7 +10,7 @@ func TestAnthropicPassthroughResolve(t *testing.T) {
 	if got := cfg.Resolve("medium"); got != "claude-sonnet-4-6" {
 		t.Fatalf("default medium: %q", got)
 	}
-	if got := cfg.Resolve("hard"); got != "claude-opus-4-7" {
+	if got := cfg.Resolve("hard"); got != "claude-opus-4-8" {
 		t.Fatalf("default hard: %q", got)
 	}
 	if got := cfg.Resolve("unknown"); got != "claude-sonnet-4-6" {

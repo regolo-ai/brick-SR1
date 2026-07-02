@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func TestParseBrick2RootConfig(t *testing.T) {
-	cfg, err := Parse("../../../../config.yaml")
+	cfg, err := Parse("../../../../config/config.yaml")
 	if err != nil {
 		t.Fatalf("parse root config: %v", err)
 	}

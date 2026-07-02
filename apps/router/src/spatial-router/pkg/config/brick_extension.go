@@ -49,14 +49,17 @@ type TextRoute struct {
 // (text/audio/image), preprocesses non-text content, and routes through the
 // semantic pipeline.
 type BrickConfig struct {
-	Enabled        bool   `yaml:"enabled,omitempty"`
-	STTModel       string `yaml:"stt_model,omitempty"`       // e.g., "faster-whisper-large-v3"
-	STTEndpoint    string `yaml:"stt_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/audio/transcriptions"
-	OCRModel       string `yaml:"ocr_model,omitempty"`       // e.g., "deepseek-ocr"
-	OCREndpoint    string `yaml:"ocr_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/chat/completions"
-	VisionModel    string `yaml:"vision_model,omitempty"`    // e.g., "qwen3-vl-32b"
-	VisionEndpoint string `yaml:"vision_endpoint,omitempty"` // e.g., "https://api.regolo.ai/v1/chat/completions"
-	OCRMinTextLen  int    `yaml:"ocr_min_text_length,omitempty"`
+	Enabled         bool                `yaml:"enabled,omitempty"`
+	UseModelRouting *bool               `yaml:"use_model_routing,omitempty"`
+	FixedModel      string              `yaml:"fixed_model,omitempty"`
+	ContextWindow   ContextWindowConfig `yaml:"context_window,omitempty"`
+	STTModel        string              `yaml:"stt_model,omitempty"`       // e.g., "faster-whisper-large-v3"
+	STTEndpoint     string              `yaml:"stt_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/audio/transcriptions"
+	OCRModel        string              `yaml:"ocr_model,omitempty"`       // e.g., "deepseek-ocr"
+	OCREndpoint     string              `yaml:"ocr_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/chat/completions"
+	VisionModel     string              `yaml:"vision_model,omitempty"`    // e.g., "qwen3-vl-32b"
+	VisionEndpoint  string              `yaml:"vision_endpoint,omitempty"` // e.g., "https://api.regolo.ai/v1/chat/completions"
+	OCRMinTextLen   int                 `yaml:"ocr_min_text_length,omitempty"`
 }
 
 // GetOCRMinTextLen returns the minimum OCR text length to consider valid, defaulting to 10.
@@ -67,44 +70,63 @@ func (b *BrickConfig) GetOCRMinTextLen() int {
 	return 10
 }
 
-// Validate checks that all required fields are set when brick is enabled.
-// Should be called at startup to fail fast on misconfiguration.
+// ModelRoutingEnabled reports whether dynamic model selection is on. An absent
+// key defaults to true so existing configs keep routing dynamically.
+func (b *BrickConfig) ModelRoutingEnabled() bool {
+	return b.UseModelRouting == nil || *b.UseModelRouting
+}
+
+// EffectiveFixedModel returns the configured fixed model or a safe default.
+func (b *BrickConfig) EffectiveFixedModel(defaultModel string) string {
+	if b.FixedModel != "" {
+		return b.FixedModel
+	}
+	if defaultModel != "" {
+		return defaultModel
+	}
+	return "gpt-5.4"
+}
+
+// EffectiveContextWindowK returns the configured K or the default of 8.
+func (b *BrickConfig) EffectiveContextWindowK() int {
+	if b.ContextWindow.K > 0 {
+		return b.ContextWindow.K
+	}
+	return 8
+}
+
+// Validate checks configured modality providers when brick is enabled. Text-only
+// Codex routing does not require OCR/STT/Vision settings, but each configured
+// modality pair must be complete and must point at a valid URL.
 func (b *BrickConfig) Validate() error {
 	if !b.Enabled {
 		return nil
 	}
 
 	checks := []struct {
-		field, name string
+		model, modelName       string
+		endpoint, endpointName string
 	}{
-		{b.VisionModel, "brick.vision_model"},
-		{b.VisionEndpoint, "brick.vision_endpoint"},
-		{b.STTModel, "brick.stt_model"},
-		{b.STTEndpoint, "brick.stt_endpoint"},
-		{b.OCRModel, "brick.ocr_model"},
-		{b.OCREndpoint, "brick.ocr_endpoint"},
+		{b.VisionModel, "brick.vision_model", b.VisionEndpoint, "brick.vision_endpoint"},
+		{b.STTModel, "brick.stt_model", b.STTEndpoint, "brick.stt_endpoint"},
+		{b.OCRModel, "brick.ocr_model", b.OCREndpoint, "brick.ocr_endpoint"},
 	}
 	for _, c := range checks {
-		if c.field == "" {
-			return fmt.Errorf("brick enabled but %s is not configured", c.name)
+		if c.model == "" && c.endpoint == "" {
+			continue
 		}
-	}
-
-	// Validate that endpoints are parseable URLs
-	endpoints := []struct {
-		value, name string
-	}{
-		{b.VisionEndpoint, "brick.vision_endpoint"},
-		{b.STTEndpoint, "brick.stt_endpoint"},
-		{b.OCREndpoint, "brick.ocr_endpoint"},
-	}
-	for _, ep := range endpoints {
-		u, err := url.Parse(ep.value)
+		if c.model == "" {
+			return fmt.Errorf("brick enabled but %s is not configured", c.modelName)
+		}
+		if c.endpoint == "" {
+			return fmt.Errorf("brick enabled but %s is not configured", c.endpointName)
+		}
+		u, err := url.Parse(c.endpoint)
 		if err != nil {
-			return fmt.Errorf("%s is not a valid URL: %w", ep.name, err)
+			return fmt.Errorf("%s is not a valid URL: %w", c.endpointName, err)
 		}
 		if u.Host == "" {
-			return fmt.Errorf("%s has no host: %q", ep.name, ep.value)
+			return fmt.Errorf("%s has no host: %q", c.endpointName, c.endpoint)
 		}
 	}
 
@@ -114,7 +136,7 @@ func (b *BrickConfig) Validate() error {
 // BrickExtension holds all Brick-specific config fields.
 // These are embedded into the main RouterConfig.
 type BrickExtension struct {
-	Model                VirtualModelConfig              `yaml:"model,omitempty"`
+	Model                VirtualModelConfig         `yaml:"model,omitempty"`
 	Providers            map[string]*ProviderConfig `yaml:"providers,omitempty"`
 	ModalityRoutes       ModalityRoutesConfig       `yaml:"modality_routes,omitempty"`
 	TextRoutes           []TextRoute                `yaml:"text_routes,omitempty"`

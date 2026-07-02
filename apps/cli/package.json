@@ -54,6 +54,12 @@
       },
       "claude settings": {
         "description": "Configure Brick Claude: context-awareness and classifier compute"
+      },
+      "codex": {
+        "description": "Inspect Brick ↔ OpenAI Codex wiring (status, routing stats)"
+      },
+      "codex settings": {
+        "description": "Configure Brick Codex: context-awareness, classifier compute, model routing, and thinking routing"
       }
     },
     "hooks": {

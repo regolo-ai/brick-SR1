@@ -13,6 +13,7 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/headers"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/multimodal"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
 
 // handleBrickRequest is the main handler for the "brick" virtual model.
@@ -73,6 +74,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		result := s.buildForwardResultForModel(rewrittenBody, cfg, selectedModel, req.Stream, clientKey)
+		metrics.BrickCCRequests.WithLabelValues("native", selectedModel).Inc()
 		w.Header().Set(headers.VSRSelectedModel, selectedModel)
 		s.forwardToBackend(w, r, result, "brick")
 		return
@@ -105,21 +107,30 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", brr))
 				return
 			}
-			routingText := extractOpenAIText(body)
+			routingText := extractOpenAIRoutingText(body, cfg)
 			if strings.TrimSpace(routingText) == "" {
 				routingText = multimodalRoutingPlaceholder(modality)
 			}
-			route, rerr := brickRouter.RouteWithCandidates(r.Context(), routingText, plan.allow)
+			allow := intersectAllow(plan.allow, brickFixedModelAllow(cfg))
+			route, rerr := brickRouter.RouteWithCandidates(r.Context(), routingText, allow)
 			if rerr != nil {
 				// Eligible set unexpectedly empty/failed: degrade gracefully to
 				// the OCR/STT preprocessing path rather than erroring the request.
 				logging.Warnf("Brick multimodal passthrough routing failed, falling back to preprocessing: %v", rerr)
 			} else {
 				forwardBody := rewriteModelInBody(body, route.Model)
-				forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model, route.ComplexityLabel)
+				effortStr := ""
+				if cfg.SkillRouter.DynamicEffort {
+					level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
+					forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
+				}
 				forwardBody = adaptForRegoloAPI(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
+				recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
 				w.Header().Set(headers.VSRSelectedModel, route.Model)
+				if effortStr != "" {
+					w.Header().Set("x-brick-effort", effortStr)
+				}
 				w.Header().Set("x-brick-route-reason", "multimodal_passthrough")
 				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s image=%v audio=%v",
 					route.Model, route.Reason, modality.HasImage, modality.HasAudio)
@@ -178,8 +189,8 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	routingText := extractOpenAIText(preprocessResult.RewrittenBody)
-	route, err := brickRouter.Route(r.Context(), routingText)
+	routingText := extractOpenAIRoutingText(preprocessResult.RewrittenBody, cfg)
+	route, err := brickRouter.RouteWithCandidates(r.Context(), routingText, brickFixedModelAllow(cfg))
 	if err != nil {
 		logging.Errorf("Brick2 routing error: %v", err)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
@@ -187,10 +198,15 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, route.Model)
-	forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model, route.ComplexityLabel)
+	effortStr := ""
+	if cfg.SkillRouter.DynamicEffort {
+		level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
+		forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
+	}
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
 	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
+	recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
 
 	keyPrefix := apiKey
 	if len(keyPrefix) > 8 {
@@ -198,11 +214,14 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(headers.VSRSelectedModel, route.Model)
 	w.Header().Set("x-brick-route-reason", route.Reason)
+	if effortStr != "" {
+		w.Header().Set("x-brick-effort", effortStr)
+	}
 	if route.MatchedKeyword != "" {
 		w.Header().Set("x-brick-keyword-rule", route.MatchedKeyword)
 	}
-	logging.Infof("Brick2: routed to model=%s reason=%s complexity=%s confidence=%.3f tau=%.3f auth=%s",
-		route.Model, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, keyPrefix)
+	logging.Infof("Brick2: routed to model=%s reason=%s complexity=%s confidence=%.3f tau=%.3f effort=%s auth=%s",
+		route.Model, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, effortStr, keyPrefix)
 
 	s.forwardToBackend(w, r, regoloResult, "brick")
 }
@@ -256,11 +275,57 @@ func multimodalRoutingPlaceholder(m multimodal.Modality) string {
 	}
 }
 
+func brickFixedModelAllow(cfg *config.RouterConfig) map[string]bool {
+	if cfg == nil || cfg.Brick.ModelRoutingEnabled() {
+		return nil
+	}
+	model := cfg.Brick.EffectiveFixedModel(cfg.BackendModels.DefaultModel)
+	return map[string]bool{model: true}
+}
+
+func intersectAllow(a, b map[string]bool) map[string]bool {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	out := make(map[string]bool)
+	for model, ok := range a {
+		if ok && b[model] {
+			out[model] = true
+		}
+	}
+	return out
+}
+
+func recordBrickOpenAIRoute(cfg *config.RouterConfig, route *brickrouting.Result, selectedModel, effortStr string) {
+	if cfg == nil || route == nil || selectedModel == "" {
+		return
+	}
+	label := route.ComplexityLabel
+	if label == "" {
+		label = "medium"
+	}
+	metrics.BrickCCRequests.WithLabelValues(label, selectedModel).Inc()
+	if cfg.SkillRouter.DynamicEffort && effortStr != "" {
+		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
+		metrics.BrickCCRouting.WithLabelValues(label, effortStr, selectedModel).Inc()
+	}
+}
+
 func (s *Server) getBrickRouter(cfg *config.RouterConfig) (*brickrouting.Router, error) {
 	s.brickRouterOnce.Do(func() {
 		s.brickRouter, s.brickRouterErr = brickrouting.New(cfg)
 	})
 	return s.brickRouter, s.brickRouterErr
+}
+
+func extractOpenAIRoutingText(body []byte, cfg *config.RouterConfig) string {
+	if cfg != nil && cfg.Brick.ContextWindow.Enabled {
+		return extractOpenAIContextText(body, cfg.Brick.EffectiveContextWindowK())
+	}
+	return extractOpenAIText(body)
 }
 
 func extractOpenAIText(body []byte) string {
@@ -271,6 +336,81 @@ func extractOpenAIText(body []byte) string {
 		return ""
 	}
 	return multimodal.ExtractText(raw.Messages)
+}
+
+type openAIMessageForRouting struct {
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"`
+}
+
+func extractOpenAIContextText(body []byte, k int) string {
+	if k <= 0 {
+		k = 8
+	}
+	var raw struct {
+		Messages []openAIMessageForRouting `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+	if len(raw.Messages) == 0 {
+		return ""
+	}
+
+	start := 0
+	turns := 0
+	for i := len(raw.Messages) - 1; i >= 0; i-- {
+		role := strings.ToLower(strings.TrimSpace(raw.Messages[i].Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		start = i
+		if role == "user" {
+			turns++
+			if turns >= k {
+				break
+			}
+		}
+	}
+
+	parts := make([]string, 0, len(raw.Messages)-start)
+	for _, msg := range raw.Messages[start:] {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		text := strings.TrimSpace(openAIContentText(msg.Content))
+		if text == "" {
+			continue
+		}
+		parts = append(parts, role+": "+text)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func openAIContentText(content interface{}) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		parts := make([]string, 0, len(v))
+		for _, part := range v {
+			m, ok := part.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if text, ok := m["text"].(string); ok && strings.TrimSpace(text) != "" {
+				parts = append(parts, text)
+				continue
+			}
+			if text, ok := m["input_text"].(string); ok && strings.TrimSpace(text) != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
+	}
 }
 
 // buildRegoloForwardResultWithKey creates a RoutingResult using the client-provided API key.

@@ -13,6 +13,7 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
 
 // Server is the Brick HTTP proxy server.
@@ -51,6 +52,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/v1/routing/test", s.handleRoutingTest)
 	mux.HandleFunc("/api/v1/diag/classifier", s.handleDiagClassifier)
+	mux.HandleFunc("/api/v1/metrics/reset", s.handleMetricsReset) // clear brick_cc_* routing counters
 	// Also expose Prometheus metrics on the main proxy port so `brick claude status`
 	// can read routing stats without publishing the dedicated metrics port (9190).
 	mux.Handle("/metrics", promhttp.Handler())
@@ -96,6 +98,23 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// handleMetricsReset clears the Brick→Claude Code pass-through routing counters
+// (requests, effort, routing heatmap, classifier latency, fallback) so
+// `brick claude status` can show a fresh dashboard without restarting the
+// router. POST-only. Only the brick_cc_* metrics are cleared; all other
+// Prometheus series are left intact.
+func (s *Server) handleMetricsReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	metrics.ResetBrickCC()
+	logging.Infof("Brick: routing metrics reset via /api/v1/metrics/reset")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok","reset":"brick_cc"}`))
 }
 
 // handleModels returns the list of available models.
@@ -155,7 +174,7 @@ func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", err))
 		return
 	}
-	route, err := brickRouter.Route(r.Context(), extractOpenAIText(body))
+	route, err := brickRouter.RouteWithCandidates(r.Context(), extractOpenAIRoutingText(body, s.cfg), brickFixedModelAllow(s.cfg))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
 		return

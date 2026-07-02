@@ -13,7 +13,7 @@ import {
   type SettingsApplyResult,
   type ComputeMode,
 } from './settings-apply.js';
-import { banner, err, info, ok, warn } from '../ui/banners.js';
+import { err, info, ok, warn } from '../ui/banners.js';
 
 function reportRestart(res: SettingsApplyResult): void {
   if (res.routerWasRunning) {
@@ -29,7 +29,6 @@ export async function runContext(
   k: number,
   exit: (code: number) => never,
 ): Promise<void> {
-  banner();
   let profile: string;
   try {
     profile = resolveProfile();
@@ -57,7 +56,6 @@ export async function runSubagents(
   enabled: boolean,
   exit: (code: number) => never,
 ): Promise<void> {
-  banner();
   let profile: string;
   try {
     profile = resolveProfile();
@@ -86,7 +84,6 @@ export async function runModelRouting(
   fixedModel: string | undefined,
   exit: (code: number) => never,
 ): Promise<void> {
-  banner();
   let profile: string;
   try {
     profile = resolveProfile();
@@ -114,7 +111,6 @@ export async function runThinkingRouting(
   enabled: boolean,
   exit: (code: number) => never,
 ): Promise<void> {
-  banner();
   let profile: string;
   try {
     profile = resolveProfile();
@@ -143,7 +139,6 @@ export async function runCompute(
   api: { baseUrl: string; token: string } | undefined,
   exit: (code: number) => never,
 ): Promise<void> {
-  banner();
   let profile: string;
   try {
     profile = resolveProfile();

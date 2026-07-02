@@ -2,14 +2,21 @@ import { Command, Flags } from '@oclif/core';
 import { loadConfig } from '../../lib/config/load.js';
 import { readState } from '../../lib/config/paths.js';
 import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
-import { ensureDefaultCodexProfile, DEFAULT_CODEX_PROFILE } from '../../lib/codex/bootstrap.js';
-import { wireCodex, codexConfigPath } from '../../lib/codex/config-toml.js';
+import { ensureDefaultCodexProfile } from '../../lib/codex/bootstrap.js';
+import {
+  wireCodex,
+  codexConfigPath,
+  readCodexConfig,
+  isWired,
+  getTopLevelModel,
+  getTopLevelModelProvider,
+} from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class CodexOn extends Command {
   static description =
-    'Wire OpenAI Codex through the local Brick router (adds a brick model_provider/profile in ~/.codex/config.toml, wire_api=chat). Auto-starts the router if it is down.';
+    'Wire OpenAI Codex through the local Brick router (sets model/model_provider to brick and adds a managed provider in ~/.codex/config.toml). Auto-starts the router if it is down.';
 
   static examples = [
     '<%= config.bin %> codex on',
@@ -60,37 +67,48 @@ export default class CodexOn extends Command {
 
     const baseUrl = `http://localhost:${port}`;
 
-    // 2. Idempotent: already wired to the same URL → nothing to do.
+    // 2. Idempotent: already wired to the same URL and the TOML still points at Brick.
     const existing = readCodexWiring();
-    if (existing?.wired && existing.baseUrl === baseUrl) {
+    const codexConfig = readCodexConfig();
+    const configAlreadyWired =
+      isWired(codexConfig) &&
+      getTopLevelModel(codexConfig) === 'brick' &&
+      getTopLevelModelProvider(codexConfig) === 'brick';
+    if (existing?.wired && existing.baseUrl === baseUrl && configAlreadyWired) {
       ok(`already wired to ${baseUrl}`);
       print();
       this.printHint();
       return;
     }
 
-    // 3. Patch ~/.codex/config.toml. Back up the prior top-level profile only on
-    // the first `on`.
-    let result: { previousProfile: string | null; createdFile: boolean };
+    // 3. Patch ~/.codex/config.toml. Back up prior root keys only on the first `on`.
+    let result: {
+      previousModel: string | null;
+      previousModelProvider: string | null;
+      previousProfile: string | null;
+      createdFile: boolean;
+    };
     try {
       result = wireCodex(baseUrl);
     } catch (e: any) {
       err(e?.message ?? String(e));
       this.exit(1);
     }
+    const previousModel = existing?.wired ? existing.previousModel : result!.previousModel;
+    const previousModelProvider = existing?.wired ? existing.previousModelProvider : result!.previousModelProvider;
     const previousProfile = existing?.wired ? existing.previousProfile : result!.previousProfile;
     const createdFile = existing?.wired ? existing.createdFile : result!.createdFile;
 
-    writeCodexWiring({ wired: true, baseUrl, previousProfile, createdFile });
+    writeCodexWiring({ wired: true, baseUrl, previousModel, previousModelProvider, previousProfile, createdFile });
 
-    ok(`Codex wired to Brick → ${baseUrl} (provider+profile "brick", wire_api=chat)`);
+    ok(`Codex wired to Brick → ${baseUrl} (model_provider "brick", model "brick", wire_api=chat)`);
     info(`patched ${codexConfigPath()}`);
     print();
     this.printHint();
   }
 
   private printHint(): void {
-    print('Codex now defaults to the "brick" profile → the local Brick router routes among the OpenAI pool.');
+    print('Codex now defaults to the "brick" model provider → the local Brick router routes among the OpenAI pool.');
     print('Your OpenAI API key is forwarded verbatim to api.openai.com. Undo with `brick codex off`.');
     print('Check wiring with `brick codex status`.');
   }

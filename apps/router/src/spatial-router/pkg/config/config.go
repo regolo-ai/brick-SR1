@@ -1805,6 +1805,12 @@ type ModelParams struct {
 	// ImageGenBackend references a named entry in image_gen_backends (like reasoning_family references reasoning_families)
 	// Required when modality is "diffusion" — tells the router which provider config to use for image generation.
 	ImageGenBackend string `yaml:"image_gen_backend,omitempty"`
+
+	// AllowedThinkingModes restricts which reasoning effort values the router may inject at
+	// runtime for this model. Valid values: "off", "low", "medium", "high", "xhigh", "max".
+	// "off" disables all reasoning injection regardless of query difficulty.
+	// When nil or empty, no restriction applies (all effort levels are permitted).
+	AllowedThinkingModes []string `yaml:"allowed_thinking_modes,omitempty"`
 }
 
 // LoRAAdapter represents a LoRA adapter configuration for a model
@@ -2812,6 +2818,14 @@ type SkillRouterConfig struct {
 	// multimodal direct forwarding can remain in model_config without being
 	// listed here.
 	Models []SkillRouterModelConfig `yaml:"models,omitempty"`
+
+	// ActiveModels, when non-empty, restricts text-routing candidacy to this
+	// subset of Models: a model listed in Models but absent from ActiveModels is
+	// not a routing candidate (its skill_vector is excluded from the distance
+	// computation). Empty/nil means every configured model is a candidate
+	// (backward compatible). The multimodal passthrough path intersects this
+	// with the per-request modality allowlist.
+	ActiveModels []string `yaml:"active_models,omitempty"`
 
 	// KeywordRules are evaluated before vector scoring. They replace the
 	// legacy decision tree for Brick2 routing.

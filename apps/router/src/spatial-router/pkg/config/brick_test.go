@@ -29,6 +29,13 @@ func TestBrickConfigValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("text-only brick config passes without modality providers", func(t *testing.T) {
+		cfg := BrickConfig{Enabled: true}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() should pass for text-only brick config, got: %v", err)
+		}
+	})
+
 	missingFields := []struct {
 		name  string
 		setup func(*BrickConfig)
