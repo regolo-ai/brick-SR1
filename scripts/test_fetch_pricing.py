@@ -137,6 +137,77 @@ class TestBuildPricingRecords:
         assert len(records) == len(fp.KNOWN_MODELS)
 
 
+class TestSanityCheck:
+    def test_rejects_output_lower_than_input(self):
+        # output < input is never plausible, regardless of fallback ratio.
+        assert fp._passes_sanity_check(5.0, 1.0, 1.0, 5.0) is False
+
+    def test_rejects_value_more_than_3x_off_from_fallback(self):
+        # input 4x the fallback reference is well outside the tolerance band,
+        # even though output > input holds.
+        assert fp._passes_sanity_check(4.0, 20.0, 1.0, 5.0) is False
+
+    def test_accepts_small_plausible_price_change(self):
+        assert fp._passes_sanity_check(1.1, 5.2, 1.0, 5.0) is True
+
+    def test_misleading_version_number_falls_back_to_static(self):
+        # Reproduces the real bug: "Claude Haiku 4.5" followed by a
+        # multi-tier price table causes the naive extractor to grab the
+        # version number as the input price. The sanity check must catch
+        # this and force fallback_static instead of shipping bad numbers.
+        records = fp.build_pricing_records(
+            ANTHROPIC_FIXTURE_MISLEADING_VERSION_HTML, None, "2026-07-02T00:00:00Z"
+        )
+        haiku = next(r for r in records if r["model"] == "claude-haiku")
+        assert haiku["source"] == "fallback_static"
+        assert haiku["input_price"] == 1.0
+        assert haiku["output_price"] == 5.0
+
+    def test_plausible_price_change_is_accepted_as_fetched(self):
+        records = fp.build_pricing_records(
+            ANTHROPIC_FIXTURE_PLAUSIBLE_CHANGE_HTML, None, "2026-07-02T00:00:00Z"
+        )
+        haiku = next(r for r in records if r["model"] == "claude-haiku")
+        assert haiku["source"] == "fetched"
+        assert haiku["input_price"] == 1.20
+        assert haiku["output_price"] == 6.00
+
+
+class TestPerModelFailureIsolation:
+    def test_exception_in_extraction_falls_back_and_isolates_other_models(self):
+        original_extract = fp.extract_price_for_model
+
+        def flaky_extract(text, model_name, window=400):
+            if model_name == "claude-sonnet":
+                raise RuntimeError("boom")
+            return original_extract(text, model_name, window)
+
+        with patch("fetch_pricing.extract_price_for_model", side_effect=flaky_extract):
+            records = fp.build_pricing_records(
+                ANTHROPIC_FIXTURE_HTML, REGOLO_FIXTURE_HTML, "2026-07-02T00:00:00Z"
+            )
+
+        assert len(records) == len(fp.KNOWN_MODELS)
+
+        sonnet = next(r for r in records if r["model"] == "claude-sonnet")
+        assert sonnet["source"] == "fallback_static"
+        assert sonnet["input_price"] == 3.0
+        assert sonnet["output_price"] == 15.0
+
+        # Other models on the same page complete normally, unaffected by the
+        # failure on claude-sonnet.
+        haiku = next(r for r in records if r["model"] == "claude-haiku")
+        assert haiku["source"] == "fetched"
+        assert haiku["input_price"] == 1.0
+        assert haiku["output_price"] == 5.0
+
+        opus = next(r for r in records if r["model"] == "claude-opus")
+        assert opus["source"] == "fetched"
+
+        qwen = next(r for r in records if r["model"] == "qwen3.5-9b")
+        assert qwen["source"] == "fetched"
+
+
 class TestFetchPage:
     @patch("fetch_pricing.requests.get")
     def test_returns_text_on_success(self, mock_get):

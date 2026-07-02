@@ -183,24 +183,35 @@ def build_pricing_records(
     records = []
 
     for provider, model, fallback_in, fallback_out, currency, source_url in KNOWN_MODELS:
-        page_text = page_by_provider.get(provider)
-        extracted = extract_price_for_model(page_text, model)
+        try:
+            page_text = page_by_provider.get(provider)
+            extracted = extract_price_for_model(page_text, model)
 
-        if extracted is not None and _passes_sanity_check(extracted[0], extracted[1], fallback_in, fallback_out):
-            input_price, output_price = extracted
-            source = "fetched"
-        elif extracted is not None:
+            if extracted is not None and _passes_sanity_check(
+                extracted[0], extracted[1], fallback_in, fallback_out
+            ):
+                input_price, output_price = extracted
+                source = "fetched"
+            elif extracted is not None:
+                print(
+                    f"WARNING: extracted price for {provider}/{model} "
+                    f"({extracted[0]}/{extracted[1]}) looks implausible vs known reference "
+                    f"({fallback_in}/{fallback_out}); using static fallback price",
+                    file=sys.stderr,
+                )
+                input_price, output_price = fallback_in, fallback_out
+                source = "fallback_static"
+            else:
+                print(
+                    f"WARNING: could not extract price for {provider}/{model} from {source_url}; "
+                    "using static fallback price",
+                    file=sys.stderr,
+                )
+                input_price, output_price = fallback_in, fallback_out
+                source = "fallback_static"
+        except Exception as exc:  # noqa: BLE001 - a single model must never abort the run
             print(
-                f"WARNING: extracted price for {provider}/{model} "
-                f"({extracted[0]}/{extracted[1]}) looks implausible vs known reference "
-                f"({fallback_in}/{fallback_out}); using static fallback price",
-                file=sys.stderr,
-            )
-            input_price, output_price = fallback_in, fallback_out
-            source = "fallback_static"
-        else:
-            print(
-                f"WARNING: could not extract price for {provider}/{model} from {source_url}; "
+                f"WARNING: unexpected error processing {provider}/{model}: {exc!r}; "
                 "using static fallback price",
                 file=sys.stderr,
             )
