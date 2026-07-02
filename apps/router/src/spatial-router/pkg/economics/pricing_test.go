@@ -90,6 +90,24 @@ func TestLoadPricingTable_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadPricingTable_EmptyFile(t *testing.T) {
+	path := writeTestPricingFile(t, "")
+
+	_, err := LoadPricingTable(path)
+	if err == nil {
+		t.Fatal("expected error for empty pricing file, got nil")
+	}
+}
+
+func TestLoadPricingTable_NullYAMLContent(t *testing.T) {
+	path := writeTestPricingFile(t, "null\n")
+
+	_, err := LoadPricingTable(path)
+	if err == nil {
+		t.Fatal("expected error for pricing file containing YAML null, got nil")
+	}
+}
+
 func TestPricingTable_PriceNotFound(t *testing.T) {
 	path := writeTestPricingFile(t, testPricingYAML)
 	table, err := LoadPricingTable(path)

@@ -57,6 +57,10 @@ func LoadPricingTable(path string) (*PricingTable, error) {
 		return nil, fmt.Errorf("economics: failed to parse pricing file %q: %w", path, err)
 	}
 
+	if len(records) == 0 {
+		return nil, fmt.Errorf("economics: pricing file %q contains no price entries", path)
+	}
+
 	entries := make(map[string]PriceEntry, len(records))
 	for _, rec := range records {
 		entries[rec.Model] = rec
