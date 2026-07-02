@@ -7,13 +7,15 @@ import {
   nativeRowsByModel,
   difficultyDistribution,
   effortRowsForModel,
-  economy,
   totalRequests,
   classifierPercentiles,
   classifierMean,
   fallbackPct,
   formatLatency,
+  fetchEconomics,
+  unifyEconomy,
   type ParsedMetrics,
+  type EconomicsResponse,
 } from '../../lib/claude/metrics.js';
 import { Dashboard } from '../../lib/claude-tui/Dashboard.js';
 import { readWiring } from '../../lib/claude/wiring-state.js';
@@ -90,6 +92,7 @@ export default class ClaudeStatus extends Command {
     }
 
     const snap = await fetchSnapshot(baseUrl, displayUrl);
+    const econ = await fetchEconomics(baseUrl);
 
     this.log('');
     this.log(`${COLORS.bold}${COLORS.cyan}Connection${COLORS.reset}`);
@@ -145,13 +148,13 @@ export default class ClaudeStatus extends Command {
 
     this.log('');
     this.log(`${COLORS.bold}${COLORS.cyan}Routing since restart${COLORS.reset}`);
-    this.printRoutingStats(snap.metrics);
+    this.printRoutingStats(snap.metrics, econ);
 
     this.log('');
     this.log(`${COLORS.dim}Live dashboard: run brick claude status in an interactive terminal (or --once for this static view).${COLORS.reset}`);
   }
 
-  private printRoutingStats(m: ParsedMetrics): void {
+  private printRoutingStats(m: ParsedMetrics, econ: EconomicsResponse | null): void {
     const total = totalRequests(m);
     if (total === 0) {
       this.log(`  ${COLORS.dim}No /v1/messages requests served yet.${COLORS.reset}`);
@@ -205,15 +208,25 @@ export default class ClaudeStatus extends Command {
     const fallbackColor = pct > 5 ? COLORS.red : pct > 1 ? COLORS.yellow : COLORS.green;
     this.log(`  Fallback rate          ${fallbackColor}${pct.toFixed(1)}%${COLORS.reset} (${m.fallbackTotal} fallbacks)`);
 
-    const e = economy(m);
-    if (e.totalRoutedReqs > 0) {
+    const ue = unifyEconomy(econ, m);
+    const hasEconomyData = ue.source === 'real' || (ue.totalRoutedReqs ?? 0) > 0;
+    if (hasEconomyData) {
       this.log('');
       this.log(`${COLORS.bold}${COLORS.cyan}Economy${COLORS.reset}`);
-      const savedColor = e.savedPct > 50 ? COLORS.green : e.savedPct > 20 ? COLORS.yellow : COLORS.dim;
-      this.log(
-        `  ${savedColor}saved ~${e.savedPct.toFixed(0)}%${COLORS.reset} vs all-opus  ${COLORS.dim}(${e.totalRoutedReqs} routed reqs)${COLORS.reset}`
-      );
-      this.log(`  ${COLORS.dim}relative estimate from request mix; excludes real token counts & caching${COLORS.reset}`);
+      const savedColor = ue.savedPct > 50 ? COLORS.green : ue.savedPct > 20 ? COLORS.yellow : COLORS.dim;
+      if (ue.source === 'real') {
+        this.log(
+          `  ${savedColor}saved ~${ue.savedPct.toFixed(0)}%${COLORS.reset} vs all-${ue.mostExpensiveModel}  ${COLORS.dim}(real token counts)${COLORS.reset}`
+        );
+        this.log(
+          `  ${COLORS.dim}tokens: ${ue.totalInputTokens?.toLocaleString()} in / ${ue.totalOutputTokens?.toLocaleString()} out${COLORS.reset}`
+        );
+      } else {
+        this.log(
+          `  ${savedColor}saved ~${ue.savedPct.toFixed(0)}%${COLORS.reset} vs all-opus  ${COLORS.dim}(${ue.totalRoutedReqs} routed reqs)${COLORS.reset}`
+        );
+        this.log(`  ${COLORS.dim}relative estimate from request mix; excludes real token counts & caching${COLORS.reset}`);
+      }
     }
   }
 }

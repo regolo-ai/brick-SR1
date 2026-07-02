@@ -54,6 +54,36 @@ export async function fetchDiag(baseUrl: string): Promise<DiagClassifier | null>
   }
 }
 
+export type EconomicsModelStats = {
+  model: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_ratio_in: number;
+  cost_ratio_out: number;
+  estimated_cost_units: number;
+};
+
+export type EconomicsResponse = {
+  models: EconomicsModelStats[];
+  most_expensive_model: string;
+  actual_cost_units: number;
+  baseline_cost_units_all_expensive: number;
+  savings_pct: number;
+  pricing_available: boolean;
+  note?: string;
+};
+
+export async function fetchEconomics(baseUrl: string): Promise<EconomicsResponse | null> {
+  try {
+    const r = await fetch(`${baseUrl}/api/v1/economics`, { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return null;
+    return (await r.json()) as EconomicsResponse;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchMetrics(baseUrl: string): Promise<ParsedMetrics | null> {
   // The metrics endpoint is exposed on a separate port — try the same host on
   // the typical metrics ports first, then fall back to the proxy port itself.
@@ -400,6 +430,42 @@ export function economy(m: ParsedMetrics): Economy {
   const opusUnits = totalRoutedReqs * OPUS_BLENDED;
   const savedPct = opusUnits === 0 ? 0 : (1 - actualUnits / opusUnits) * 100;
   return { actualUnits, opusUnits, savedPct, totalRoutedReqs };
+}
+
+export type UnifiedEconomy = {
+  source: 'real' | 'estimate';
+  savedPct: number;
+  // Present only when source === 'real':
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  mostExpensiveModel?: string;
+  // Present only when source === 'estimate' (mirrors legacy Economy):
+  totalRoutedReqs?: number;
+};
+
+// Prefers real token-based savings from /api/v1/economics when the router
+// exposes it AND has actual data (pricing_available && at least one model
+// with non-zero estimated_cost_units contributing to the baseline).
+// Falls back to the legacy request-count estimate otherwise (older router,
+// endpoint unreachable, or no priced traffic yet).
+export function unifyEconomy(econ: EconomicsResponse | null, m: ParsedMetrics): UnifiedEconomy {
+  if (econ && econ.pricing_available && econ.baseline_cost_units_all_expensive > 0) {
+    const totalInputTokens = econ.models.reduce((sum, row) => sum + row.input_tokens, 0);
+    const totalOutputTokens = econ.models.reduce((sum, row) => sum + row.output_tokens, 0);
+    return {
+      source: 'real',
+      savedPct: econ.savings_pct,
+      totalInputTokens,
+      totalOutputTokens,
+      mostExpensiveModel: econ.most_expensive_model,
+    };
+  }
+  const legacy = economy(m);
+  return {
+    source: 'estimate',
+    savedPct: legacy.savedPct,
+    totalRoutedReqs: legacy.totalRoutedReqs,
+  };
 }
 
 export function classifierPercentiles(m: ParsedMetrics): { p50: number | null; p95: number | null } {
