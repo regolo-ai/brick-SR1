@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -30,6 +31,10 @@ type Server struct {
 	brickRouterErr  error
 
 	economicsStore *economics.Store
+	// pricingPath is where pricing.yaml lives, used by handleEconomics to
+	// load a PricingTable on demand. Derived from configPath's directory so
+	// it sits next to the router config by convention.
+	pricingPath string
 }
 
 // NewServer creates a new Brick proxy server.
@@ -39,6 +44,7 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
 		configPath:     configPath,
 		port:           port,
 		economicsStore: economics.NewStore(),
+		pricingPath:    filepath.Join(filepath.Dir(configPath), "pricing.yaml"),
 	}
 }
 
@@ -62,6 +68,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/v1/routing/test", s.handleRoutingTest)
 	mux.HandleFunc("/api/v1/diag/classifier", s.handleDiagClassifier)
 	mux.HandleFunc("/api/v1/metrics/reset", s.handleMetricsReset) // clear brick_cc_* routing counters
+	mux.HandleFunc("/api/v1/economics", s.handleEconomics)        // token usage + real savings vs. all-expensive baseline
 	// Also expose Prometheus metrics on the main proxy port so `brick claude status`
 	// can read routing stats without publishing the dedicated metrics port (9190).
 	mux.Handle("/metrics", promhttp.Handler())
