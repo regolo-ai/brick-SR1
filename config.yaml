@@ -86,15 +86,17 @@ reasoning_families:
 default_reasoning_effort: "medium"
 
 # ─── Brick2 Complexity Service ───────────────────────────────
-# Fine-tuned Qwen3.5-0.8B classifier. Brick2 defaults to
-# regolo/brick-complexity-2-eco; this HTTP endpoint exposes:
-# POST /classify {"text":"..."} -> {"label":"easy|medium|hard","confidence":0..1}
+# Served remotely via Regolo's OpenAI-compatible API (model brick-complexity-pro).
+# POST /v1/chat/completions with the classifier SYSTEM_PROMPT + query; label
+# read from the completion text, confidence derived from token logprobs.
 complexity_service:
   enabled: true
-  base_url: "http://127.0.0.1:8094"
-  bearer_token_file: "/root/.brick_classifier_token"
+  base_url: "https://api.regolo.ai"
+  protocol: "openai"
+  model_name: "brick-complexity-pro"
+  bearer_token_file: "/root/.regolo_api_key"
   timeout_seconds: 8       # GPU + tunnel <500ms tipico, margine generoso
-  auto_spawn: false        # set true for local Python sidecar
+  auto_spawn: false        # remote endpoint; never spawn a local sidecar
 
 # ─── Anthropic Pass-through (Claude Code → Brick → api.anthropic.com) ───
 # Esposto come endpoint POST /v1/messages. Brick classifica difficoltà del
@@ -153,10 +155,12 @@ skill_router:
     use_cpu: true
 
   complexity_model:
-    model_id: "regolo/brick-complexity-2-eco"
+    model_id: "regolo/brick-complexity-pro"
     base_model_id: "Qwen/Qwen3.5-0.8B"
-    base_url: "http://127.0.0.1:8094"
-    bearer_token_file: "/root/.brick_classifier_token"
+    base_url: "https://api.regolo.ai"
+    protocol: "openai"
+    model_name: "brick-complexity-pro"
+    bearer_token_file: "/root/.regolo_api_key"
     timeout_seconds: 8
     auto_spawn: false
 
