@@ -35,16 +35,35 @@ type Server struct {
 	// load a PricingTable on demand. Derived from configPath's directory so
 	// it sits next to the router config by convention.
 	pricingPath string
+	// economicsSnapshotPath is where the economics.Store's usage counters are
+	// periodically persisted, so `brick claude status`'s real-savings figure
+	// survives a router restart instead of resetting to zero. Sits next to
+	// the router config by the same convention as pricingPath.
+	economicsSnapshotPath string
 }
 
-// NewServer creates a new Brick proxy server.
+// economicsSnapshotInterval is how often the economics store is flushed to
+// disk while the server is running, in addition to the flush performed on
+// graceful shutdown.
+const economicsSnapshotInterval = 30 * time.Second
+
+// NewServer creates a new Brick proxy server. If a prior economics snapshot
+// exists on disk (economics_snapshot.json next to configPath), it is loaded
+// so token-usage counters survive a restart instead of resetting to zero; a
+// missing file is not an error (fresh install / first run).
 func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
+	store := economics.NewStore()
+	snapshotPath := filepath.Join(filepath.Dir(configPath), "economics_snapshot.json")
+	if err := store.LoadSnapshot(snapshotPath); err != nil {
+		logging.Warnf("Economics: failed to load prior usage snapshot from %s: %v", snapshotPath, err)
+	}
 	return &Server{
-		cfg:            cfg,
-		configPath:     configPath,
-		port:           port,
-		economicsStore: economics.NewStore(),
-		pricingPath:    filepath.Join(filepath.Dir(configPath), "pricing.yaml"),
+		cfg:                   cfg,
+		configPath:            configPath,
+		port:                  port,
+		economicsStore:        store,
+		pricingPath:           filepath.Join(filepath.Dir(configPath), "pricing.yaml"),
+		economicsSnapshotPath: snapshotPath,
 	}
 }
 
@@ -97,15 +116,43 @@ func (s *Server) Start(ctx context.Context) error {
 		close(errCh)
 	}()
 
+	// Periodically flush economics usage counters to disk so the real-savings
+	// figure survives a restart. Stopped when the server context is cancelled.
+	snapshotTicker := time.NewTicker(economicsSnapshotInterval)
+	defer snapshotTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-snapshotTicker.C:
+				s.saveEconomicsSnapshot()
+			}
+		}
+	}()
+
 	// Wait for context cancellation or server error
 	select {
 	case err := <-errCh:
 		return fmt.Errorf("server error: %w", err)
 	case <-ctx.Done():
 		logging.Infof("Shutting down proxy server...")
+		// Final flush so no usage accumulated since the last tick is lost.
+		s.saveEconomicsSnapshot()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return s.httpServer.Shutdown(shutdownCtx)
+	}
+}
+
+// saveEconomicsSnapshot persists the economics usage counters to disk,
+// logging (but not failing) on error. Safe to call with a nil store.
+func (s *Server) saveEconomicsSnapshot() {
+	if s.economicsStore == nil || s.economicsSnapshotPath == "" {
+		return
+	}
+	if err := s.economicsStore.SaveSnapshot(s.economicsSnapshotPath); err != nil {
+		logging.Warnf("Economics: failed to save usage snapshot to %s: %v", s.economicsSnapshotPath, err)
 	}
 }
 

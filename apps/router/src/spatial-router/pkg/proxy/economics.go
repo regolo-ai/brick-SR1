@@ -63,9 +63,37 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 	// ratios and the all-expensive baseline are only meaningful within this
 	// pool, since models with unknown price would otherwise break the max()
 	// used by CostRatioIn/CostRatioOut.
+	//
+	// Multiple provider pools (e.g. Regolo in EUR alongside the Anthropic
+	// passthrough in USD) can be active on the same router and share this
+	// one economicsStore. Comparing costs across currencies with a single
+	// max()/ratio would be numerically meaningless (a mixed EUR/USD "most
+	// expensive" has no real meaning), so the pool is further restricted to
+	// whichever currency has the most OBSERVED, priced traffic — i.e. the
+	// one actually in active use — and models in any other currency are
+	// reported with token counts only (same as "unpriced"), never mixed
+	// into the cost computation.
+	pricedByModel := make(map[string]economics.PriceEntry, len(snap))
+	requestsByCurrency := make(map[string]int64)
+	for _, u := range snap {
+		if entry, ok := table.Price(u.Model); ok {
+			pricedByModel[u.Model] = entry
+			requestsByCurrency[entry.Currency] += u.Requests
+		}
+	}
+
+	dominantCurrency := ""
+	var dominantRequests int64 = -1
+	for currency, reqs := range requestsByCurrency {
+		if reqs > dominantRequests {
+			dominantCurrency = currency
+			dominantRequests = reqs
+		}
+	}
+
 	var pool []string
 	for _, u := range snap {
-		if _, ok := table.Price(u.Model); ok {
+		if entry, ok := pricedByModel[u.Model]; ok && entry.Currency == dominantCurrency {
 			pool = append(pool, u.Model)
 		}
 	}
@@ -126,6 +154,12 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 		savingsPct = (1 - actualCostUnits/baselineCostUnits) * 100
 	}
 
+	note := ""
+	if len(requestsByCurrency) > 1 {
+		note = "multiple pricing currencies observed (" + dominantCurrency +
+			" chosen by traffic volume); models priced in other currencies are shown with token counts only"
+	}
+
 	writeJSON(w, http.StatusOK, economicsResponse{
 		Models:             models,
 		MostExpensiveModel: mostExpensive,
@@ -133,6 +167,7 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 		BaselineCostUnits:  baselineCostUnits,
 		SavingsPct:         savingsPct,
 		PricingAvailable:   true,
+		Note:               note,
 	})
 }
 

@@ -238,3 +238,96 @@ func TestHandleEconomicsNilStore(t *testing.T) {
 		t.Fatalf("expected no models, got %+v", resp.Models)
 	}
 }
+
+// TestHandleEconomicsMixedCurrencyRestrictsPoolToDominant verifies that when
+// two provider pools with different currencies are both observed (e.g.
+// Anthropic passthrough in USD alongside a Regolo pool in EUR sharing one
+// economicsStore), the cost-ratio pool is restricted to whichever currency
+// has the most observed, priced requests, and models priced in the other
+// currency are still listed (full traffic visibility) with zeroed cost
+// fields rather than being silently dropped or mixed into a meaningless
+// cross-currency ratio.
+func TestHandleEconomicsMixedCurrencyRestrictsPoolToDominant(t *testing.T) {
+	pricingYAML := `
+- provider: test
+  model: usd-cheap
+  input_price: 1
+  output_price: 5
+  currency: USD
+- provider: test
+  model: usd-expensive
+  input_price: 5
+  output_price: 25
+  currency: USD
+- provider: test
+  model: eur-model
+  input_price: 1
+  output_price: 4
+  currency: EUR
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pricing.yaml")
+	if err := writeFile(path, pricingYAML); err != nil {
+		t.Fatalf("failed to write test pricing file: %v", err)
+	}
+
+	store := economics.NewStore()
+	// USD side has more requests, so USD must be the dominant currency.
+	store.RecordUsage("usd-cheap", 1000, 1000)
+	store.RecordUsage("usd-expensive", 100, 100)
+	// EUR side is priced but has fewer requests; it must be excluded from
+	// the cost-ratio pool entirely, not mixed into a USD/EUR ratio.
+	store.RecordUsage("eur-model", 500, 500)
+
+	srv := &Server{economicsStore: store, pricingPath: path}
+
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet, "/api/v1/economics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeEconomicsResponse(t, rec)
+	if len(resp.Models) != 3 {
+		t.Fatalf("expected 3 model rows (all observed models, regardless of currency), got %d: %+v", len(resp.Models), resp.Models)
+	}
+
+	byModel := make(map[string]economicsModelStats, len(resp.Models))
+	for _, m := range resp.Models {
+		byModel[m.Model] = m
+	}
+
+	usdExpensive, ok := byModel["usd-expensive"]
+	if !ok {
+		t.Fatalf("missing usd-expensive row in %+v", resp.Models)
+	}
+	if usdExpensive.CostRatioIn != 1.0 {
+		t.Errorf("expected usd-expensive to be the dominant-currency pool's most expensive model, got ratio_in=%v", usdExpensive.CostRatioIn)
+	}
+
+	eurModel, ok := byModel["eur-model"]
+	if !ok {
+		t.Fatalf("missing eur-model row in %+v", resp.Models)
+	}
+	if eurModel.InputTokens != 500 || eurModel.OutputTokens != 500 {
+		t.Fatalf("eur-model token sums wrong (must still be visible even though excluded from cost pool): %+v", eurModel)
+	}
+	if eurModel.CostRatioIn != 0 || eurModel.CostRatioOut != 0 || eurModel.EstimatedCostUnits != 0 {
+		t.Errorf("expected eur-model to be excluded from the dominant (USD) cost pool with zeroed cost fields: %+v", eurModel)
+	}
+
+	if resp.MostExpensiveModel != "usd-expensive" {
+		t.Errorf("expected most_expensive_model=usd-expensive, got %q", resp.MostExpensiveModel)
+	}
+
+	// Baseline/actual must only reflect the USD pool (1000+1000 + 100+100 =
+	// 2200), never including the EUR-priced model's tokens.
+	if !approxEqual(resp.BaselineCostUnits, 2200.0, 1e-6) {
+		t.Errorf("baseline_cost_units should exclude the non-dominant-currency model, got %v want 2200", resp.BaselineCostUnits)
+	}
+
+	if resp.Note == "" {
+		t.Error("expected a non-empty note explaining the mixed-currency restriction")
+	}
+}
+

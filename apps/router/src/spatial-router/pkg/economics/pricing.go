@@ -21,6 +21,7 @@ package economics
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"gopkg.in/yaml.v3"
@@ -72,9 +73,36 @@ func LoadPricingTable(path string) (*PricingTable, error) {
 }
 
 // Price returns the PriceEntry for a model, and whether it was found.
+//
+// Lookup order: exact match first. If the exact name isn't in the table
+// (e.g. the router recorded a versioned ID like "claude-haiku-4-5" while
+// pricing.yaml only has the unversioned "claude-haiku"), fall back to the
+// longest pricing-table key that is a case-insensitive prefix of the
+// requested model name. This mirrors the CLI's existing prefix-match
+// pricing lookup (apps/cli/src/lib/claude/pricing.ts) so a model-ID version
+// bump does not silently drop out of cost tracking until pricing.yaml is
+// manually updated with the new exact ID. The longest matching prefix wins
+// so a more specific entry (if one is ever added) takes priority over a
+// shorter, more generic one.
 func (t *PricingTable) Price(model string) (PriceEntry, bool) {
-	entry, ok := t.entries[model]
-	return entry, ok
+	if entry, ok := t.entries[model]; ok {
+		return entry, true
+	}
+
+	lowerModel := strings.ToLower(model)
+	var best PriceEntry
+	bestLen := -1
+	for key, entry := range t.entries {
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerModel, lowerKey) && len(lowerKey) > bestLen {
+			best = entry
+			bestLen = len(lowerKey)
+		}
+	}
+	if bestLen >= 0 {
+		return best, true
+	}
+	return PriceEntry{}, false
 }
 
 // CostRatioIn returns most-expensive-input-price-in-pool / this model's
@@ -98,7 +126,7 @@ func (t *PricingTable) costRatio(model string, pool []string, priceOf func(Price
 		return 0, fmt.Errorf("economics: cannot compute %s cost ratio for %q: pool is empty", priceKind, model)
 	}
 
-	modelEntry, ok := t.entries[model]
+	modelEntry, ok := t.Price(model)
 	if !ok {
 		return 0, fmt.Errorf("economics: cannot compute %s cost ratio: model %q not found in pricing table", priceKind, model)
 	}
@@ -111,7 +139,7 @@ func (t *PricingTable) costRatio(model string, pool []string, priceOf func(Price
 	var maxPrice float64
 	seenMax := false
 	for _, poolModel := range pool {
-		entry, ok := t.entries[poolModel]
+		entry, ok := t.Price(poolModel)
 		if !ok {
 			return 0, fmt.Errorf("economics: cannot compute %s cost ratio: pool member %q not found in pricing table", priceKind, poolModel)
 		}
