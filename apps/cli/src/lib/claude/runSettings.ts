@@ -2,7 +2,8 @@
 // runMode.ts. Keeps profile resolution, apply, restart reporting, and wiring
 // persistence in one place so the leaf commands and the interactive menu agree.
 
-import { resolveProfile } from '../config/paths.js';
+import { paths, resolveProfile } from '../config/paths.js';
+import { upsertEnvValues } from '../config/env-file.js';
 import { readWiring, writeWiring } from './wiring-state.js';
 import {
   applyContextAwareness,
@@ -10,6 +11,8 @@ import {
   applySubagentRouting,
   applyModelRouting,
   applyThinkingRouting,
+  REGOLO_API_KEY_ENV,
+  REGOLO_CLASSIFIER_MODEL,
   type SettingsApplyResult,
   type ComputeMode,
 } from './settings-apply.js';
@@ -136,7 +139,7 @@ export async function runThinkingRouting(
 
 export async function runCompute(
   mode: ComputeMode,
-  api: { baseUrl: string; token: string } | undefined,
+  api: { baseUrl?: string; token?: string; model?: string } | undefined,
   exit: (code: number) => never,
 ): Promise<void> {
   let profile: string;
@@ -147,11 +150,18 @@ export async function runCompute(
     exit(1);
   }
   try {
+    // For api mode, persist the Regolo API key to the profile .env so the
+    // router expands ${REGOLO_API_KEY} at startup; the YAML only ever holds
+    // the env reference, never the literal key.
+    if (mode === 'api' && api?.token) {
+      const pp = paths(profile);
+      await upsertEnvValues(pp.env, { [REGOLO_API_KEY_ENV]: api.token });
+    }
     const res = await applyCompute(profile, mode, api);
     ok(
       mode === 'local'
         ? `classifier compute set to LOCAL for profile '${profile}'.`
-        : `classifier compute set to API (${api?.baseUrl}) for profile '${profile}'.`,
+        : `classifier compute set to API (Regolo ${REGOLO_CLASSIFIER_MODEL}) for profile '${profile}'.`,
     );
     reportRestart(res);
     const w = readWiring();

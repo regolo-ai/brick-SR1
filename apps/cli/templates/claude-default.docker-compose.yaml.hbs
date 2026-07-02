@@ -33,7 +33,14 @@ services:
         condition: service_healthy
 {{/if}}
     environment:
+{{#if useLocalClassifier}}
       BRICK_CLASSIFIER_TOKEN: ${BRICK_CLASSIFIER_TOKEN:?missing — re-run brick claude on}
+{{else}}
+      # Hosted Regolo complexity classifier: the router expands ${REGOLO_API_KEY}
+      # from this env when reading config.yaml. Empty is tolerated (routing
+      # falls back to "medium" until a key is set via brick claude settings).
+      REGOLO_API_KEY: ${REGOLO_API_KEY:-}
+{{/if}}
     ports:
       - "{{port}}:8000"
     volumes:

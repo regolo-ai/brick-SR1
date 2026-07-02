@@ -12,6 +12,7 @@ import {
   getTopLevelModelProvider,
 } from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
+import { ensureRegoloClassifierKey } from '../../lib/config/regolo-key.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class CodexOn extends Command {
@@ -33,6 +34,13 @@ export default class CodexOn extends Command {
 
     // Materialize the dedicated Codex profile (OpenAI pool skill router) if absent.
     const profile = await ensureDefaultCodexProfile();
+
+    // Hosted Regolo classifier (default): ensure a Regolo API key before start.
+    await ensureRegoloClassifierKey(
+      profile,
+      'This Codex profile uses the hosted Regolo complexity classifier (brick-complexity-pro).',
+    );
+
     const cfg = await loadConfig(profile);
     const port = cfg.server_port;
 

@@ -7,6 +7,7 @@ import { readCodexWiring } from '../../../lib/codex/wiring-state.js';
 import {
   DEFAULT_CONTEXT_K,
   LOCAL_DISCLAIMER,
+  REGOLO_API_KEY_HELP,
   saveCodexConfigAndRestart,
   type SettingsApplyResult,
 } from '../../../lib/codex/settings-apply.js';
@@ -121,8 +122,8 @@ export default class CodexSettings extends Command {
         const cm = await p.select({
           message: 'Classifier compute',
           options: [
-            { value: 'local', label: 'Local (auto-spawned server)' },
-            { value: 'api', label: 'API (remote endpoint)' },
+            { value: 'api', label: 'API (hosted Regolo classifier)', hint: 'just paste your Regolo API key' },
+            { value: 'local', label: 'Local (auto-spawned server)', hint: 'self-hosted, needs a GPU/CPU budget' },
           ],
         });
         if (p.isCancel(cm)) continue;
@@ -130,15 +131,10 @@ export default class CodexSettings extends Command {
           p.note(LOCAL_DISCLAIMER, 'Local inference');
           await runCodexCompute('local', undefined, (c) => process.exit(c));
         } else {
-          const baseUrl = await p.text({
-            message: 'Classifier base URL',
-            placeholder: 'https://host:port',
-            validate: (v) => (v && /^https?:\/\//.test(v) ? undefined : 'enter an http(s) URL'),
-          });
-          if (p.isCancel(baseUrl)) continue;
-          const token = await p.password({ message: 'Bearer token (leave blank if none)' });
+          p.note(REGOLO_API_KEY_HELP, 'Regolo API key');
+          const token = await p.password({ message: 'Regolo API key' });
           if (p.isCancel(token)) continue;
-          await runCodexCompute('api', { baseUrl: String(baseUrl), token: String(token ?? '') }, (c) => process.exit(c));
+          await runCodexCompute('api', { token: String(token ?? '') }, (c) => process.exit(c));
         }
       } else if (section === 'modelrouting') {
         const onoff = await p.select({

@@ -5,6 +5,7 @@ import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
 import { ensureDefaultProfile } from '../../lib/claude/bootstrap.js';
 import { getBaseUrl, setBaseUrl, settingsPath, hasBrickModelOption } from '../../lib/claude/settings.js';
 import { readWiring, writeWiring } from '../../lib/claude/wiring-state.js';
+import { ensureRegoloClassifierKey } from '../../lib/config/regolo-key.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class ClaudeOn extends Command {
@@ -25,18 +26,29 @@ export default class ClaudeOn extends Command {
     banner();
 
     let profile: string;
+    let justCreated = false;
     try {
       profile = resolveProfile();
     } catch (e: any) {
       if (listProfiles().length === 0) {
         // Brand-new user: materialize a ready-to-serve default Claude profile.
         profile = await ensureDefaultProfile();
+        justCreated = true;
         ok(`created default Claude profile '${profile}'`);
       } else {
         err(e?.message ?? String(e));
         this.exit(1);
       }
     }
+
+    // Fresh default profile ships with the hosted Regolo classifier: make sure
+    // we have a Regolo API key before starting the router. Prompts for it on
+    // first run (with a signup link) unless the classifier is local or a key
+    // is already present.
+    await ensureRegoloClassifierKey(
+      profile!,
+      justCreated ? 'This profile uses the hosted Regolo complexity classifier (brick-complexity-pro).' : undefined,
+    );
 
     const cfg = await loadConfig(profile);
     const port = cfg.server_port;

@@ -7,7 +7,7 @@ import { saveConfigText } from '../../../lib/config/save.js';
 import { readWiring } from '../../../lib/claude/wiring-state.js';
 import { runContext, runCompute, runSubagents, runModelRouting, runThinkingRouting } from '../../../lib/claude/runSettings.js';
 import { runModelsPoolWizard } from '../../../lib/wizard/steps/models-pool.js';
-import { LOCAL_DISCLAIMER, DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
+import { LOCAL_DISCLAIMER, REGOLO_API_KEY_HELP, DEFAULT_CONTEXT_K } from '../../../lib/claude/settings-apply.js';
 import { banner, err } from '../../../lib/ui/banners.js';
 import { ConfigSchema, type BrickConfig } from '../../../lib/config/schema.js';
 
@@ -114,25 +114,20 @@ export default class ClaudeSettings extends Command {
         const cm = await p.select({
           message: 'Classifier compute',
           options: [
-            { value: 'local', label: 'Local (auto-spawned server)' },
-            { value: 'api', label: 'API (remote endpoint)' },
+            { value: 'api', label: 'API (hosted Regolo classifier)', hint: 'just paste your Regolo API key' },
+            { value: 'local', label: 'Local (auto-spawned server)', hint: 'self-hosted, needs a GPU/CPU budget' },
           ],
-          initialValue: computeLabel === 'api' ? 'api' : 'local',
+          initialValue: computeLabel === 'local' ? 'local' : 'api',
         });
         if (p.isCancel(cm)) continue;
         if (cm === 'local') {
           p.note(LOCAL_DISCLAIMER, 'Local inference');
           await runCompute('local', undefined, (c) => process.exit(c));
         } else {
-          const baseUrl = await p.text({
-            message: 'Classifier base URL',
-            placeholder: 'https://host:port',
-            validate: (v) => (v && /^https?:\/\//.test(v) ? undefined : 'enter an http(s) URL'),
-          });
-          if (p.isCancel(baseUrl)) continue;
-          const token = await p.password({ message: 'Bearer token (leave blank if none)' });
+          p.note(REGOLO_API_KEY_HELP, 'Regolo API key');
+          const token = await p.password({ message: 'Regolo API key' });
           if (p.isCancel(token)) continue;
-          await runCompute('api', { baseUrl: String(baseUrl), token: String(token ?? '') }, (c) => process.exit(c));
+          await runCompute('api', { token: String(token ?? '') }, (c) => process.exit(c));
         }
       } else if (section === 'subagents') {
         const onoff = await p.select({

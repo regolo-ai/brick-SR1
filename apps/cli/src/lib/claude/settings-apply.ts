@@ -17,11 +17,31 @@ export const DEFAULT_CONTEXT_K = 8;
 /** Local classifier endpoint (auto-spawned server.py). */
 export const LOCAL_CLASSIFIER_URL = 'http://127.0.0.1:8094';
 
+/**
+ * Hosted classifier defaults: the "api" compute mode points at Regolo's
+ * OpenAI-compatible endpoint running brick-complexity-pro, so a user who does
+ * not want to self-host only needs to supply their Regolo API key. The base
+ * URL and model are fixed (not prompted) — a custom third-party endpoint is a
+ * separate, advanced path.
+ */
+export const REGOLO_CLASSIFIER_URL = 'https://api.regolo.ai';
+export const REGOLO_CLASSIFIER_MODEL = 'brick-complexity-pro';
+/** Env var the router expands for the Regolo classifier bearer token. */
+export const REGOLO_API_KEY_ENV = 'REGOLO_API_KEY';
+/** Where a user creates a Regolo account and gets an API key. */
+export const REGOLO_SIGNUP_URL = 'https://regolo.ai/signup';
+
 /** Shown before switching to local compute. No em dashes (house style). */
 export const LOCAL_DISCLAIMER =
   'Local classifier inference runs Qwen3.5-0.8B (about 1.6GB VRAM on GPU).\n' +
   'Recommended only on a reasonably performant machine. On CPU it works but\n' +
   'adds roughly 1 to 5 seconds to every routing decision.';
+
+/** Shown before asking for the Regolo API key in api compute mode. */
+export const REGOLO_API_KEY_HELP =
+  'The hosted classifier uses Regolo (brick-complexity-pro).\n' +
+  'No API key yet? Create one in a minute at ' + REGOLO_SIGNUP_URL + '\n' +
+  'then paste it here. It is saved to the profile .env, never in the YAML.';
 
 export type ComputeMode = 'local' | 'api';
 
@@ -165,27 +185,22 @@ export async function applyThinkingRouting(
 }
 
 /**
- * Switch the classifier compute location. 'local' points at the auto-spawned
- * server.py; 'api' points at a user-supplied remote endpoint with a bearer token.
- * Mirrors the change onto skill_router.complexity_model when present, because the
- * Go router consults that base_url first (newComplexityClient).
+ * Pure transform: mutate a parsed config object's complexity_service (and
+ * skill_router.complexity_model, when present) for the given compute mode.
+ * Extracted from applyCompute so it can be unit-tested without filesystem or
+ * docker I/O. 'local' points at the auto-spawned server.py; 'api' points at
+ * the hosted Regolo classifier (base_url/model overridable for an advanced
+ * custom endpoint), storing the bearer token as an env reference
+ * (${REGOLO_API_KEY}) so the literal key never lands in the YAML.
  */
-export async function applyCompute(
-  profile: string,
+export function applyComputeToConfig(
+  obj: any,
   mode: ComputeMode,
-  api?: { baseUrl: string; token: string; protocol?: 'brick' | 'openai' }
-): Promise<SettingsApplyResult> {
-  if (mode === 'api' && (!api || !api.baseUrl)) {
-    throw new SettingsError('api compute requires a base_url (and usually a bearer token)');
-  }
-  const obj = loadObj(await loadConfigText(profile), profile);
-
-  // Snapshot the blocks we touch so a re-selection of the already-active mode is
-  // a no-op: no rewrite, no router restart ("if nothing changed, close it").
-  const before = JSON.stringify([
-    obj.complexity_service ?? null,
-    obj.skill_router?.complexity_model ?? null,
-  ]);
+  api?: { baseUrl?: string; model?: string; protocol?: 'brick' | 'openai' }
+): void {
+  const apiBaseUrl = api?.baseUrl || REGOLO_CLASSIFIER_URL;
+  const apiModel = api?.model || REGOLO_CLASSIFIER_MODEL;
+  const apiBearer = '${' + REGOLO_API_KEY_ENV + '}';
 
   const cs = (obj.complexity_service && typeof obj.complexity_service === 'object')
     ? obj.complexity_service
@@ -194,11 +209,14 @@ export async function applyCompute(
   if (mode === 'local') {
     cs.base_url = LOCAL_CLASSIFIER_URL;
     cs.auto_spawn = true;
+    delete cs.protocol;
+    delete cs.model_name;
     delete cs.bearer_token;
   } else {
-    cs.base_url = api!.baseUrl;
-    cs.bearer_token = api!.token;
-    cs.protocol = api!.protocol ?? 'openai';
+    cs.base_url = apiBaseUrl;
+    cs.protocol = api?.protocol ?? 'openai';
+    cs.model_name = apiModel;
+    cs.bearer_token = apiBearer;
     cs.auto_spawn = false;
   }
   obj.complexity_service = cs;
@@ -208,9 +226,39 @@ export async function applyCompute(
   const cm = obj.skill_router?.complexity_model;
   if (cm && typeof cm === 'object') {
     cm.base_url = cs.base_url;
-    if (mode === 'api') cm.bearer_token = api!.token;
-    else delete cm.bearer_token;
+    if (mode === 'api') {
+      cm.protocol = cs.protocol;
+      cm.model_name = apiModel;
+      cm.bearer_token = apiBearer;
+    } else {
+      delete cm.protocol;
+      delete cm.model_name;
+      delete cm.bearer_token;
+    }
   }
+}
+
+/**
+ * Switch the classifier compute location. 'local' points at the auto-spawned
+ * server.py; 'api' points at the hosted Regolo classifier (or a custom endpoint
+ * when overridden). Mirrors the change onto skill_router.complexity_model when
+ * present, because the Go router consults that base_url first.
+ */
+export async function applyCompute(
+  profile: string,
+  mode: ComputeMode,
+  api?: { baseUrl?: string; token?: string; model?: string; protocol?: 'brick' | 'openai' }
+): Promise<SettingsApplyResult> {
+  const obj = loadObj(await loadConfigText(profile), profile);
+
+  // Snapshot the blocks we touch so a re-selection of the already-active mode is
+  // a no-op: no rewrite, no router restart ("if nothing changed, close it").
+  const before = JSON.stringify([
+    obj.complexity_service ?? null,
+    obj.skill_router?.complexity_model ?? null,
+  ]);
+
+  applyComputeToConfig(obj, mode, api);
 
   const after = JSON.stringify([
     obj.complexity_service ?? null,

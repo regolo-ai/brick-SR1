@@ -41,11 +41,16 @@ model_config:
   claude-sonnet-4-6: { preferred_endpoints: ["regolo"], param_size: "1b" }
   claude-opus-4-8: { preferred_endpoints: ["regolo"], param_size: "1b" }
 
-# Complexity classifier: reaches the classifier sidecar via Docker Compose service DNS.
+# Complexity classifier: hosted on Regolo's OpenAI-compatible API by default
+# (model brick-complexity-pro). No local GPU/sidecar needed; the router expands
+# ${REGOLO_API_KEY} from the profile .env. Switch to a self-hosted local
+# classifier any time with: brick claude settings compute local
 complexity_service:
   enabled: true
-  base_url: http://classifier:8094
-  bearer_token: "${BRICK_CLASSIFIER_TOKEN}"
+  base_url: https://api.regolo.ai
+  protocol: openai
+  model_name: brick-complexity-pro
+  bearer_token: "${REGOLO_API_KEY}"
   timeout_seconds: 8
   auto_spawn: false
 
@@ -61,8 +66,12 @@ skill_router:
     labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
     use_cpu: true
   complexity_model:
-    model_id: regolo/brick-complexity-2-eco
+    model_id: regolo/brick-complexity-pro
     base_model_id: Qwen/Qwen3.5-0.8B
+    base_url: https://api.regolo.ai
+    protocol: openai
+    model_name: brick-complexity-pro
+    bearer_token: "${REGOLO_API_KEY}"
     timeout_seconds: 8
     auto_spawn: false
   math:

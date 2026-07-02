@@ -1,5 +1,7 @@
 import { ensureDefaultCodexProfile } from './bootstrap.js';
 import { readCodexWiring, writeCodexWiring } from './wiring-state.js';
+import { paths } from '../config/paths.js';
+import { upsertEnvValues } from '../config/env-file.js';
 import {
   applyCodexContextAwareness,
   applyCodexModelRouting,
@@ -8,6 +10,7 @@ import {
   type SettingsApplyResult,
   type ComputeMode,
 } from './settings-apply.js';
+import { REGOLO_API_KEY_ENV, REGOLO_CLASSIFIER_MODEL } from '../claude/settings-apply.js';
 import { err, info, ok, warn } from '../ui/banners.js';
 
 function reportRestart(res: SettingsApplyResult): void {
@@ -95,16 +98,20 @@ export async function runCodexThinkingRouting(
 
 export async function runCodexCompute(
   mode: ComputeMode,
-  api: { baseUrl: string; token: string } | undefined,
+  api: { baseUrl?: string; token?: string; model?: string } | undefined,
   exit: (code: number) => never,
 ): Promise<void> {
   const profile = await codexProfile(exit);
   try {
+    if (mode === 'api' && api?.token) {
+      const pp = paths(profile);
+      await upsertEnvValues(pp.env, { [REGOLO_API_KEY_ENV]: api.token });
+    }
     const res = await applyCompute(profile, mode, api);
     ok(
       mode === 'local'
         ? `classifier compute set to LOCAL for Codex profile '${profile}'.`
-        : `classifier compute set to API (${api?.baseUrl}) for Codex profile '${profile}'.`,
+        : `classifier compute set to API (Regolo ${REGOLO_CLASSIFIER_MODEL}) for Codex profile '${profile}'.`,
     );
     reportRestart(res);
     const w = readCodexWiring();

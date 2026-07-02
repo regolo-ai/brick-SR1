@@ -8,6 +8,7 @@ export {
   DEFAULT_CONTEXT_K,
   LOCAL_CLASSIFIER_URL,
   LOCAL_DISCLAIMER,
+  REGOLO_API_KEY_HELP,
   applyCompute,
   type ComputeMode,
   type SettingsApplyResult,
