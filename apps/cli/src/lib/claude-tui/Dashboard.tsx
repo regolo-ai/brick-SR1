@@ -2,18 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import {
   fetchSnapshot,
+  fetchEconomics,
   resetMetrics,
   routedRowsByModel,
   nativeRowsByModel,
   difficultyDistribution,
   effortRowsForModel,
-  economy,
+  unifyEconomy,
   totalRequests,
   classifierPercentiles,
   classifierMean,
   fallbackPct,
   formatLatency,
   type Snapshot,
+  type EconomicsResponse,
 } from '../claude/metrics.js';
 
 const ACCENT = '#00d4aa';
@@ -179,6 +181,7 @@ export function Dashboard({
 }: DashboardProps) {
   const { exit } = useApp();
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [econ, setEcon] = useState<EconomicsResponse | null>(null);
   const [tick, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
   // Single confirmation for clearing the routing cache: press `n` to arm, `n`
@@ -211,8 +214,8 @@ export function Dashboard({
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const s = await fetchSnapshot(baseUrl, envUrl);
-      if (alive) { setSnap(s); setLoading(false); }
+      const [s, e] = await Promise.all([fetchSnapshot(baseUrl, envUrl), fetchEconomics(baseUrl)]);
+      if (alive) { setSnap(s); setEcon(e); setLoading(false); }
     };
     run();
     const id = setInterval(run, intervalMs);
@@ -222,7 +225,7 @@ export function Dashboard({
   return (
     <Box flexDirection="column" paddingX={1}>
       <RoutingBox snap={snap} emptyRequestsLabel={emptyRequestsLabel} nativeLabel={nativeLabel} />
-      <EconomyBox snap={snap} enabled={showEconomy} />
+      <EconomyBox snap={snap} econ={econ} enabled={showEconomy} />
       <ConnectionBox snap={snap} loading={loading} mode={mode} connectionLabel={connectionLabel} />
       <ClassifierBox snap={snap} />
 
@@ -417,20 +420,30 @@ function RoutingBox({
   );
 }
 
-function EconomyBox({ snap, enabled }: { snap: Snapshot | null; enabled: boolean }) {
+function EconomyBox({
+  snap,
+  econ,
+  enabled,
+}: {
+  snap: Snapshot | null;
+  econ: EconomicsResponse | null;
+  enabled: boolean;
+}) {
   if (!enabled) return null;
   const m = snap?.metrics;
   if (!m) return null;
-  const e = economy(m);
-  if (e.totalRoutedReqs === 0) return null;
+  const ue = unifyEconomy(econ, m);
+  const hasData = ue.source === 'real' || (ue.totalRoutedReqs ?? 0) > 0;
+  if (!hasData) return null;
 
-  const spentPct = e.opusUnits === 0 ? 0 : (e.actualUnits / e.opusUnits) * 100;
-  const savedColor = e.savedPct > 50 ? 'green' : e.savedPct > 20 ? 'yellow' : 'gray';
+  const spentPct = Math.max(0, Math.min(100, 100 - ue.savedPct));
+  const savedColor = ue.savedPct > 50 ? 'green' : ue.savedPct > 20 ? 'yellow' : 'gray';
+  const baselineLabel = ue.source === 'real' ? `all-${ue.mostExpensiveModel}` : 'all-opus';
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>◆ Economy</Text>
-      <Text dimColor>spent vs all-opus baseline</Text>
+      <Text dimColor>{`spent vs ${baselineLabel} baseline`}</Text>
       <Box>
         <StackedBar
           segments={[
@@ -439,10 +452,19 @@ function EconomyBox({ snap, enabled }: { snap: Snapshot | null; enabled: boolean
           ]}
         />
         <Text>{'  '}</Text>
-        <Text color={savedColor} bold>{`saved ${e.savedPct.toFixed(0)}%`}</Text>
+        <Text color={savedColor} bold>{`saved ${ue.savedPct.toFixed(0)}%`}</Text>
       </Box>
-      <Text dimColor>{`${e.totalRoutedReqs} routed reqs · ~${e.savedPct.toFixed(0)}% cheaper than all-opus (estimate)`}</Text>
-      <Text dimColor>relative estimate from request mix; excludes real token counts &amp; caching</Text>
+      {ue.source === 'real' ? (
+        <>
+          <Text dimColor>{`~${ue.savedPct.toFixed(0)}% cheaper than ${baselineLabel} (real token counts)`}</Text>
+          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} in / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
+        </>
+      ) : (
+        <>
+          <Text dimColor>{`${ue.totalRoutedReqs} routed reqs · ~${ue.savedPct.toFixed(0)}% cheaper than all-opus (estimate)`}</Text>
+          <Text dimColor>relative estimate from request mix; excludes real token counts &amp; caching</Text>
+        </>
+      )}
     </Box>
   );
 }
