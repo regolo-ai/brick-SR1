@@ -21,7 +21,7 @@ fraction of its cost. No cascades. No wasted calls. Drop-in `model: "brick"`.
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](#-datasets--models)
 
-**[Quickstart](#-quickstart) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [FAQ](#-faq) · [Paper](#-paper) · [Contributing](#-contributing)**
+**[Quickstart](#-quickstart) · [Why Brick](#-why-brick) · [Claude Code](#-brick--claude-code) · [Usage](#-two-ways-to-use-brick) · [FAQ](#-faq) · [Benchmarks](#-results-dataset-a-n5504) · [How it works](#-how-it-works) · [Paper](#-paper)**
 
 </div>
 
@@ -74,31 +74,6 @@ Until then, `brick serve` (from the CLI above) runs the same router locally from
 
 ---
 
-## 📊 Results (Dataset A, n=5,504)
-
-Brick sits on the **Pareto frontier** of cost vs quality, dominating single-model
-baselines and prior routers (RouteLLM, FrugalGPT, Cascade Routing) and approaching
-the oracle ceiling.
-
-<div align="center">
-  <img src="docs/paper/figures/cost_pareto.png" alt="Cost vs accuracy on Dataset A: Brick traces the Pareto frontier" width="780">
-</div>
-
-| Setting | Accuracy | Cost (× cheapest) | Latency (avg) |
-|---|---:|---:|---:|
-| Always Qwen3.5-9b | 65.4% | 1.0× | 8.1 s |
-| Always DeepSeek-v4-flash | 71.2% | 4.0× | 14.7 s |
-| Always Kimi2.6 | 75.02% | 6.0× | 51.2 s |
-| **Brick (max-quality)** | **76.98%** | **1.5×** | 22.8 s |
-| **Brick (max-saving)** | 72.4% | **1.0×** | 9.4 s |
-| _Oracle bound (3-model pool)_ | _83.25%_ | _n/a_ | _n/a_ |
-
-**Brick beats always-Kimi at ~4× lower cost and roughly half the latency.**
-Inter-rater agreement on the 3-judge eval panel: κ = 0.761. Full per-dimension
-breakdown and baseline reproduction in [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
-
----
-
 ## 🤔 Why Brick
 
 | | Single model | RouteLLM | FrugalGPT / Cascade | **Brick** |
@@ -117,40 +92,7 @@ confidence check passes, paying for every miss in tokens and latency. Brick make
 
 ---
 
-## 🧠 How it works
-
-For every request the router computes a **capability vector** and a **complexity
-score**, then picks the model whose skill profile is closest to what the query needs.
-
-```mermaid
-flowchart LR
-  Q([Query]) --> C[Capability classifier<br/>ModernBERT → p&#40;x&#41; ∈ Δ⁶]
-  Q --> X[Complexity classifier<br/>Qwen3.5-0.8B + LoRA → τ]
-  C --> R{{Skill-distance argmin<br/>Jₘ = Dₘ + β·aₘ}}
-  X --> R
-  R --> M1[qwen3.5-9b]
-  R --> M2[deepseek-v4-flash]
-  R --> M3[kimi2.6]
-```
-
-The query and each model live as vectors in the same capability space. The winner is
-the model whose skill vector is nearest to the query's needs, biased by a cost term:
-
-<div align="center">
-  <img src="docs/paper/figures/mom_capability_3d.png" alt="Spatial routing: the query vector and per-model skill vectors in capability space" width="540">
-</div>
-
-1. **Capability** `p(x) ∈ Δ⁶`: soft assignment over `coding`, `creative_synthesis`, `instruction_following`, `math_reasoning`, `planning_agentic`, `world_knowledge` ([`brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier)).
-2. **Complexity** `τ ∈ {easy, medium, hard}` ([`brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco), Qwen3.5-0.8B + LoRA).
-3. **Objective** per model: `Jₘ = Dₘ + β·aₘ`, distance `Dₘ = ‖p(x) − sₘ‖` plus normalized cost `aₘ`.
-4. **Argmin** over the pool → selected backend. The `r` knob slides the whole pool from max-saving to max-quality.
-
-Multimodal inputs are preprocessed (OCR, Whisper-compatible STT) then routed as text, or
-forwarded directly to a vision model. Details in [apps/router/README.md](apps/router/README.md) and the [paper](docs/paper/paper.pdf) §3.
-
----
-
-## 🚀 Three ways to use Brick
+## 🚀 Two ways to use Brick
 
 ### A. Run the gateway (Docker)
 
@@ -169,33 +111,6 @@ brick route "what is 2+2?"   # show the routing decision for a prompt
 ```
 
 Full walkthrough: [docs/quickstart/serve.md](docs/quickstart/serve.md) · CLI reference: [apps/cli/README.md](apps/cli/README.md).
-
-### C. Reproduce the paper
-
-<details>
-<summary>Full evaluation pipeline (Dataset A, 5,504 queries)</summary>
-
-```bash
-git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
-
-uv sync                                                  # Python workspaces
-cd apps/cli && npm install && cd ../..                   # CLI
-
-# Download HF artifacts (datasets + models)
-python packages/datasets/scripts/download_dataset_a.py --out ./data/dataset_a
-python packages/datasets/scripts/download_models.py     --out ./models
-
-# Inference + grading
-python packages/evals/scripts/100_run_inference.py  --config packages/evals/configs/protocols.yaml
-python packages/evals/scripts/110_grade_inference.py
-python packages/evals/scripts/130_aggregate_results.py | tee results.txt
-
-# Expected: Brick max-quality ≈ 76.98% accuracy, oracle bound ≈ 83.25%
-```
-
-Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.md](docs/quickstart/eval.md).
-
-</details>
 
 ---
 
@@ -275,19 +190,6 @@ It also shows connection/wiring state, classifier latency (avg, p50, p95), and f
 ### Works with workflows and subagents
 
 Brick routing is per request. In Claude Code workflows and subagents, each agent's call is routed **independently** as long as that agent uses **brick-claude**, so a cheap subagent task can land on haiku while a hard one escalates to opus in the same run.
-
----
-
-## 🤗 Datasets & models
-
-| Artifact | HF Repo | Type | Notes |
-|---|---|---|---|
-| Dataset A (eval) | [`regolo/brick-dataset-A-routing-eval`](https://huggingface.co/datasets/regolo/brick-dataset-A-routing-eval) | dataset | 5,504 queries, 6 dims, per-model verdicts |
-| Dataset B (training) | [`massaindustries/dataset-B-modernbert-train`](https://huggingface.co/datasets/massaindustries/dataset-B-modernbert-train) | dataset | ~50k labeled, multi-label |
-| Capability classifier | [`regolo/brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier) | model | ModernBERT-base, 6-label sigmoid |
-| Complexity classifier | [`regolo/brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco) | model | Qwen3.5-0.8B + LoRA, 3-class |
-
-Download recipes: [`packages/datasets/`](packages/datasets/).
 
 ---
 
@@ -417,6 +319,112 @@ make lint      # pre-commit run --all-files
 For architecture and per-component conventions, start from [What's in the repo](#-whats-in-the-repo) and the component READMEs linked under [Develop](#-develop).
 
 ---
+---
+
+# 🔬 Paper & experiments
+
+Everything below reproduces the research behind Brick: the benchmark numbers, the
+routing algorithm, the datasets and models, and the paper itself.
+
+## 📊 Results (Dataset A, n=5,504)
+
+Brick sits on the **Pareto frontier** of cost vs quality, dominating single-model
+baselines and prior routers (RouteLLM, FrugalGPT, Cascade Routing) and approaching
+the oracle ceiling.
+
+<div align="center">
+  <img src="docs/paper/figures/cost_pareto.png" alt="Cost vs accuracy on Dataset A: Brick traces the Pareto frontier" width="780">
+</div>
+
+| Setting | Accuracy | Cost (× cheapest) | Latency (avg) |
+|---|---:|---:|---:|
+| Always Qwen3.5-9b | 65.4% | 1.0× | 8.1 s |
+| Always DeepSeek-v4-flash | 71.2% | 4.0× | 14.7 s |
+| Always Kimi2.6 | 75.02% | 6.0× | 51.2 s |
+| **Brick (max-quality)** | **76.98%** | **1.5×** | 22.8 s |
+| **Brick (max-saving)** | 72.4% | **1.0×** | 9.4 s |
+| _Oracle bound (3-model pool)_ | _83.25%_ | _n/a_ | _n/a_ |
+
+**Brick beats always-Kimi at ~4× lower cost and roughly half the latency.**
+Inter-rater agreement on the 3-judge eval panel: κ = 0.761. Full per-dimension
+breakdown and baseline reproduction in [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
+
+---
+
+## 🧠 How it works
+
+For every request the router computes a **capability vector** and a **complexity
+score**, then picks the model whose skill profile is closest to what the query needs.
+
+```mermaid
+flowchart LR
+  Q([Query]) --> C[Capability classifier<br/>ModernBERT → p&#40;x&#41; ∈ Δ⁶]
+  Q --> X[Complexity classifier<br/>Qwen3.5-0.8B + LoRA → τ]
+  C --> R{{Skill-distance argmin<br/>Jₘ = Dₘ + β·aₘ}}
+  X --> R
+  R --> M1[qwen3.5-9b]
+  R --> M2[deepseek-v4-flash]
+  R --> M3[kimi2.6]
+```
+
+The query and each model live as vectors in the same capability space. The winner is
+the model whose skill vector is nearest to the query's needs, biased by a cost term:
+
+<div align="center">
+  <img src="docs/paper/figures/mom_capability_3d.png" alt="Spatial routing: the query vector and per-model skill vectors in capability space" width="540">
+</div>
+
+1. **Capability** `p(x) ∈ Δ⁶`: soft assignment over `coding`, `creative_synthesis`, `instruction_following`, `math_reasoning`, `planning_agentic`, `world_knowledge` ([`brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier)).
+2. **Complexity** `τ ∈ {easy, medium, hard}` ([`brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco), Qwen3.5-0.8B + LoRA).
+3. **Objective** per model: `Jₘ = Dₘ + β·aₘ`, distance `Dₘ = ‖p(x) − sₘ‖` plus normalized cost `aₘ`.
+4. **Argmin** over the pool → selected backend. The `r` knob slides the whole pool from max-saving to max-quality.
+
+Multimodal inputs are preprocessed (OCR, Whisper-compatible STT) then routed as text, or
+forwarded directly to a vision model. Details in [apps/router/README.md](apps/router/README.md) and the [paper](docs/paper/paper.pdf) §3.
+
+---
+
+## 🔁 Reproduce the paper
+
+<details>
+<summary>Full evaluation pipeline (Dataset A, 5,504 queries)</summary>
+
+```bash
+git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
+
+uv sync                                                  # Python workspaces
+cd apps/cli && npm install && cd ../..                   # CLI
+
+# Download HF artifacts (datasets + models)
+python packages/datasets/scripts/download_dataset_a.py --out ./data/dataset_a
+python packages/datasets/scripts/download_models.py     --out ./models
+
+# Inference + grading
+python packages/evals/scripts/100_run_inference.py  --config packages/evals/configs/protocols.yaml
+python packages/evals/scripts/110_grade_inference.py
+python packages/evals/scripts/130_aggregate_results.py | tee results.txt
+
+# Expected: Brick max-quality ≈ 76.98% accuracy, oracle bound ≈ 83.25%
+```
+
+Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.md](docs/quickstart/eval.md).
+
+</details>
+
+---
+
+## 🤗 Datasets & models
+
+| Artifact | HF Repo | Type | Notes |
+|---|---|---|---|
+| Dataset A (eval) | [`regolo/brick-dataset-A-routing-eval`](https://huggingface.co/datasets/regolo/brick-dataset-A-routing-eval) | dataset | 5,504 queries, 6 dims, per-model verdicts |
+| Dataset B (training) | [`massaindustries/dataset-B-modernbert-train`](https://huggingface.co/datasets/massaindustries/dataset-B-modernbert-train) | dataset | ~50k labeled, multi-label |
+| Capability classifier | [`regolo/brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier) | model | ModernBERT-base, 6-label sigmoid |
+| Complexity classifier | [`regolo/brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco) | model | Qwen3.5-0.8B + LoRA, 3-class |
+
+Download recipes: [`packages/datasets/`](packages/datasets/).
+
+---
 
 ## 📄 Paper
 
@@ -444,4 +452,3 @@ Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf) · compile with `c
 </a>
 
 ---
-
