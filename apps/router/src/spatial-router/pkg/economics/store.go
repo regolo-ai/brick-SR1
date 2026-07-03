@@ -47,6 +47,16 @@ func (s *Store) RecordUsage(model string, inputTokens, outputTokens int64) {
 	s.usage[model] = entry
 }
 
+// Reset clears all accumulated usage counters in memory. Callers that persist
+// snapshots to disk (see Server.saveEconomicsSnapshot) must re-save after
+// calling this, otherwise the cleared counters only last until the next
+// restart reloads the stale snapshot file.
+func (s *Store) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.usage = make(map[string]ModelUsage)
+}
+
 // Snapshot returns a copy of all accumulated usage, one entry per model
 // that has received at least one RecordUsage call, sorted by model name
 // for deterministic output.

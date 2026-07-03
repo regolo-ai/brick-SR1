@@ -164,20 +164,27 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMetricsReset clears the Brick→Claude Code pass-through routing counters
-// (requests, effort, routing heatmap, classifier latency, fallback) so
-// `brick claude status` can show a fresh dashboard without restarting the
-// router. POST-only. Only the brick_cc_* metrics are cleared; all other
-// Prometheus series are left intact.
+// (requests, effort, routing heatmap, classifier latency, fallback) AND the
+// economics token/cost usage store, so `brick claude status` shows a fully
+// fresh dashboard without restarting the router. POST-only. Only the
+// brick_cc_* metrics and economics usage are cleared; all other Prometheus
+// series are left intact. The economics snapshot on disk is rewritten
+// immediately so a router restart does not silently reload the pre-reset
+// totals (see saveEconomicsSnapshot).
 func (s *Server) handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	metrics.ResetBrickCC()
+	if s.economicsStore != nil {
+		s.economicsStore.Reset()
+		s.saveEconomicsSnapshot()
+	}
 	logging.Infof("Brick: routing metrics reset via /api/v1/metrics/reset")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok","reset":"brick_cc"}`))
+	w.Write([]byte(`{"status":"ok","reset":"brick_cc,economics"}`))
 }
 
 // handleModels returns the list of available models.
