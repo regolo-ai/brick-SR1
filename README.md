@@ -1,3 +1,4 @@
+
 <div align="center">
 
 <img width="1640" height="471" alt="Brick (1)" src="https://github.com/user-attachments/assets/b7cab21d-a75f-4fb7-ad91-d7afb0957ad9" />
@@ -117,6 +118,12 @@ Full walkthrough: [docs/quickstart/serve.md](docs/quickstart/serve.md) · CLI re
 
 ## 🧠 Brick + Claude Code
 
+
+
+https://github.com/user-attachments/assets/13c02f5b-191a-43cb-ad26-12ab6cb44f6a
+
+
+
 Put one OpenAI/Anthropic-compatible endpoint in front of Claude Code, and Brick routes every request to **haiku**, **sonnet**, or **opus** based on capability and complexity. You keep the Claude Code UX; Brick picks the cheapest model that can do the job.
 
 ### Setup
@@ -139,30 +146,26 @@ Use `brick claude on --no-start` to require an already-healthy router instead of
 
 ### The 5 modes
 
+<img width="1640" height="395" alt="Brick (4)" src="https://github.com/user-attachments/assets/77d0e69a-4f67-4a8b-beb0-757ea1d67d5f" />
+
+
+https://github.com/user-attachments/assets/396a41a2-822d-4916-a593-78e346ba5db9
+
+
+
 Each mode sets a routing preference `r` and a complexity (easy/medium/hard) to model map. Switch with `brick claude mode` or directly via `brick claude <mode>`.
 
-| Mode | r | easy | medium | hard |
-|------|-----|--------|--------|--------|
-| eco  | -1   | haiku  | haiku  | haiku  |
-| lite | -0.5 | haiku  | haiku  | sonnet |
-| mid  | 0    | haiku  | sonnet | opus   |
-| pro  | 0.5  | sonnet | sonnet | opus   |
-| max  | 1    | opus   | opus   | opus   |
+
+
+
 
 `mid` is the default. (On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium resolve to sonnet, hard to opus.)
 
 ### How the effort picker works
 
-The effort slider in Claude Code's `/model` picker selects the **Brick mode** (the model tier), not the thinking budget:
+The effort slider in Claude Code's `/model` picker selects the **Brick mode** (the model tier), not the thinking budget
 
-| Effort | Mode |
-|--------|------|
-| low    | eco  |
-| medium | lite |
-| high   | mid  |
-| xhigh  | pro  |
-| max    | max  |
-
+### Reasoning effort 
 Reasoning effort itself is then decided **autonomously per request** from the router's own signals (query difficulty plus the chosen model's headroom). You pick the tier; Brick picks how hard to think.
 
 ### Native models bypass the router
@@ -184,10 +187,6 @@ The dashboard reports, since the last router restart:
 
 It also shows connection/wiring state, classifier latency (avg, p50, p95), and fallback rate.
 
-<div align="center">
-  <img width="286" height="440" alt="image" src="https://github.com/user-attachments/assets/d7741efa-0d63-45f3-83f3-39d16bca5dab" />
-</div>
-  
 ### Works with workflows and subagents
 
 Brick routing is per request. In Claude Code workflows and subagents, each agent's call is routed **independently** as long as that agent uses **brick-claude**, so a cheap subagent task can land on haiku while a hard one escalates to opus in the same run.
