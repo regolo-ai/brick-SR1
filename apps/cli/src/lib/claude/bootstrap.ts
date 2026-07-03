@@ -13,6 +13,41 @@ export const DEFAULT_CLAUDE_PROFILE = 'claude';
 export const DEFAULT_CLAUDE_PORT = 8000;
 
 /**
+ * Render the Claude profile's docker-compose.yml from the shared template and
+ * write it only if the content changed. Returns true when the file was rewritten.
+ *
+ * The topology depends on compute mode: `useLocalClassifier` adds the classifier
+ * sidecar and injects BRICK_CLASSIFIER_TOKEN into the router; otherwise the router
+ * is standalone and gets REGOLO_API_KEY for the hosted classifier. Because the two
+ * shapes inject different env vars, switching compute mode MUST regenerate the
+ * compose (a plain `docker restart` keeps the old container environment).
+ */
+export function renderClaudeCompose(
+  profile: string,
+  useLocalClassifier: boolean,
+  port: number = DEFAULT_CLAUDE_PORT,
+): boolean {
+  const pp = paths(profile);
+  const composeTpl = readFileSync(join(TEMPLATE_DIR, 'claude-default.docker-compose.yaml.hbs'), 'utf8');
+  const rendered = Handlebars.compile(composeTpl)({
+    projectName: `brick-${profile}`,
+    port,
+    configPath: pp.config,
+    useLocalClassifier,
+    image: defaultImage(),
+  });
+  let existing = '';
+  try {
+    existing = readFileSync(pp.compose, 'utf8');
+  } catch {
+    /* no compose yet */
+  }
+  if (existing === rendered) return false;
+  writeFileSync(pp.compose, rendered, { mode: 0o644 });
+  return true;
+}
+
+/**
  * Materialize a ready-to-serve default profile for Claude Code. By default the
  * complexity classifier is hosted on Regolo (no local sidecar), so the profile
  * is a single router container; the user supplies their Regolo API key (see
@@ -56,15 +91,7 @@ export async function ensureDefaultProfile(): Promise<string> {
 
   // 3. docker-compose.yml — single-container template (router only); the
   //    hosted Regolo classifier means no local sidecar.
-  const composeTpl = readFileSync(join(TEMPLATE_DIR, 'claude-default.docker-compose.yaml.hbs'), 'utf8');
-  const composeRendered = Handlebars.compile(composeTpl)({
-    projectName: `brick-${profile}`,
-    port: DEFAULT_CLAUDE_PORT,
-    configPath: pp.config,
-    useLocalClassifier: false,   // default profile uses the hosted Regolo classifier
-    image: defaultImage(),
-  });
-  writeFileSync(pp.compose, composeRendered, { mode: 0o644 });
+  renderClaudeCompose(profile, false, DEFAULT_CLAUDE_PORT);
 
   if (!readState().activeProfile) updateState({ activeProfile: profile });
 

@@ -9,8 +9,9 @@ import yaml from 'js-yaml';
 import { paths } from '../config/paths.js';
 import { loadConfigText } from '../config/load.js';
 import { saveConfigText } from '../config/save.js';
-import { dockerCmd } from '../docker/run.js';
+import { dockerCmd, dockerCompose } from '../docker/run.js';
 import { isHealthy, waitHealth } from '../docker/serve.js';
+import { renderClaudeCompose, DEFAULT_CLAUDE_PORT } from './bootstrap.js';
 
 /** Default trailing-turns window fed to the classifier when context-awareness is on. */
 export const DEFAULT_CONTEXT_K = 8;
@@ -264,5 +265,34 @@ export async function applyCompute(
     obj.complexity_service ?? null,
     obj.skill_router?.complexity_model ?? null,
   ]);
-  return saveAndRestart(obj, profile, after !== before);
+  const configChanged = after !== before;
+
+  if (configChanged) {
+    const dump = yaml.dump(obj, { lineWidth: 120, noRefs: true, sortKeys: false });
+    await saveConfigText(dump, profile);
+  }
+
+  // Compute mode changes the container topology and env, not just the mounted
+  // config: local mode adds the classifier sidecar and injects
+  // BRICK_CLASSIFIER_TOKEN, api mode is router-only with REGOLO_API_KEY. A plain
+  // `docker restart` keeps the OLD environment, so the router would expand
+  // ${REGOLO_API_KEY} against a var the container never received (empty -> the
+  // hosted classifier 403s -> every request falls back to "medium"). Regenerate
+  // the compose to the correct shape and recreate the container via compose up.
+  const port = typeof obj.server_port === 'number' ? obj.server_port : DEFAULT_CLAUDE_PORT;
+  const composeChanged = renderClaudeCompose(profile, mode === 'local', port);
+
+  const routerWasRunning = await isHealthy(port);
+  let restartedRouter = false;
+  if (routerWasRunning && (configChanged || composeChanged)) {
+    // `up -d --remove-orphans` recreates the router when the compose env changed
+    // and drops/starts the classifier sidecar to match the new topology.
+    const res = await dockerCompose(profile, ['up', '-d', '--remove-orphans']);
+    if (res.exitCode === 0) {
+      await waitHealth(port, 60_000);
+      restartedRouter = true;
+    }
+  }
+
+  return { configPath: paths(profile).config, changed: configChanged || composeChanged, restartedRouter, routerWasRunning };
 }
