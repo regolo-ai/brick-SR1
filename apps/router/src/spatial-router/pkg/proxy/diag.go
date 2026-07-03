@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
@@ -11,10 +12,18 @@ import (
 
 // handleDiagClassifier reports whether the configured complexity classifier
 // is reachable and what device it loaded the model on. Used by `brick claude
-// status` to surface "the GPU is actually being hit" without requiring the
-// caller to know the bearer token. Returns:
+// status` to surface "the classifier is actually being hit" without requiring
+// the caller to know the bearer token. Returns:
 //
 //	{"reachable": true, "device": "cuda", "latency_ms": 12, "endpoint": "..."}
+//
+// The probe depends on the protocol. The brick protocol (local auto-spawned
+// server) exposes an unauthenticated GET /health returning {status, model,
+// device}. The openai protocol (a hosted OpenAI-compatible endpoint such as
+// Regolo's brick-complexity-pro) has no /health and requires a bearer token,
+// so we probe GET /v1/models with Authorization instead. Probing /health on
+// an openai endpoint returns 403 and would wrongly report "unreachable" even
+// when routing works.
 func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 	cfg := s.cfg
 	if cfg == nil || cfg.ComplexityService == nil || !cfg.ComplexityService.Enabled {
@@ -37,7 +46,14 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 		endpoint = formatHTTPEndpoint(addr, port)
 	}
 
-	healthURL := endpoint + "/health"
+	isOpenAI := strings.EqualFold(strings.TrimSpace(cfg.ComplexityService.Protocol), "openai")
+
+	var healthURL string
+	if isOpenAI {
+		healthURL = strings.TrimRight(endpoint, "/") + "/v1/models"
+	} else {
+		healthURL = endpoint + "/health"
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
@@ -53,12 +69,19 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The openai probe hits an authenticated endpoint; the brick /health is open.
+	if isOpenAI {
+		if token, terr := cfg.ComplexityService.ResolveBearerToken(); terr == nil && token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
+
 	client := &http.Client{Timeout: 3 * time.Second}
 	start := time.Now()
 	resp, err := client.Do(req)
 	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
-		logging.Warnf("[DiagClassifier] /health failed: %v", err)
+		logging.Warnf("[DiagClassifier] %s failed: %v", healthURL, err)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"enabled":   true,
 			"endpoint":  endpoint,
@@ -69,21 +92,34 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	var health struct {
-		Status string `json:"status"`
-		Model  string `json:"model"`
-		Device string `json:"device"`
+	reachable := resp.StatusCode == http.StatusOK
+
+	// The brick /health body carries {status, model, device}. An openai
+	// /v1/models body is a model list with none of those fields, so report
+	// the configured model and a "remote (openai)" device label instead.
+	var device, model string
+	if isOpenAI {
+		device = "remote (openai)"
+		model = cfg.ComplexityService.ModelName
+	} else {
+		var health struct {
+			Status string `json:"status"`
+			Model  string `json:"model"`
+			Device string `json:"device"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&health)
+		device = health.Device
+		model = health.Model
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&health)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled":     true,
 		"endpoint":    endpoint,
-		"reachable":   resp.StatusCode == http.StatusOK,
+		"reachable":   reachable,
 		"http_status": resp.StatusCode,
 		"latency_ms":  latencyMs,
-		"device":      health.Device,
-		"model":       health.Model,
+		"device":      device,
+		"model":       model,
 	})
 }
 
