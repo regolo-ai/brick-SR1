@@ -131,8 +131,11 @@ COPY --from=go-builder /app/bin/brick /app/brick
 COPY --from=go-builder /app/libs/*.so /usr/local/lib/
 RUN ldconfig
 
-# Copy configuration
+# Copy configuration. pricing.yaml must sit next to config.yaml: the router
+# resolves the pricing table at filepath.Join(dir(configPath), "pricing.yaml"),
+# and without it GET /api/v1/economics degrades to token counts only.
 COPY apps/router/config/config.yaml /app/config/
+COPY pricing.yaml /app/config/
 
 # Expose required ports
 # Brick HTTP proxy port
