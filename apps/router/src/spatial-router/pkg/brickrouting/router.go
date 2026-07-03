@@ -621,7 +621,11 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 		baseURL = defaultComplexityBaseURL
 	}
 
-	token := strings.TrimSpace(skillCfg.BearerToken)
+	// Expand env references (e.g. "${REGOLO_API_KEY}") so an unexpanded literal
+	// does not shadow the ResolveBearerToken fallback below and cause the router
+	// to send "Authorization: Bearer ${REGOLO_API_KEY}" verbatim (403 -> every
+	// request falls back to "medium").
+	token := strings.TrimSpace(os.ExpandEnv(skillCfg.BearerToken))
 	if token == "" && skillCfg.BearerTokenFile != "" {
 		if b, err := os.ReadFile(skillCfg.BearerTokenFile); err == nil {
 			token = strings.TrimSpace(string(b))

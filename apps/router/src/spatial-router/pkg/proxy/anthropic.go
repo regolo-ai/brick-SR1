@@ -530,7 +530,13 @@ func resolveComplexityEndpoint(cfg *config.RouterConfig) (string, string, time.D
 			timeout = time.Duration(cfg.SkillRouter.ComplexityModel.TimeoutSeconds) * time.Second
 		}
 		baseURL = strings.TrimRight(cfg.SkillRouter.ComplexityModel.BaseURL, "/")
-		token = strings.TrimSpace(cfg.SkillRouter.ComplexityModel.BearerToken)
+		// Expand env references (e.g. "${REGOLO_API_KEY}") just like
+		// ComplexityService.ResolveBearerToken does below. Without this an
+		// unexpanded literal is non-empty, so the ResolveBearerToken fallback
+		// is skipped and the router sends "Authorization: Bearer ${REGOLO_API_KEY}"
+		// verbatim, which the hosted classifier rejects with 403 (routing then
+		// silently falls back to "medium" for every request).
+		token = strings.TrimSpace(os.ExpandEnv(cfg.SkillRouter.ComplexityModel.BearerToken))
 		if token == "" && cfg.SkillRouter.ComplexityModel.BearerTokenFile != "" {
 			if resolved, err := os.ReadFile(cfg.SkillRouter.ComplexityModel.BearerTokenFile); err == nil {
 				token = strings.TrimSpace(string(resolved))
