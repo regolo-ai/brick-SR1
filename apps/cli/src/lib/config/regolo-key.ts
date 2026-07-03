@@ -32,7 +32,7 @@ export function classifierComputeStatus(rawConfig: any, resolvedKey: string): Cl
   const csUrl: string = rawConfig?.complexity_service?.base_url ?? '';
   const cmUrl: string = rawConfig?.skill_router?.complexity_model?.base_url ?? '';
   const pointsAtRegolo =
-    csUrl.startsWith(REGOLO_CLASSIFIER_URL) || cmUrl.startsWith(REGOLO_CLASSIFIER_URL);
+    csUrl.trim().startsWith(REGOLO_CLASSIFIER_URL) || cmUrl.trim().startsWith(REGOLO_CLASSIFIER_URL);
   const anyUrl = (csUrl || cmUrl).trim() !== '';
 
   if (pointsAtRegolo) {

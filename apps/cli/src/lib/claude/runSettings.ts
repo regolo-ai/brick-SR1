@@ -168,8 +168,14 @@ export async function runCompute(
         : `classifier compute set to API (Regolo ${REGOLO_CLASSIFIER_MODEL}) for profile '${profile}'.`,
     );
     reportRestart(res);
-    const w = readWiring();
-    if (w) writeWiring({ ...w, computeMode: mode });
+    // Only the interactive `settings compute` path (no explicit profile) owns
+    // the Claude wiring-state record. When invoked with an explicit profile
+    // (from `brick claude/codex on`), those commands manage wiring themselves,
+    // and a codex-profile compute switch must not rewrite the Claude record.
+    if (!profileOverride) {
+      const w = readWiring();
+      if (w) writeWiring({ ...w, computeMode: mode });
+    }
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);

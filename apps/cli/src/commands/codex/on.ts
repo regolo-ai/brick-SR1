@@ -35,22 +35,24 @@ export default class CodexOn extends Command {
     // Materialize the dedicated Codex profile (OpenAI pool skill router) if absent.
     const profile = await ensureDefaultCodexProfile();
 
-    // Hosted Regolo classifier (default): ensure a Regolo API key before start.
-    await ensureClassifierCompute(
-      profile,
-      'Set up the complexity classifier for this Codex profile.',
-    );
-
     const cfg = await loadConfig(profile);
     const port = cfg.server_port;
 
     // The Claude and Codex router stacks both bind host 8000 (mutually exclusive).
+    // This guard must run before any classifier setup below, since a
+    // `needs-choice` + Local answer there can trigger `docker compose up`.
     const running = readState().runningProfile;
     if (running && running !== profile && (await isHealthy(port))) {
       warn(`a different Brick router ('${running}') is already serving port ${port}.`);
       warn(`stop it first (\`brick claude off --stop\` or \`brick stop\`) before wiring Codex.`);
       this.exit(1);
     }
+
+    // Hosted Regolo classifier (default): ensure a Regolo API key before start.
+    await ensureClassifierCompute(
+      profile,
+      'Set up the complexity classifier for this Codex profile.',
+    );
 
     // 1. Ensure the router is up and healthy before pointing Codex at it.
     if (!(await isHealthy(port))) {
