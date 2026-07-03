@@ -141,10 +141,14 @@ export async function runCompute(
   mode: ComputeMode,
   api: { baseUrl?: string; token?: string; model?: string } | undefined,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    // An explicit profile (e.g. from `brick claude on` / `brick codex on`,
+    // which resolve their own profile) must win over the active profile so
+    // the compute switch never targets a different profile than the caller.
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);

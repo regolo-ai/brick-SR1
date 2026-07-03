@@ -12,7 +12,7 @@ import {
   getTopLevelModelProvider,
 } from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
-import { ensureRegoloClassifierKey } from '../../lib/config/regolo-key.js';
+import { ensureClassifierCompute } from '../../lib/config/regolo-key.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class CodexOn extends Command {
@@ -36,9 +36,9 @@ export default class CodexOn extends Command {
     const profile = await ensureDefaultCodexProfile();
 
     // Hosted Regolo classifier (default): ensure a Regolo API key before start.
-    await ensureRegoloClassifierKey(
+    await ensureClassifierCompute(
       profile,
-      'This Codex profile uses the hosted Regolo complexity classifier (brick-complexity-pro).',
+      'Set up the complexity classifier for this Codex profile.',
     );
 
     const cfg = await loadConfig(profile);

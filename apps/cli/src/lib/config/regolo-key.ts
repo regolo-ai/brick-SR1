@@ -142,7 +142,7 @@ export async function ensureClassifierCompute(profile: string, announce?: string
 
   if (mode === 'local') {
     p.note(LOCAL_DISCLAIMER, 'Local inference');
-    await runCompute('local', undefined, (code) => process.exit(code));
+    await runCompute('local', undefined, (code) => process.exit(code), profile);
     return;
   }
 
@@ -155,5 +155,5 @@ export async function ensureClassifierCompute(profile: string, announce?: string
     warn(`No key entered; routing falls back to "medium" until you set one.`);
     return;
   }
-  await runCompute('api', { token: key }, (code) => process.exit(code));
+  await runCompute('api', { token: key }, (code) => process.exit(code), profile);
 }
