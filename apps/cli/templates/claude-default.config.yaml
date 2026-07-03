@@ -76,6 +76,11 @@ skill_router:
     auto_spawn: false
   math:
     routing_preference: 0
+    # Softened preference knob (paper default is 2.920351): widens the transition
+    # so the effort modes (see clientEffortToPreference) yield a graded opus share
+    # (high ~1/3, xhigh ~2/3, max all) instead of a near-step jump. Retuning this
+    # must stay in sync with the effort->preference anchors in effort.go.
+    preference_power: 2.2
     tau: { easy: 0.55, medium: 0.72, hard: 0.88 }
   models:
     - model: claude-haiku-4-5

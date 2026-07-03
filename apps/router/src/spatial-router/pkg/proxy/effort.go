@@ -184,14 +184,23 @@ func routingPreferenceOf(cfg *config.RouterConfig) float64 {
 }
 
 // clientEffortToPreference maps an Anthropic effort string (from the client's
-// output_config.effort) to a Brick routing preference r in [-1,1].
-// This lets the effort picker in Claude Code act as the Brick mode selector:
+// output_config.effort) to a Brick routing preference r in [-1,1], which drives
+// MODEL selection via RouteWithPreference. This lets the effort picker in Claude
+// Code act as the Brick mode selector.
 //
-//	low    → eco  (r=-1.0): all → haiku, minimal effort
-//	medium → lite (r=-0.5): cost-conscious, sonnet only for hard
-//	high   → mid  (r=0.0):  balanced default (haiku/sonnet/opus by complexity)
-//	xhigh  → pro  (r=+0.5): sonnet baseline, opus for hard
-//	max    → max  (r=+1.0): all → opus, maximum quality
+// The positive-side values are tuned for a softened knob (skill_router.math.
+// preference_power = 2.2 in the default profile) and a sonnet+opus pool, to give
+// a graded opus share across the top modes rather than a near-step jump:
+//
+//	low    (r=-1.0): cheapest tier only (sonnet), minimal effort
+//	medium (r=-0.5): cost-conscious, sonnet
+//	high   (r=+0.43): opus on genuinely hard queries (~a third), sonnet otherwise
+//	xhigh  (r=+0.452): opus majority (~two thirds), sonnet on easy/medium
+//	max    (r=+0.52): opus for everything, maximum quality
+//
+// NOTE: these anchors are matched to preference_power=2.2; raising the power back
+// toward the paper default (2.92) steepens the curve and collapses the high/xhigh
+// gap. Keep the two in sync when retuning.
 func clientEffortToPreference(effort string) float64 {
 	switch strings.ToLower(strings.TrimSpace(effort)) {
 	case "low":
@@ -199,11 +208,11 @@ func clientEffortToPreference(effort string) float64 {
 	case "medium":
 		return -0.5
 	case "high":
-		return 0.0
+		return 0.43
 	case "xhigh":
-		return 0.5
+		return 0.452
 	case "max":
-		return 1.0
+		return 0.52
 	default:
 		return 0.0 // treat unknown as mid
 	}
