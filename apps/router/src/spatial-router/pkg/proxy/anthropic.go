@@ -177,10 +177,12 @@ func (s *Server) handleBrickRouted(
 	// autonomously and does not depend on the mode.
 	preference := clientEffortToPreference(clientEffort)
 
+	// Fallback complexity label for the model_map path. Only computed below when
+	// the skill router does not run: the router returns its own complexity label,
+	// so classifying here too would be a redundant round-trip. It also calls the
+	// brick-protocol /classify endpoint, which a hosted openai classifier (Regolo)
+	// rejects with 403 — harmless as a rare fallback, noisy on every request.
 	label := "medium"
-	if prompt != "" {
-		label = classifyAnthropicComplexity(r.Context(), cfg, prompt)
-	}
 
 	clientWants1M := requestRequestsContext1M(r.Header.Values("Anthropic-Beta"))
 	use1M := clientWants1M && apCfg.ExtraUsageEnabled && len(body) > apCfg.EffectiveContext1MThresholdBytes()
@@ -211,6 +213,10 @@ func (s *Server) handleBrickRouted(
 			under = underCapacityForModel(route, route.Model)
 			routedViaSkill = true
 		}
+	}
+	if !routedViaSkill && prompt != "" {
+		// Model_map fallback only: the skill router did not produce a label.
+		label = classifyAnthropicComplexity(r.Context(), cfg, prompt)
 	}
 	if selectedModel == "" {
 		if use1M {
