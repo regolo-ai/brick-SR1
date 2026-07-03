@@ -1,8 +1,9 @@
 <div align="center">
 
-# 🧱 Brick
+<img width="1640" height="471" alt="Brick (1)" src="https://github.com/user-attachments/assets/b7cab21d-a75f-4fb7-ad91-d7afb0957ad9" />
 
-### One OpenAI-compatible endpoint. The right model for every query.
+
+### One Query, One Endpoint, Every LLM on Earth.
 
 Brick is a **Mixture-of-Models (MoM) routing gateway**. It reads each prompt's
 **capability** and **complexity**, then routes it to the best backend in a pool of
