@@ -146,42 +146,19 @@ Use `brick claude on --no-start` to require an already-healthy router instead of
 
 ### The 5 modes: pick your cost/quality trade-off
 
-A mode is how you tell Brick how much to spend. Each one maps easy/medium/hard queries to a
-model tier, from cheapest (`eco`, always haiku) to strongest (`max`, always opus). Pick one
-and Brick handles the per-query routing inside it.
+A mode is how you tell Brick how much to spend. Each one maps easy/medium/hard queries to a model tier, from cheapest (`eco`, always haiku) to strongest (`max`, always opus), with `lite`, `mid` and `pro` in between. Pick one and Brick handles the per-query routing inside it.
 
 <img width="1640" height="395" alt="Brick (4)" src="https://github.com/user-attachments/assets/77d0e69a-4f67-4a8b-beb0-757ea1d67d5f" />
 
 
 https://github.com/user-attachments/assets/396a41a2-822d-4916-a593-78e346ba5db9
 
-| Mode | r    | easy   | medium | hard   |
-|------|------|--------|--------|--------|
-| eco  | -1   | haiku  | haiku  | haiku  |
-| lite | -0.5 | haiku  | haiku  | sonnet |
-| mid  | 0    | haiku  | sonnet | opus   |
-| pro  | 0.5  | sonnet | sonnet | opus   |
-| max  | 1    | opus   | opus   | opus   |
 
-Switch with `brick claude mode` or directly via `brick claude <mode>`. `mid` is the default.
-On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium
-resolve to sonnet, hard to opus.
+You switch mode straight from the **thinking effort** slider in Claude Code's `/model` picker: low picks `eco`, medium `lite`, high `mid`, xhigh `pro`, and max `max`. So the effort control does not set a thinking budget, it selects the model tier. You can also switch explicitly with `brick claude mode` or `brick claude <mode>`.
 
-### The effort picker just picks the mode
+`mid` is the default. On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium resolve to sonnet, hard to opus.
 
-The effort slider in Claude Code's `/model` picker is a shortcut for choosing the Brick mode
-(the model tier), not the thinking budget:
-
-| Effort | Mode |
-|--------|------|
-| low    | eco  |
-| medium | lite |
-| high   | mid  |
-| xhigh  | pro  |
-| max    | max  |
-
-You pick the tier; how hard to think is then decided **autonomously per request** from the
-router's own signals (query difficulty plus the chosen model's headroom).
+Once you have picked the tier, how hard to think is decided **autonomously per request** from the router's own signals (query difficulty plus the chosen model's headroom).
 
 ### Native models bypass the router
 
@@ -334,18 +311,14 @@ make lint      # pre-commit run --all-files
 For architecture and per-component conventions, start from [What's in the repo](#-whats-in-the-repo) and the component READMEs linked under [Develop](#-develop).
 
 ---
----
 
-# 🔬 Paper & experiments
+## 🔬 Paper & experiments
 
-Everything below reproduces the research behind Brick: the benchmark numbers, the
-routing algorithm, the datasets and models, and the paper itself.
+Everything below reproduces the research behind Brick: the benchmark numbers, the routing algorithm, the datasets and models, and the paper itself.
 
-## 📊 Results (Dataset A, n=5,504)
+### 📊 Results (Dataset A, n=5,504)
 
-Brick sits on the **Pareto frontier** of cost vs quality, dominating single-model
-baselines and prior routers (RouteLLM, FrugalGPT, Cascade Routing) and approaching
-the oracle ceiling.
+Brick sits on the **Pareto frontier** of cost vs quality, dominating single-model baselines and prior routers (RouteLLM, FrugalGPT, Cascade Routing) and approaching the oracle ceiling.
 
 <div align="center">
   <img src="docs/paper/figures/cost_pareto.png" alt="Cost vs accuracy on Dataset A: Brick traces the Pareto frontier" width="780">
@@ -360,16 +333,11 @@ the oracle ceiling.
 | **Brick (max-saving)** | 72.4% | **1.0×** | 9.4 s |
 | _Oracle bound (3-model pool)_ | _83.25%_ | _n/a_ | _n/a_ |
 
-**Brick beats always-Kimi at ~4× lower cost and roughly half the latency.**
-Inter-rater agreement on the 3-judge eval panel: κ = 0.761. Full per-dimension
-breakdown and baseline reproduction in [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
+**Brick beats always-Kimi at ~4× lower cost and roughly half the latency.** Inter-rater agreement on the 3-judge eval panel: κ = 0.761. Full per-dimension breakdown and baseline reproduction in [`packages/evals/baselines/RESULTS.md`](packages/evals/baselines/RESULTS.md).
 
----
+### 🧠 How it works
 
-## 🧠 How it works
-
-For every request the router computes a **capability vector** and a **complexity
-score**, then picks the model whose skill profile is closest to what the query needs.
+For every request the router computes a **capability vector** and a **complexity score**, then picks the model whose skill profile is closest to what the query needs.
 
 ```mermaid
 flowchart LR
@@ -382,8 +350,7 @@ flowchart LR
   R --> M3[kimi2.6]
 ```
 
-The query and each model live as vectors in the same capability space. The winner is
-the model whose skill vector is nearest to the query's needs, biased by a cost term:
+The query and each model live as vectors in the same capability space. The winner is the model whose skill vector is nearest to the query's needs, biased by a cost term:
 
 <div align="center">
   <img src="docs/paper/figures/mom_capability_3d.png" alt="Spatial routing: the query vector and per-model skill vectors in capability space" width="540">
@@ -394,12 +361,9 @@ the model whose skill vector is nearest to the query's needs, biased by a cost t
 3. **Objective** per model: `Jₘ = Dₘ + β·aₘ`, distance `Dₘ = ‖p(x) − sₘ‖` plus normalized cost `aₘ`.
 4. **Argmin** over the pool → selected backend. The `r` knob slides the whole pool from max-saving to max-quality.
 
-Multimodal inputs are preprocessed (OCR, Whisper-compatible STT) then routed as text, or
-forwarded directly to a vision model. Details in [apps/router/README.md](apps/router/README.md) and the [paper](docs/paper/paper.pdf) §3.
+Multimodal inputs are preprocessed (OCR, Whisper-compatible STT) then routed as text, or forwarded directly to a vision model. Details in [apps/router/README.md](apps/router/README.md) and the [paper](docs/paper/paper.pdf) §3.
 
----
-
-## 🔁 Reproduce the paper
+### 🔁 Reproduce the paper
 
 <details>
 <summary>Full evaluation pipeline (Dataset A, 5,504 queries)</summary>
@@ -426,9 +390,7 @@ Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.m
 
 </details>
 
----
-
-## 🤗 Datasets & models
+### 🤗 Datasets & models
 
 | Artifact | HF Repo | Type | Notes |
 |---|---|---|---|
@@ -439,9 +401,7 @@ Full pipeline (judges, baselines, cost/Pareto analysis): [docs/quickstart/eval.m
 
 Download recipes: [`packages/datasets/`](packages/datasets/).
 
----
-
-## 📄 Paper
+### 📄 Paper
 
 > **Brick and the Mixture-of-Models (MoM) Paradigm: Bridging Open- and Closed-Weight LLM Pools**
 > Francesco Massa, Marco Cristofanilli (2026) · Built at [Regolo.ai](https://regolo.ai) (Seeweb)
@@ -458,12 +418,9 @@ Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf) · compile with `c
 }
 ```
 
----
-
-## 📈 Star history
+### 📈 Star history
 
 <a href="https://star-history.com/#regolo-ai/brick-sr1&Date">
   <img src="https://api.star-history.com/svg?repos=regolo-ai/brick-sr1&type=Date" alt="Star history chart" width="600">
 </a>
 
----
