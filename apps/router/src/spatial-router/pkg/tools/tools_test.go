@@ -11,8 +11,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
 
-	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/tools"
+	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 func TestTools(t *testing.T) {

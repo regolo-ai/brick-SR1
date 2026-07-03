@@ -10,6 +10,7 @@ Usage:
     python3 scripts/72_push_dataset_a_routing.py --dry-run   # build + parquet locali, no push
     python3 scripts/72_push_dataset_a_routing.py             # build + push HF
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,24 +54,24 @@ GRADED_FILES: dict[str, list[Path]] = {
 INDIVIDUAL_JUDGES: dict[str, dict[str, Path]] = {
     "qwen": {
         "gpt54mini": REPO_ROOT / "data/inference/qwen3.5-9b/planning_full_graded.jsonl",
-        "mistral":   REPO_ROOT / "data/inference/qwen3.5-9b/planning_full_graded__mistral.jsonl",
-        "glm":       REPO_ROOT / "data/inference/qwen3.5-9b/planning_full_graded__glm.jsonl",
+        "mistral": REPO_ROOT / "data/inference/qwen3.5-9b/planning_full_graded__mistral.jsonl",
+        "glm": REPO_ROOT / "data/inference/qwen3.5-9b/planning_full_graded__glm.jsonl",
     },
     "ds4": {
         "gpt54mini": REPO_ROOT / "data/inference/deepseek-v4-flash/planning_full_graded.jsonl",
-        "mistral":   REPO_ROOT / "data/inference/deepseek-v4-flash/planning_full_graded__mistral.jsonl",
-        "glm":       REPO_ROOT / "data/inference/deepseek-v4-flash/planning_full_graded__glm.jsonl",
+        "mistral": REPO_ROOT / "data/inference/deepseek-v4-flash/planning_full_graded__mistral.jsonl",
+        "glm": REPO_ROOT / "data/inference/deepseek-v4-flash/planning_full_graded__glm.jsonl",
     },
     "kimi": {
         "gpt54mini": REPO_ROOT / "data/inference/kimi2.6/planning_full_graded.jsonl",
-        "mistral":   REPO_ROOT / "data/inference/kimi2.6/planning_full_graded__mistral.jsonl",
-        "glm":       REPO_ROOT / "data/inference/kimi2.6/planning_full_graded__glm.jsonl",
+        "mistral": REPO_ROOT / "data/inference/kimi2.6/planning_full_graded__mistral.jsonl",
+        "glm": REPO_ROOT / "data/inference/kimi2.6/planning_full_graded__glm.jsonl",
     },
 }
 
 MODEL_ID_REAL = {
     "qwen": "Qwen/Qwen3.5-9B",
-    "ds4":  "deepseek/deepseek-v4-flash",
+    "ds4": "deepseek/deepseek-v4-flash",
     "kimi": "moonshotai/Kimi-K2.6",
 }
 
@@ -138,7 +139,7 @@ def collect_multiturn_rows(model_idx: dict[str, dict[str, dict]]) -> list[dict]:
     Non sono nel base dataset_A; dimension reassigned a `planning_agentic_multiturn`."""
     mt_qids = set()
     for m in MODELS:
-        for qid, rec in model_idx[m].items():
+        for qid, _rec in model_idx[m].items():
             if isinstance(qid, str) and qid.startswith("multi_turn_"):
                 mt_qids.add(qid)
     out = []
@@ -150,22 +151,26 @@ def collect_multiturn_rows(model_idx: dict[str, dict[str, dict]]) -> list[dict]:
                 break
         gm = sample.get("grader_meta", {}) if sample else {}
         category = gm.get("category", "") if isinstance(gm, dict) else ""
-        out.append({
-            "query_id": qid,
-            "query": "<multi-turn-benchmark>",
-            "dimension": "planning_agentic_multiturn",
-            "evaluation_protocol_id": sample.get("evaluation_protocol_id", "tool_call_match") if sample else "tool_call_match",
-            "source": f"BFCL-multi-turn-{category}" if category else "BFCL-multi-turn",
-            "gated": False,
-            "expected_answer": {"type": "multi_turn", "payload": "<see grader_meta per turn>"},
-            "few_shot_examples": [],
-            "shots": 0,
-            "input_tokens_qwen": None,
-            "input_tokens_deepseek": None,
-            "input_tokens_kimi": None,
-            "license": "Apache-2.0",
-            "length_band": "med",
-        })
+        out.append(
+            {
+                "query_id": qid,
+                "query": "<multi-turn-benchmark>",
+                "dimension": "planning_agentic_multiturn",
+                "evaluation_protocol_id": sample.get("evaluation_protocol_id", "tool_call_match")
+                if sample
+                else "tool_call_match",
+                "source": f"BFCL-multi-turn-{category}" if category else "BFCL-multi-turn",
+                "gated": False,
+                "expected_answer": {"type": "multi_turn", "payload": "<see grader_meta per turn>"},
+                "few_shot_examples": [],
+                "shots": 0,
+                "input_tokens_qwen": None,
+                "input_tokens_deepseek": None,
+                "input_tokens_kimi": None,
+                "license": "Apache-2.0",
+                "length_band": "med",
+            }
+        )
     return out
 
 
@@ -255,9 +260,9 @@ def build_verbose_df(
             row[f"{m}_reasoning_tokens"] = mrec.get("reasoning_tokens")
             row[f"{m}_input_tokens"] = mrec.get("input_tokens")
             row[f"{m}_finish_reason"] = mrec.get("finish_reason")
-            row[f"{m}_grader_meta"] = json.dumps(
-                mrec.get("grader_meta"), ensure_ascii=False
-            ) if mrec.get("grader_meta") is not None else None
+            row[f"{m}_grader_meta"] = (
+                json.dumps(mrec.get("grader_meta"), ensure_ascii=False) if mrec.get("grader_meta") is not None else None
+            )
             row[f"{m}_model_id_real"] = mrec.get("model_id_real")
 
             jverdicts = individual_judges[m].get(qid, {})
@@ -279,7 +284,7 @@ def _write_parquet(df, path: Path, row_group_size: int = 500) -> None:
     writer = pq.ParquetWriter(str(path), schema, compression="zstd")
     try:
         for start in range(0, len(df), chunk_size):
-            chunk = df.iloc[start:start + chunk_size]
+            chunk = df.iloc[start : start + chunk_size]
             table = pa.Table.from_pandas(chunk, schema=schema, preserve_index=False)
             writer.write_table(table, row_group_size=chunk_size)
     finally:
@@ -290,7 +295,9 @@ def _write_jsonl_from_df(df, path: Path) -> None:
     """Salva DataFrame come JSONL.gz (1 riga = 1 obj). Usato per evals con expected_answer
     enormi (LiveCodeBench private_tests fino a ~90MB) che non entrano in Parquet."""
     import gzip
+
     import pandas as pd
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     def _clean(v):
@@ -314,7 +321,6 @@ def _write_jsonl_from_df(df, path: Path) -> None:
 
 def _coerce_nullable_bools(df, cols: list[str]):
     """Cast colonne con bool/None mix a pandas BooleanDtype (pyarrow lo mappa a nullable bool)."""
-    import pandas as pd
     for c in cols:
         if c not in df.columns:
             continue
@@ -326,6 +332,7 @@ def _prepend_schema_anchor(df):
     """Inserisce riga 0 con tutti i campi popolati (no null). Forza schema-inference di
     datasets a tipi concreti invece di null type. Utenti devono filtrare query_id != '_schema_anchor'."""
     import pandas as pd
+
     anchor = {}
     for col in df.columns:
         nn = df[col].dropna()
@@ -333,11 +340,11 @@ def _prepend_schema_anchor(df):
             anchor[col] = "_anchor_"
             continue
         v = nn.iloc[0]
-        if isinstance(v, (bool,)) or str(df[col].dtype) == "boolean":
+        if isinstance(v, bool) or str(df[col].dtype) == "boolean":
             anchor[col] = True
-        elif isinstance(v, (int,)):
+        elif isinstance(v, int):
             anchor[col] = 0
-        elif isinstance(v, (float,)):
+        elif isinstance(v, float):
             anchor[col] = 0.0
         else:
             anchor[col] = "_anchor_"
@@ -391,7 +398,9 @@ def make_readme(stats: dict) -> str:
     lines.append("")
     lines.append(f"**Totale query:** {n} | **Gated (masked) query:** {n_gated}")
     lines.append("")
-    lines.append("Dataset di valutazione per LLM routing systems su 6 capability. Ogni query è stata eseguita su 3 modelli (qwen3.5-9b, deepseek-v4-flash, kimi2.6) e giudicata con grader deterministici (math/coding/ifeval) o LLM judge panel 2-of-3 (planning_agentic) / single judge (creative_synthesis, world_knowledge).")
+    lines.append(
+        "Dataset di valutazione per LLM routing systems su 6 capability. Ogni query è stata eseguita su 3 modelli (qwen3.5-9b, deepseek-v4-flash, kimi2.6) e giudicata con grader deterministici (math/coding/ifeval) o LLM judge panel 2-of-3 (planning_agentic) / single judge (creative_synthesis, world_knowledge)."
+    )
     lines.append("")
     lines.append("## Configs")
     lines.append("")
@@ -449,12 +458,22 @@ def make_readme(stats: dict) -> str:
     lines.append("")
     lines.append("| dimension | rows | verdict source |")
     lines.append("|---|---|---|")
-    lines.append(f"| planning_agentic | {by_dim.get('planning_agentic', 0)} | panel 2-of-3 (gpt-5.4-mini + mistral-small-2603 + glm-5-turbo) per ST; single judge per MT |")
-    lines.append(f"| math_reasoning | {by_dim.get('math_reasoning', 0)} | deterministic (math_equiv, gsm8k_final_answer) |")
+    lines.append(
+        f"| planning_agentic | {by_dim.get('planning_agentic', 0)} | panel 2-of-3 (gpt-5.4-mini + mistral-small-2603 + glm-5-turbo) per ST; single judge per MT |"
+    )
+    lines.append(
+        f"| math_reasoning | {by_dim.get('math_reasoning', 0)} | deterministic (math_equiv, gsm8k_final_answer) |"
+    )
     lines.append(f"| coding | {by_dim.get('coding', 0)} | deterministic (unit_test_pass) |")
-    lines.append(f"| instruction_following | {by_dim.get('instruction_following', 0)} | deterministic (ifeval_constraint_check) |")
-    lines.append(f"| world_knowledge | {by_dim.get('world_knowledge', 0)} | mix (deterministic mcq_letter per 102; LLM judge `llm_judge_factual` per 700) |")
-    lines.append(f"| creative_synthesis | {by_dim.get('creative_synthesis', 0)} | LLM judge `rubric_judge` (gpt-5.4-mini) |")
+    lines.append(
+        f"| instruction_following | {by_dim.get('instruction_following', 0)} | deterministic (ifeval_constraint_check) |"
+    )
+    lines.append(
+        f"| world_knowledge | {by_dim.get('world_knowledge', 0)} | mix (deterministic mcq_letter per 102; LLM judge `llm_judge_factual` per 700) |"
+    )
+    lines.append(
+        f"| creative_synthesis | {by_dim.get('creative_synthesis', 0)} | LLM judge `rubric_judge` (gpt-5.4-mini) |"
+    )
     lines.append("")
     lines.append("## Win-rate per modello")
     lines.append("")
@@ -479,18 +498,24 @@ def make_readme(stats: dict) -> str:
     lines.append("")
     lines.append("## Reproducibility")
     lines.append("")
-    lines.append("- Stesso pool di 5339 query del dataset base [`massaindustries/dataset-A-routing-eval`](https://huggingface.co/datasets/massaindustries/dataset-A-routing-eval)")
+    lines.append(
+        "- Stesso pool di 5339 query del dataset base [`massaindustries/dataset-A-routing-eval`](https://huggingface.co/datasets/massaindustries/dataset-A-routing-eval)"
+    )
     lines.append("- Inference deterministic (temperature=0.0)")
     lines.append("- Judge panel costanti, prompt template versionati nello skill `llmevals`")
     lines.append("- Per ripetere i test: scarica config `evals`, esegui inference, applica grader")
     lines.append("")
     lines.append("## License")
     lines.append("")
-    lines.append("CC-BY-4.0 (eccetto query originali dei dataset gated, che restano sotto le license dei rispettivi source).")
+    lines.append(
+        "CC-BY-4.0 (eccetto query originali dei dataset gated, che restano sotto le license dei rispettivi source)."
+    )
     lines.append("")
     lines.append("## Citation")
     lines.append("")
-    lines.append("Per i source originali del dataset_A, vedere `lockfile.yaml` in [`massaindustries/dataset-A-routing-eval`](https://huggingface.co/datasets/massaindustries/dataset-A-routing-eval).")
+    lines.append(
+        "Per i source originali del dataset_A, vedere `lockfile.yaml` in [`massaindustries/dataset-A-routing-eval`](https://huggingface.co/datasets/massaindustries/dataset-A-routing-eval)."
+    )
     return "\n".join(lines)
 
 
@@ -523,30 +548,30 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="solo build locale, no push HF")
     args = parser.parse_args()
 
-    print(f"=== build dataset_A_routing ===")
+    print("=== build dataset_A_routing ===")
     base_path = data_dir("final") / "evaluation_parameters_full.jsonl"
     base_rows = list(load_jsonl(base_path))
     print(f"loaded base dataset: {len(base_rows)} rows from {base_path}")
 
-    print(f"\nloading model indexes...")
+    print("\nloading model indexes...")
     model_idx: dict[str, dict[str, dict]] = {}
     for m in MODELS:
         idx = load_model_index(m)
         model_idx[m] = idx
         print(f"  {m}: {len(idx)} unique query_id")
 
-    print(f"\nloading individual judges for planning ST...")
+    print("\nloading individual judges for planning ST...")
     individual_judges: dict[str, dict[str, dict[str, bool]]] = {}
     for m in MODELS:
         ij = load_individual_judges(m)
         individual_judges[m] = ij
         print(f"  {m}: {len(ij)} query_id with individual judge verdicts")
 
-    print(f"\ncollecting multi-turn extra rows (not in base dataset)...")
+    print("\ncollecting multi-turn extra rows (not in base dataset)...")
     extra_rows = collect_multiturn_rows(model_idx)
     print(f"  multi-turn rows: {len(extra_rows)}")
 
-    print(f"\nbuilding DataFrames...")
+    print("\nbuilding DataFrames...")
     evals_df = build_evals_df(base_rows, extra_rows)
     evals_df = _prepend_schema_anchor(evals_df)
     print(f"  evals_df: {len(evals_df)} rows, {len(evals_df.columns)} cols (incl. schema anchor)")
@@ -556,15 +581,13 @@ def main():
     results_df = _prepend_schema_anchor(results_df)
     print(f"  results_df: {len(results_df)} rows, {len(results_df.columns)} cols (incl. schema anchor)")
     verbose_df = build_verbose_df(base_rows, extra_rows, model_idx, individual_judges)
-    bool_cols_verbose = bool_cols_results + [
-        f"{m}_judge_{j}" for m in MODELS for j in ("gpt54mini", "mistral", "glm")
-    ]
+    bool_cols_verbose = bool_cols_results + [f"{m}_judge_{j}" for m in MODELS for j in ("gpt54mini", "mistral", "glm")]
     verbose_df = _coerce_nullable_bools(verbose_df, bool_cols_verbose)
     verbose_df = _prepend_schema_anchor(verbose_df)
     print(f"  verbose_df: {len(verbose_df)} rows, {len(verbose_df.columns)} cols (incl. schema anchor)")
 
     stats = compute_stats(base_rows + extra_rows, model_idx, results_df)
-    print(f"\nstats:")
+    print("\nstats:")
     print(f"  by_dim: {stats['by_dim']}")
     print(f"  coverage: {stats['coverage']}")
     print(f"  win_rate: {stats['win_rate']}")
@@ -601,7 +624,7 @@ def main():
 
     stats_path = out_dir / "build_stats.json"
     stats_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
-    print(f"  build_stats.json")
+    print("  build_stats.json")
 
     if args.dry_run:
         print(f"\n[DRY-RUN] skipping HF push. Files saved to {out_dir}")
@@ -631,7 +654,7 @@ def main():
             commit_message=f"dataset_A_routing config={cfg}",
         )
 
-    print(f"  uploading README.md")
+    print("  uploading README.md")
     api.upload_file(
         path_or_fileobj=str(readme_path),
         path_in_repo="README.md",
@@ -640,7 +663,7 @@ def main():
         commit_message="dataset card with multi-config + verdict stats",
     )
 
-    print(f"  uploading build_stats.json")
+    print("  uploading build_stats.json")
     api.upload_file(
         path_or_fileobj=str(stats_path),
         path_in_repo="build_stats.json",

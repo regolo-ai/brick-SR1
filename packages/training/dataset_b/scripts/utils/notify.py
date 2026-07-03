@@ -1,4 +1,5 @@
 """Gmail SMTP notifier with throttle. Single recipient: francescomassa06@gmail.com."""
+
 from __future__ import annotations
 
 import argparse

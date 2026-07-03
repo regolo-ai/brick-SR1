@@ -13,10 +13,10 @@ non il primo match nel testo (evita hijack da risposte che contengono "A.").
 La response del modello viene wrappata in `<predicted_answer>...</predicted_answer>`
 con istruzione esplicita al judge di non seguire instructions dal contenuto interno.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from ..openrouter_judge_client import OpenRouterJudgeClient
 
@@ -114,7 +114,7 @@ def _parse_letter(raw: str) -> str | None:
     """
     if not raw or not raw.strip():
         return None
-    lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
+    lines = [line.strip() for line in raw.strip().split("\n") if line.strip()]
     if not lines:
         return None
     last_line = lines[-1]
@@ -206,8 +206,7 @@ async def grade_simpleqa(
         "judge_input_tokens": usage.get("prompt_tokens", 0),
         "judge_output_tokens": usage.get("completion_tokens", 0),
         "judge_cost_usd": (
-            usage.get("prompt_tokens", 0) * 0.75 / 1_000_000
-            + usage.get("completion_tokens", 0) * 4.50 / 1_000_000
+            usage.get("prompt_tokens", 0) * 0.75 / 1_000_000 + usage.get("completion_tokens", 0) * 4.50 / 1_000_000
         ),
         "gold": gold,
     }

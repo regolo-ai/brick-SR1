@@ -19,6 +19,7 @@ Output: `data/reports/panel_results.{csv,md}`.
 Uso:
   python scripts/131_panel_report.py
 """
+
 from __future__ import annotations
 
 import csv
@@ -88,17 +89,19 @@ def main() -> int:
             graded = t + f
             acc_cond = t / graded if graded else 0.0
             acc_over = t / N_PC if N_PC else 0.0
-            rows.append({
-                "model": model,
-                "judge": judge_label,
-                "n": tot,
-                "true": t,
-                "false": f,
-                "abstention": n,
-                "acc_conditional": round(acc_cond, 4),
-                "acc_overall": round(acc_over, 4),
-                "cost_usd": round(cost, 4),
-            })
+            rows.append(
+                {
+                    "model": model,
+                    "judge": judge_label,
+                    "n": tot,
+                    "true": t,
+                    "false": f,
+                    "abstention": n,
+                    "acc_conditional": round(acc_cond, 4),
+                    "acc_overall": round(acc_over, 4),
+                    "cost_usd": round(cost, 4),
+                }
+            )
             if judge_label == "panel-2of3":
                 panel_votes_by_model[model] = votes
             print(f"[read] {model}/{judge_label}: T={t} F={f} None={n} cost=${cost:.4f}")
@@ -135,8 +138,10 @@ def main() -> int:
                 f"{r['acc_overall']*100:.1f}% | ${r['cost_usd']:.4f} |\n"
             )
         fmd.write("\n## Panel vote distribution (T-F counts on the 3 judges)\n\n")
-        fmd.write("Format `T-F`: number of accept votes minus reject votes among the 3 judges; "
-                  "`1-1` = only 2 valid votes with tie (abstention).\n\n")
+        fmd.write(
+            "Format `T-F`: number of accept votes minus reject votes among the 3 judges; "
+            "`1-1` = only 2 valid votes with tie (abstention).\n\n"
+        )
         all_keys = sorted({k for v in panel_votes_by_model.values() for k in v.keys()})
         fmd.write("| Model | " + " | ".join(all_keys) + " |\n")
         fmd.write("|---" + "|--:" * len(all_keys) + "|\n")
@@ -144,9 +149,9 @@ def main() -> int:
             votes = panel_votes_by_model.get(model, Counter())
             cells = [str(votes.get(k, 0)) for k in all_keys]
             fmd.write(f"| {model} | " + " | ".join(cells) + " |\n")
-        fmd.write("\nPanel cost totale: ${:.4f}\n".format(
-            sum(r["cost_usd"] for r in rows if r["judge"] == "panel-2of3")
-        ))
+        fmd.write(
+            "\nPanel cost totale: ${:.4f}\n".format(sum(r["cost_usd"] for r in rows if r["judge"] == "panel-2of3"))
+        )
     print(f"[write] {md_path}")
     print(f"[done] {len(rows)} righe ({len(MODELS)} modelli × {len(JUDGE_FILES)} giudici)")
     return 0

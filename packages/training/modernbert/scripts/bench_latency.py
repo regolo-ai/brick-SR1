@@ -4,14 +4,15 @@ Usage:
     python bench_latency.py --ckpt outputs/modernbert-winner/best \
         --batch 1 --warmup 100 --n 1000
 """
+
 from __future__ import annotations
+
 import argparse
-import time
 import statistics
+import time
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
 
 SAMPLE_TEXTS = [
     "write a python function to sort a list",
@@ -33,14 +34,17 @@ def main() -> int:
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.ckpt)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.ckpt, torch_dtype=torch.bfloat16,
-        attn_implementation="sdpa").cuda().eval()
+    model = (
+        AutoModelForSequenceClassification.from_pretrained(
+            args.ckpt, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        )
+        .cuda()
+        .eval()
+    )
 
     # Prepare batch
-    texts = (SAMPLE_TEXTS * (args.batch // len(SAMPLE_TEXTS) + 1))[:args.batch]
-    inp = tokenizer(texts, return_tensors="pt", truncation=True,
-                    max_length=args.max_length, padding=True).to("cuda")
+    texts = (SAMPLE_TEXTS * (args.batch // len(SAMPLE_TEXTS) + 1))[: args.batch]
+    inp = tokenizer(texts, return_tensors="pt", truncation=True, max_length=args.max_length, padding=True).to("cuda")
 
     # Warmup
     with torch.no_grad():

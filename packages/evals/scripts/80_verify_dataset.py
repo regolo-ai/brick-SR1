@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """80 - Verify dataset post-push: load_dataset() + smoke checks."""
+
 from __future__ import annotations
 
 import sys
@@ -16,16 +17,33 @@ REPO_ID = "massaindustries/dataset-A-routing-eval"
 
 def main():
     from datasets import load_dataset
+
     print(f"loading {REPO_ID}...")
     ds = load_dataset(REPO_ID, split="train", token=hf_token())
     print(f"  loaded {len(ds)} rows")
 
     # Schema check
-    required = {"query_id", "query", "query_hash", "dimension", "source", "shots",
-                "input_tokens_qwen", "input_tokens_deepseek", "input_tokens_kimi",
-                "expected_answer", "evaluation_protocol_id", "few_shot_examples",
-                "language", "difficulty_band", "length_band", "dataset_release_date",
-                "contamination_risk", "gated", "license"}
+    required = {
+        "query_id",
+        "query",
+        "query_hash",
+        "dimension",
+        "source",
+        "shots",
+        "input_tokens_qwen",
+        "input_tokens_deepseek",
+        "input_tokens_kimi",
+        "expected_answer",
+        "evaluation_protocol_id",
+        "few_shot_examples",
+        "language",
+        "difficulty_band",
+        "length_band",
+        "dataset_release_date",
+        "contamination_risk",
+        "gated",
+        "license",
+    }
     missing = required - set(ds.column_names)
     if missing:
         print(f"[FAIL] missing columns: {missing}")
@@ -40,18 +58,21 @@ def main():
 
     # Sample 10 random
     import random
+
     rng = random.Random(0)
     sample_idx = rng.sample(range(len(ds)), min(10, len(ds)))
-    print(f"\nSample 10 rows:")
+    print("\nSample 10 rows:")
     for i in sample_idx:
         r = ds[i]
         gated_marker = " [GATED-MASKED]" if r["gated"] else ""
         q_preview = r["query"][:80].replace("\n", " ")
-        print(f"  {r['query_id']} | {r['dimension']:20s} | shots={r['shots']} | toks(q)={r['input_tokens_qwen']}{gated_marker}")
+        print(
+            f"  {r['query_id']} | {r['dimension']:20s} | shots={r['shots']} | toks(q)={r['input_tokens_qwen']}{gated_marker}"
+        )
         print(f"    query: {q_preview}...")
 
     # Re-tokenize 50 random and compare with stored
-    print(f"\nRe-tokenize 50 sample (qwen)...")
+    print("\nRe-tokenize 50 sample (qwen)...")
     re_idx = rng.sample(range(len(ds)), min(50, len(ds)))
     mismatches = 0
     for i in re_idx:
@@ -66,7 +87,7 @@ def main():
     if mismatches > 0:
         print(f"[WARN] {mismatches}/50 token mismatches (possibly tokenizer version drift)")
     else:
-        print(f"[OK] 50/50 token counts match")
+        print("[OK] 50/50 token counts match")
 
     # Gated rows have query='<masked>'
     gated_rows = [r for r in ds if r["gated"]]

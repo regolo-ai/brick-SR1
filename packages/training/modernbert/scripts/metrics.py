@@ -6,13 +6,21 @@ Threshold-conditional macro-F1 at {0.3, 0.5, 0.7}.
 
 Used as `compute_metrics` callback in HF Trainer.
 """
+
 from __future__ import annotations
+
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import f1_score
 
-DIMS = ["instruction_following", "coding", "math_reasoning",
-        "world_knowledge", "planning_agentic", "creative_synthesis"]
+DIMS = [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis",
+]
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:

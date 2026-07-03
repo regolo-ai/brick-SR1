@@ -3,7 +3,9 @@
 Usage:
     python sanity_check.py --ckpt outputs/modernbert-winner/best
 """
+
 from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
@@ -31,14 +33,17 @@ def main() -> int:
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.ckpt)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.ckpt, torch_dtype=torch.bfloat16,
-        attn_implementation="sdpa").cuda().eval()
+    model = (
+        AutoModelForSequenceClassification.from_pretrained(
+            args.ckpt, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        )
+        .cuda()
+        .eval()
+    )
 
     n_pass = 0
     for text, expected in SAMPLES:
-        inp = tokenizer(text, return_tensors="pt", truncation=True,
-                        max_length=512).to("cuda")
+        inp = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to("cuda")
         with torch.no_grad():
             logits = model(**inp).logits.float().cpu()
         scores = torch.sigmoid(logits)[0].tolist()
@@ -47,7 +52,7 @@ def main() -> int:
         ok = top_dim == expected
         n_pass += int(ok)
         marker = "PASS" if ok else "FAIL"
-        score_str = "  ".join(f"{d}={s:.2f}" for d, s in zip(DIMS, scores))
+        score_str = "  ".join(f"{d}={s:.2f}" for d, s in zip(DIMS, scores, strict=False))
         print(f"[{marker}] {text!r:65s}  expected={expected:22s} top={top_dim:22s}")
         print(f"        {score_str}")
     print(f"\n{n_pass}/{len(SAMPLES)} PASS")

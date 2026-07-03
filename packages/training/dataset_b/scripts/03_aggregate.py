@@ -6,6 +6,7 @@ Writes: data/final/dataset_b_train.jsonl
 Computes mean across judges (skipping judges with parse_fail), flags disagreement
 when max-min > threshold on any dimension. Optional --audit prints histogram + stats.
 """
+
 from __future__ import annotations
 
 import argparse

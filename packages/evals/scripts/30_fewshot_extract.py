@@ -9,6 +9,7 @@ Strategia:
 - Random sample con seed=42
 - Estrazione campi (question, reasoning, final_answer) per dimension-specific
 """
+
 from __future__ import annotations
 
 import json
@@ -41,6 +42,7 @@ def _eval_hashes(source_id: str, query_field: str = "query") -> set[str]:
 
 def _load_pool(pool_cfg: dict) -> list[dict]:
     from datasets import load_dataset
+
     repo = pool_cfg["repo"]
     cfg = pool_cfg.get("config")
     split = pool_cfg.get("split", "train")

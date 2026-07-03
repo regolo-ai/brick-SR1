@@ -10,8 +10,8 @@ import (
 
 	"github.com/openai/openai-go"
 
-	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
+	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 // ToolEntry represents a tool stored in the tools database

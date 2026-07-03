@@ -3,6 +3,7 @@
 
 Modifica IN-PLACE data/final/evaluation_parameters_full.jsonl.
 """
+
 from __future__ import annotations
 
 import sys
@@ -43,7 +44,7 @@ def main():
         print(f"  [warn] kimi tokenizer failed: {e}; using qwen as fallback")
         ki = qwen[:]
 
-    for r, q, d, k in zip(rows, qwen, ds, ki):
+    for r, q, d, k in zip(rows, qwen, ds, ki, strict=False):
         r["input_tokens_qwen"] = q
         r["input_tokens_deepseek"] = d
         r["input_tokens_kimi"] = k

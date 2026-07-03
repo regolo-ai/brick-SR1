@@ -3,7 +3,9 @@
 Usage:
     python select_top3.py --project dataset-b-modernbert --sweep <SWEEP_ID>
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import shutil
@@ -18,12 +20,13 @@ def main() -> int:
     args = ap.parse_args()
 
     import wandb
+
     api = wandb.Api()
     sweep = api.sweep(f"{args.project}/{args.sweep}")
     runs = sorted(
-        [r for r in sweep.runs if r.state == "finished"
-         and r.summary.get("eval/pearson_macro") is not None],
-        key=lambda r: r.summary["eval/pearson_macro"], reverse=True,
+        [r for r in sweep.runs if r.state == "finished" and r.summary.get("eval/pearson_macro") is not None],
+        key=lambda r: r.summary["eval/pearson_macro"],
+        reverse=True,
     )[:3]
 
     out_root = Path(args.output_dir)
@@ -38,15 +41,17 @@ def main() -> int:
         src = Path(f"outputs/modernbert-{size}/best")
         if src.exists():
             shutil.copytree(src, rank_dir / "best", dirs_exist_ok=True)
-        summary.append({
-            "rank": i,
-            "run_id": run.id,
-            "name": run.name,
-            "config": dict(run.config),
-            "pearson_macro": run.summary["eval/pearson_macro"],
-            "mae_macro": run.summary.get("eval/mae_macro"),
-            "local_ckpt": str(rank_dir / "best") if src.exists() else None,
-        })
+        summary.append(
+            {
+                "rank": i,
+                "run_id": run.id,
+                "name": run.name,
+                "config": dict(run.config),
+                "pearson_macro": run.summary["eval/pearson_macro"],
+                "mae_macro": run.summary.get("eval/mae_macro"),
+                "local_ckpt": str(rank_dir / "best") if src.exists() else None,
+            }
+        )
     (out_root / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
     return 0

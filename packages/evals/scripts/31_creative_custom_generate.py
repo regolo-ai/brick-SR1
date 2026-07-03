@@ -4,6 +4,7 @@
 Genere bilanciati: literary, sci-fi, horror, comedic, poetic, dialogue-driven, micro-fiction, character study.
 Output: data/creative_custom/generated.jsonl + SHA256 in lockfile.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,7 +64,7 @@ def main():
 
     rows: list[dict] = []
     if out_path.exists():
-        with open(out_path, "r", encoding="utf-8") as f:
+        with open(out_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -90,7 +91,9 @@ def main():
                 counts_by_genre[genre] += 1
                 if len(rows) % 25 == 0:
                     save_jsonl(out_path, rows)
-                    print(f"  progress: {len(rows)}/{TARGET_GENERATIONS} (genre={genre} {counts_by_genre[genre]}/{PER_GENRE})")
+                    print(
+                        f"  progress: {len(rows)}/{TARGET_GENERATIONS} (genre={genre} {counts_by_genre[genre]}/{PER_GENRE})"
+                    )
             except Exception as e:
                 print(f"  [warn] gen_one failed ({genre}): {type(e).__name__}: {str(e)[:120]}")
                 time.sleep(2)
@@ -103,10 +106,11 @@ def main():
 
     # Lockfile entry
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     entries["creative_custom_generated"] = {
         "model": "qwen3.5-122b@regolo",

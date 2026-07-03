@@ -13,6 +13,7 @@ Comportamento:
 - Restituisce (passed: bool|None, meta: dict). passed=True iff TUTTI i test
   (public+private) ritornano True secondo la convenzione LCB.
 """
+
 from __future__ import annotations
 
 import base64
@@ -127,9 +128,11 @@ def _worker(sample, code, timeout, debug, result, meta_list):
     stato globale)."""
     # Re-importa nel child per sicurezza
     import sys as _sys
+
     if str(_EXT) not in _sys.path:
         _sys.path.insert(0, str(_EXT))
     from lcb_runner.evaluation.testing_util import run_test as _rt
+
     try:
         res, meta = _rt(sample, test=code, debug=debug, timeout=timeout)
     except Exception as e:
@@ -167,6 +170,7 @@ def _run_isolated(sample: dict, code: str, timeout: int, n_inputs: int) -> tuple
     for e in res:
         try:
             import numpy as _np
+
             if isinstance(e, _np.ndarray):
                 e = e.item(0)
             if isinstance(e, _np.bool_):
@@ -216,9 +220,7 @@ def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | No
     sample = {"input_output": json.dumps(in_outs)}
 
     try:
-        results, rt_meta = _run_isolated(
-            sample, code, timeout=timeout, n_inputs=len(all_tests)
-        )
+        results, rt_meta = _run_isolated(sample, code, timeout=timeout, n_inputs=len(all_tests))
     except Exception as e:
         return False, {
             "reason": "isolated runner raised",
@@ -236,12 +238,7 @@ def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | No
     # in alcuni casi). Trattali come fallimenti.
     n_missing = max(0, n_total - len(results))
 
-    all_pass = (
-        n_passed == n_total
-        and n_failed == 0
-        and n_error == 0
-        and n_missing == 0
-    )
+    all_pass = n_passed == n_total and n_failed == 0 and n_error == 0 and n_missing == 0
 
     meta = {
         "n_tests": n_total,

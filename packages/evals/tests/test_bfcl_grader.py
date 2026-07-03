@@ -2,21 +2,21 @@
 
 Test minimi per le 5 categorie BFCL + parsing response.
 """
+
 from __future__ import annotations
 
 import pytest
-
 from brick_evals.graders.bfcl_grader import (
     AVAILABLE,
     extract_calls,
     grade_bfcl,
 )
 
-
 pytestmark = pytest.mark.skipif(not AVAILABLE, reason="BFCL ast_checker not importable")
 
 
 # --- Helpers per costruire payload BFCL minimali --------------------------
+
 
 def _func_spec_simple() -> dict:
     return {
@@ -62,6 +62,7 @@ def _payload_irrelevance() -> dict:
 
 # --- Parsing tests --------------------------------------------------------
 
+
 def test_extract_calls_raw_python():
     calls, meta = extract_calls("calculate_cell_density(optical_density=0.6, dilution=5)")
     assert calls == [{"calculate_cell_density": {"optical_density": 0.6, "dilution": 5}}]
@@ -69,12 +70,7 @@ def test_extract_calls_raw_python():
 
 
 def test_extract_calls_python_code_block():
-    txt = (
-        "Sure, here's the call:\n"
-        "```python\n"
-        "calculate_cell_density(optical_density=0.6, dilution=5)\n"
-        "```\n"
-    )
+    txt = "Sure, here's the call:\n" "```python\n" "calculate_cell_density(optical_density=0.6, dilution=5)\n" "```\n"
     calls, meta = extract_calls(txt)
     assert calls == [{"calculate_cell_density": {"optical_density": 0.6, "dilution": 5}}]
     assert meta["strategy"] == "py_block"
@@ -89,9 +85,7 @@ def test_extract_calls_toolcall_tag():
 
 def test_extract_calls_openai_json_block():
     txt = (
-        '```json\n'
-        '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n'
-        '```'
+        "```json\n" '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n' "```"
     )
     calls, meta = extract_calls(txt)
     assert calls == [{"calculate_cell_density": {"optical_density": 0.6, "dilution": 5}}]
@@ -110,6 +104,7 @@ def test_extract_calls_unparseable():
 
 
 # --- Grading tests --------------------------------------------------------
+
 
 def test_grade_simple_correct():
     response = "calculate_cell_density(optical_density=0.6, dilution=5)"
@@ -152,9 +147,7 @@ def test_grade_simple_no_response():
 
 def test_grade_simple_openai_format():
     response = (
-        '```json\n'
-        '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n'
-        '```'
+        "```json\n" '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n' "```"
     )
     correct, _ = grade_bfcl(response, _payload_simple())
     assert correct is True

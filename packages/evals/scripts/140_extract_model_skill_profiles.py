@@ -15,20 +15,19 @@ dove K_m,c sono le risposte corrette del modello m nella capability c,
 N_m,c e il supporto totale, mu_c e la prior globale della capability,
 e k e la forza della prior.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import math
-import os
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import pyarrow as pa
 import pyarrow.ipc as pa_ipc
-
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -88,12 +87,7 @@ def load_hf_rows() -> Iterable[dict]:
 
 
 def latest_cached_arrow(cache_root: Path) -> Path | None:
-    base = (
-        cache_root
-        / "massaindustries___dataset-a-routing"
-        / DATASET_CONFIG
-        / "0.0.0"
-    )
+    base = cache_root / "massaindustries___dataset-a-routing" / DATASET_CONFIG / "0.0.0"
     if not base.exists():
         return None
 
@@ -123,17 +117,14 @@ def read_arrow_table(path: Path) -> pa.Table:
 def iter_cached_arrow_rows(cache_root: Path) -> Iterable[dict]:
     arrow_path = latest_cached_arrow(cache_root)
     if arrow_path is None:
-        raise FileNotFoundError(
-            "cached Arrow file not found for "
-            f"{DATASET_ID}/{DATASET_CONFIG}/{DATASET_SPLIT}"
-        )
+        raise FileNotFoundError("cached Arrow file not found for " f"{DATASET_ID}/{DATASET_CONFIG}/{DATASET_SPLIT}")
 
     table = read_arrow_table(arrow_path)
     for batch in table.to_batches(max_chunksize=8192):
         names = batch.schema.names
         cols = [batch.column(i).to_pylist() for i in range(len(names))]
-        for values in zip(*cols):
-            yield dict(zip(names, values))
+        for values in zip(*cols, strict=False):
+            yield dict(zip(names, values, strict=False))
 
 
 def iter_rows(cache_root: Path) -> tuple[str, Iterable[dict]]:
@@ -268,26 +259,27 @@ def write_markdown(path: Path, payload: dict) -> None:
         vals = [fmt_float(profile["ability"][cap]) for cap in payload["capabilities"]]
         lines.append(f"| {model} | " + " | ".join(vals) + " |")
 
-    lines.extend([
-        "",
-        "## Correct / Support",
-        "",
-        "| Model | " + " | ".join(payload["capabilities"]) + " |",
-        "|---|" + "|".join(["---:"] * len(payload["capabilities"])) + "|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Correct / Support",
+            "",
+            "| Model | " + " | ".join(payload["capabilities"]) + " |",
+            "|---|" + "|".join(["---:"] * len(payload["capabilities"])) + "|",
+        ]
+    )
 
     for model, profile in payload["models"].items():
-        vals = [
-            f"{profile['correct'][cap]}/{profile['support'][cap]}"
-            for cap in payload["capabilities"]
-        ]
+        vals = [f"{profile['correct'][cap]}/{profile['support'][cap]}" for cap in payload["capabilities"]]
         lines.append(f"| {model} | " + " | ".join(vals) + " |")
 
-    lines.extend([
-        "",
-        "## Ranking Per Capability",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Ranking Per Capability",
+            "",
+        ]
+    )
 
     for cap in payload["capabilities"]:
         ranked = sorted(
@@ -308,12 +300,14 @@ def write_markdown(path: Path, payload: dict) -> None:
             )
         lines.append("")
 
-    lines.extend([
-        "## Global Priors",
-        "",
-        "| Capability | Prior mu_c |",
-        "|---|---:|",
-    ])
+    lines.extend(
+        [
+            "## Global Priors",
+            "",
+            "| Capability | Prior mu_c |",
+            "|---|---:|",
+        ]
+    )
     for cap in payload["capabilities"]:
         lines.append(f"| {cap} | {fmt_float(payload['global_prior'][cap])} |")
 

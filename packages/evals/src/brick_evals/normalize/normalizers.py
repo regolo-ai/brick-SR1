@@ -3,11 +3,11 @@
 Output: dict con keys query, expected_answer, language, difficulty_band, dataset_release_date,
 contamination_risk, gated, license, source_meta (informazione raw extra non in schema).
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 
 def _len_band(text: str) -> str:
@@ -110,7 +110,7 @@ def normalize_math500(row: dict) -> dict:
     answer = row.get("answer", "")
     level = row.get("level")
     band = "unknown"
-    if isinstance(level, (int, str)):
+    if isinstance(level, int | str):
         try:
             lv = int(str(level).replace("Level ", ""))
             band = "low" if lv <= 2 else ("med" if lv == 3 else "high")
@@ -368,12 +368,19 @@ def normalize_bfcl(row: dict) -> dict:
     if isinstance(question, list):
         # BFCL multi-turn: prendi user message
         question = " ".join(
-            m.get("content", "") for turn in question for m in (turn if isinstance(turn, list) else [turn]) if isinstance(m, dict) and m.get("role") == "user"
+            m.get("content", "")
+            for turn in question
+            for m in (turn if isinstance(turn, list) else [turn])
+            if isinstance(m, dict) and m.get("role") == "user"
         )
     category = row.get("_category") or row.get("category", "unknown")
-    band = {"simple": "low", "multiple": "med", "parallel": "high", "parallel_multiple": "high", "irrelevance": "med"}.get(
-        category, "unknown"
-    )
+    band = {
+        "simple": "low",
+        "multiple": "med",
+        "parallel": "high",
+        "parallel_multiple": "high",
+        "irrelevance": "med",
+    }.get(category, "unknown")
     return {
         "query": question,
         "expected_answer": {

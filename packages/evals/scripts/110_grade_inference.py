@@ -18,6 +18,7 @@ Usage:
       --inference data/inference/deepseek-v4-flash/dataset_a_smoke.jsonl \\
       --output data/inference/deepseek-v4-flash/graded_smoke.jsonl
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,12 +41,16 @@ if _env_path.exists():
             _k, _v = _line.split("=", 1)
             os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
-from brick_evals.io_utils import load_jsonl, repo_root  # noqa: E402
-from brick_evals.graders.ifeval_grader import grade_ifeval as _grade_ifeval_impl, AVAILABLE as IFEVAL_AVAILABLE  # noqa: E402
-from brick_evals.graders.lcb_grader import grade_lcb as _grade_lcb_impl, AVAILABLE as LCB_AVAILABLE  # noqa: E402
-from brick_evals.graders.bfcl_grader import grade_bfcl as _grade_bfcl_impl, AVAILABLE as BFCL_AVAILABLE  # noqa: E402
-from brick_evals.graders.rubric_judge_grader import grade_rubric as _grade_rubric_impl, AVAILABLE as RUBRIC_AVAILABLE  # noqa: E402
+from brick_evals.graders.bfcl_grader import AVAILABLE as BFCL_AVAILABLE  # noqa: E402
+from brick_evals.graders.bfcl_grader import grade_bfcl as _grade_bfcl_impl  # noqa: E402
+from brick_evals.graders.ifeval_grader import AVAILABLE as IFEVAL_AVAILABLE  # noqa: E402
+from brick_evals.graders.ifeval_grader import grade_ifeval as _grade_ifeval_impl  # noqa: E402
+from brick_evals.graders.lcb_grader import AVAILABLE as LCB_AVAILABLE  # noqa: E402
+from brick_evals.graders.lcb_grader import grade_lcb as _grade_lcb_impl  # noqa: E402
+from brick_evals.graders.rubric_judge_grader import AVAILABLE as RUBRIC_AVAILABLE  # noqa: E402
+from brick_evals.graders.rubric_judge_grader import grade_rubric as _grade_rubric_impl  # noqa: E402
 from brick_evals.graders.simpleqa_grader import grade_simpleqa as _grade_simpleqa_impl  # noqa: E402
+from brick_evals.io_utils import load_jsonl, repo_root  # noqa: E402
 from brick_evals.openrouter_judge_client import OpenRouterJudgeClient  # noqa: E402
 
 PROGRAMMATIC = {"gsm8k_final_answer", "mcq_letter", "math_equiv", "ifeval_constraint_check"}
@@ -56,6 +61,7 @@ NOT_SUPPORTED = {"tool_call_trajectory", "gaia_exact_match"}
 
 
 # ---------- gsm8k ----------
+
 
 def grade_gsm8k(response: str, payload: dict) -> tuple[bool | None, dict]:
     expected = str(payload.get("final_answer", "")).strip()
@@ -205,6 +211,7 @@ def grade_math_equiv(response: str, payload: dict) -> tuple[bool | None, dict]:
     try:
         import sympy
         from sympy.parsing.latex import parse_latex
+
         try:
             ce = parse_latex(candidate)
             ee = parse_latex(expected)
@@ -219,6 +226,7 @@ def grade_math_equiv(response: str, payload: dict) -> tuple[bool | None, dict]:
 
 # ---------- ifeval ----------
 
+
 def grade_ifeval(response: str, payload: dict) -> tuple[bool | None, dict]:
     if not IFEVAL_AVAILABLE:
         return None, {"reason": "ifeval registry not available"}
@@ -231,6 +239,7 @@ def grade_ifeval(response: str, payload: dict) -> tuple[bool | None, dict]:
 
 # ---------- lcb ----------
 
+
 def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | None, dict]:
     if not LCB_AVAILABLE:
         return None, {"reason": "LCB runner not available"}
@@ -239,6 +248,7 @@ def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | No
 
 # ---------- bfcl (tool_call_match, planning_agentic single-turn) ----------
 
+
 def grade_bfcl(response: str, payload: dict) -> tuple[bool | None, dict]:
     if not BFCL_AVAILABLE:
         return None, {"reason": "BFCL ast_checker not available"}
@@ -246,6 +256,7 @@ def grade_bfcl(response: str, payload: dict) -> tuple[bool | None, dict]:
 
 
 # ---------- rubric_judge (LLM-as-judge per planning_custom + creative_*) ----
+
 
 def grade_rubric(response: str, payload: dict, query: str) -> tuple[bool | None, dict]:
     if not RUBRIC_AVAILABLE:
@@ -281,7 +292,7 @@ async def grade_row(
     enable_lcb: bool = True,
     enable_judge: bool = False,
     lcb_timeout: int = 6,
-    judge_client: "OpenRouterJudgeClient | None" = None,
+    judge_client: OpenRouterJudgeClient | None = None,
     judge_model: str = "openai/gpt-5.4-mini",
     judge_temperature: float = 0.0,
 ) -> tuple[bool | None, dict]:
@@ -309,16 +320,22 @@ async def grade_row(
         if not enable_judge:
             return None, {"reason": "rubric_judge not enabled (use --enable-judge)"}
         return await _grade_rubric_impl(
-            response, payload, query=query,
-            judge_client=judge_client, judge_model=judge_model,
+            response,
+            payload,
+            query=query,
+            judge_client=judge_client,
+            judge_model=judge_model,
             judge_temperature=judge_temperature,
         )
     if protocol == "llm_judge_factual":
         if not enable_judge:
             return None, {"reason": "llm_judge_factual not enabled (use --enable-judge)"}
         return await _grade_simpleqa_impl(
-            response, payload, query=query,
-            judge_client=judge_client, judge_model=judge_model,
+            response,
+            payload,
+            query=query,
+            judge_client=judge_client,
+            judge_model=judge_model,
             judge_temperature=judge_temperature,
         )
     if protocol in LLM_JUDGE:
@@ -364,16 +381,19 @@ async def _process_row(
         thinking = row.get("model_raw_thinking_output") or ""
         query = ev.get("query") or ""
         correct, meta = await grade_row(
-            response, protocol, expected,
-            query=query, thinking=thinking,
-            enable_lcb=enable_lcb, enable_judge=enable_judge, lcb_timeout=lcb_timeout,
-            judge_client=judge_client, judge_model=judge_model, judge_temperature=judge_temperature,
+            response,
+            protocol,
+            expected,
+            query=query,
+            thinking=thinking,
+            enable_lcb=enable_lcb,
+            enable_judge=enable_judge,
+            lcb_timeout=lcb_timeout,
+            judge_client=judge_client,
+            judge_model=judge_model,
+            judge_temperature=judge_temperature,
         )
-        if (
-            finish == "length"
-            and not response.strip()
-            and not meta.get("from_thinking")
-        ):
+        if finish == "length" and not response.strip() and not meta.get("from_thinking"):
             row["correct"] = None
             row["grader_meta"] = {
                 "reason": "truncation_empty: finish_reason=length, no response, thinking has no parseable answer"
@@ -412,8 +432,12 @@ async def _amain() -> None:
     p.add_argument("--judge-temperature", type=float, default=0.0)
     p.add_argument("--judge-concurrency", type=int, default=4, help="async concurrency per LLM judge")
     p.add_argument("--limit", type=int, default=None, help="grade only first N rows (smoke test)")
-    p.add_argument("--max-budget", type=float, default=None,
-                   help="Hard cap (USD) sul costo cumulato dei judge. Abort quando superato.")
+    p.add_argument(
+        "--max-budget",
+        type=float,
+        default=None,
+        help="Hard cap (USD) sul costo cumulato dei judge. Abort quando superato.",
+    )
     args = p.parse_args()
 
     enable_lcb = (not args.no_lcb) and LCB_AVAILABLE
@@ -421,7 +445,9 @@ async def _amain() -> None:
     print(f"[grader] inference={args.inference}")
     print(f"[grader] dataset={args.dataset}")
     print(f"[grader] output={args.output}")
-    print(f"[grader] enable_lcb={enable_lcb}  enable_judge={args.enable_judge}  judge_model={args.judge_model}  conc={args.judge_concurrency}")
+    print(
+        f"[grader] enable_lcb={enable_lcb}  enable_judge={args.enable_judge}  judge_model={args.judge_model}  conc={args.judge_concurrency}"
+    )
 
     # Slim eval_index: solo query + expected_answer per ridurre RAM
     eval_index: dict[str, dict] = {}
@@ -437,7 +463,7 @@ async def _amain() -> None:
     # === Append-resume: load existing graded qids ===
     done_qids: set[str] = set()
     if args.output.exists():
-        with open(args.output, "r", encoding="utf-8") as fexist:
+        with open(args.output, encoding="utf-8") as fexist:
             for line in fexist:
                 line = line.strip()
                 if not line:
@@ -452,7 +478,7 @@ async def _amain() -> None:
         # We rewrite the file with just valid rows + truncate.
         if done_qids:
             valid_rows = []
-            with open(args.output, "r", encoding="utf-8") as fexist:
+            with open(args.output, encoding="utf-8") as fexist:
                 for line in fexist:
                     line = line.strip()
                     if not line:
@@ -469,7 +495,7 @@ async def _amain() -> None:
 
     # Conta solo righe da gradare (no upfront load)
     total_to_grade = 0
-    with open(args.inference, "r", encoding="utf-8") as fin:
+    with open(args.inference, encoding="utf-8") as fin:
         for line in fin:
             line = line.strip()
             if not line:
@@ -498,7 +524,7 @@ async def _amain() -> None:
     async def _row_stream():
         """Yield rows to grade, streaming from disk (no upfront list)."""
         count = 0
-        with open(args.inference, "r", encoding="utf-8") as fin:
+        with open(args.inference, encoding="utf-8") as fin:
             for line in fin:
                 line = line.strip()
                 if not line:
@@ -523,7 +549,8 @@ async def _amain() -> None:
                 continue
             try:
                 await _process_row(
-                    row, eval_index,
+                    row,
+                    eval_index,
                     enable_lcb=enable_lcb,
                     enable_judge=args.enable_judge,
                     lcb_timeout=args.lcb_timeout,
@@ -535,11 +562,7 @@ async def _amain() -> None:
                     stats=stats,
                 )
                 stats["completed"] += 1
-                if (
-                    args.max_budget
-                    and stats["judge_cost"] > args.max_budget
-                    and not stats["aborted"]
-                ):
+                if args.max_budget and stats["judge_cost"] > args.max_budget and not stats["aborted"]:
                     stats["aborted"] = True
                     print(
                         f"\n[BUDGET ABORT] judge cost ${stats['judge_cost']:.4f} "
@@ -559,8 +582,7 @@ async def _amain() -> None:
             async with OpenRouterJudgeClient(model=args.judge_model) as judge_client:
                 queue: asyncio.Queue = asyncio.Queue(maxsize=args.judge_concurrency * 2)
                 workers = [
-                    asyncio.create_task(_worker(queue, judge_client, fout, i))
-                    for i in range(args.judge_concurrency)
+                    asyncio.create_task(_worker(queue, judge_client, fout, i)) for i in range(args.judge_concurrency)
                 ]
                 # Producer: stream rows (stop feeding se budget abort)
                 async for row in _row_stream():
@@ -575,7 +597,8 @@ async def _amain() -> None:
             # No judge: sequential streaming, programmatic graders are fast
             async for row in _row_stream():
                 await _process_row(
-                    row, eval_index,
+                    row,
+                    eval_index,
                     enable_lcb=enable_lcb,
                     enable_judge=False,
                     lcb_timeout=args.lcb_timeout,
@@ -616,7 +639,7 @@ async def _amain() -> None:
         # Re-read output to aggregate judge cost
         total_cost = 0.0
         total_in = total_out = 0
-        with open(args.output, "r", encoding="utf-8") as f:
+        with open(args.output, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue

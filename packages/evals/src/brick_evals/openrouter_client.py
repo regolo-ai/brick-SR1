@@ -8,6 +8,7 @@
 
 Docs: https://openrouter.ai/docs/api-reference/chat-completion
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,6 +30,7 @@ DEFAULT_MAX_RETRIES = 4
 @dataclass
 class InferenceResult:
     """Output normalizzato di una singola call."""
+
     content: str
     reasoning: str | None
     finish_reason: str | None
@@ -69,7 +71,7 @@ class OpenRouterClient:
         }
         self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "OpenRouterClient":
+    async def __aenter__(self) -> OpenRouterClient:
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout, connect=30.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=32),
@@ -177,7 +179,7 @@ class OpenRouterClient:
                 return
             except ValueError:
                 pass
-        delay = min(2 ** attempt + random.uniform(0, 1), 30.0)
+        delay = min(2**attempt + random.uniform(0, 1), 30.0)
         await asyncio.sleep(delay)
 
     @staticmethod

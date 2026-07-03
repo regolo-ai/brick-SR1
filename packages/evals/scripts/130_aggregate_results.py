@@ -27,6 +27,7 @@ Metriche per riga:
 Uso:
   python scripts/130_aggregate_results.py
 """
+
 from __future__ import annotations
 
 import csv
@@ -179,24 +180,26 @@ def main() -> int:
             comp = graded / n if n else 0.0
             acc_cond = t / graded if graded else 0.0
             acc_over = t / n if n else 0.0
-            rows.append({
-                "model": model,
-                "protocol": label,
-                "dimension": dimension,
-                "source": source,
-                "n": n,
-                "correct": t,
-                "incorrect": f,
-                "none_total": none,
-                "none_trunc": c["none_trunc"],
-                "none_notattempted": c["none_notattempted"],
-                "none_error": c["none_error"],
-                "none_other": c["none_other"],
-                "completion_rate": round(comp, 4),
-                "accuracy_conditional": round(acc_cond, 4),
-                "accuracy_overall": round(acc_over, 4),
-                "judge_cost_usd": round(judge_cost.get((model, label), 0.0), 4),
-            })
+            rows.append(
+                {
+                    "model": model,
+                    "protocol": label,
+                    "dimension": dimension,
+                    "source": source,
+                    "n": n,
+                    "correct": t,
+                    "incorrect": f,
+                    "none_total": none,
+                    "none_trunc": c["none_trunc"],
+                    "none_notattempted": c["none_notattempted"],
+                    "none_error": c["none_error"],
+                    "none_other": c["none_other"],
+                    "completion_rate": round(comp, 4),
+                    "accuracy_conditional": round(acc_cond, 4),
+                    "accuracy_overall": round(acc_over, 4),
+                    "judge_cost_usd": round(judge_cost.get((model, label), 0.0), 4),
+                }
+            )
 
     # --- output CSV ---
     out_dir = REPO / "data" / "reports"

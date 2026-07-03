@@ -2,13 +2,14 @@
 
 Backend: RegoloClient (qwen3.5-122b out-of-pool, no contamination con qwen3.5-9b/deepseek-v4-flash/kimi2.6).
 """
+
 from __future__ import annotations
 
 import json
-import re
 import time
 from collections import Counter
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .regolo_client import RegoloClient
 
@@ -45,7 +46,7 @@ def parse_score_rubric(text: str, axes: list[str]) -> dict | None:
     out = {}
     for ax in axes:
         v = obj.get(ax)
-        if isinstance(v, (int, float)) and 1 <= v <= 5:
+        if isinstance(v, int | float) and 1 <= v <= 5:
             out[ax] = int(v)
         else:
             return None
@@ -146,5 +147,5 @@ def run_with_retry(fn: Callable, *args, max_attempts: int = 3, backoff: float = 
         except Exception as e:
             last_err = e
             if attempt < max_attempts - 1:
-                time.sleep(backoff ** attempt)
+                time.sleep(backoff**attempt)
     raise last_err

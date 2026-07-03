@@ -37,15 +37,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Build Rust bindings (shared libs needed by CGO link)
         run: |
-          cd apps/router/candle-binding && cargo build --release --no-default-features
-          cd ../ml-binding              && cargo build --release
-          cd ../nlp-binding             && cargo build --release
+          cd candle-binding && cargo build --release --no-default-features
+          cd ../ml-binding  && cargo build --release
+          cd ../nlp-binding && cargo build --release
           mkdir -p /tmp/libs
-          cp candle-binding/target/release/libcandle_spatial_router.so /tmp/libs/ || true
-          cp ml-binding/target/release/libml_spatial_router.so         /tmp/libs/ || true
-          cp nlp-binding/target/release/libnlp_binding.so               /tmp/libs/ || true
+          cp candle-binding/target/release/libcandle_spatial_router.so /tmp/libs/
+          cp ml-binding/target/release/libml_spatial_router.so         /tmp/libs/
+          cp nlp-binding/target/release/libnlp_binding.so              /tmp/libs/
         working-directory: apps/router
-        continue-on-error: true
       - name: go vet
         working-directory: apps/router/src/spatial-router
         run: go vet ./...
@@ -100,9 +99,11 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: apps/cli/package-lock.json
-      - name: npm ci
-        working-directory: apps/cli
+          cache-dependency-path: package-lock.json
+      # Install from the repo-root lockfile (npm workspaces). apps/cli has no
+      # standalone lockfile; the root package-lock.json already pins the CLI
+      # dependency graph, so `npm ci` at the root hydrates apps/cli too.
+      - name: npm ci (workspace root)
         run: npm ci
       - name: npm run build
         working-directory: apps/cli

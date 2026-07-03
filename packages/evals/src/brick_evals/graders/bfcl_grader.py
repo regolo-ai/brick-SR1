@@ -17,6 +17,7 @@ Strategia:
 
 Output: `(correct: bool|None, meta: dict)`.
 """
+
 from __future__ import annotations
 
 import ast
@@ -29,17 +30,13 @@ from typing import Any
 
 # --- Inject BFCL path -------------------------------------------------------
 
-_BFCL_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "external"
-    / "bfcl"
-    / "berkeley-function-call-leaderboard"
-)
+_BFCL_PATH = Path(__file__).resolve().parents[3] / "external" / "bfcl" / "berkeley-function-call-leaderboard"
 if _BFCL_PATH.exists() and str(_BFCL_PATH) not in sys.path:
     sys.path.insert(0, str(_BFCL_PATH))
 
 
 # --- Stub model_config to avoid pulling provider SDKs ----------------------
+
 
 def _install_model_config_stub() -> None:
     """Stub `bfcl_eval.constants.model_config` BEFORE ast_checker imports it.
@@ -97,7 +94,7 @@ def _resolve_value(value: ast.AST) -> Any:
     if isinstance(value, ast.UnaryOp):
         # numeri negativi: -3, -1.5
         inner = _resolve_value(value.operand)
-        if isinstance(value.op, ast.USub) and isinstance(inner, (int, float)):
+        if isinstance(value.op, ast.USub) and isinstance(inner, int | float):
             return -inner
         return inner
     if isinstance(value, ast.List):
@@ -105,10 +102,7 @@ def _resolve_value(value: ast.AST) -> Any:
     if isinstance(value, ast.Tuple):
         return [_resolve_value(v) for v in value.elts]
     if isinstance(value, ast.Dict):
-        return {
-            _resolve_value(k): _resolve_value(v)
-            for k, v in zip(value.keys, value.values)
-        }
+        return {_resolve_value(k): _resolve_value(v) for k, v in zip(value.keys, value.values, strict=False)}
     if isinstance(value, ast.Name):
         # variabile non risolvibile: la trattiamo come stringa con il suo id
         return value.id
@@ -157,7 +151,7 @@ def _ast_parse_python(text: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if isinstance(body, ast.Call):
         out.append(_resolve_call(body))
-    elif isinstance(body, (ast.List, ast.Tuple)):
+    elif isinstance(body, ast.List | ast.Tuple):
         for elem in body.elts:
             if not isinstance(elem, ast.Call):
                 raise ValueError(f"non-call element in list: {ast.dump(elem)}")

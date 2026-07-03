@@ -4,15 +4,23 @@ ANNOTATIONS list contains tuples (if_, code, math, wk, pa, cs) in same order
 as sample_200.csv. Each value is Claude's semantic judgement (not heuristic).
 Granularity: {0.0, 0.3, 0.5, 0.7, 0.8, 1.0} per judge prompt scale.
 """
+
 from __future__ import annotations
+
 import csv
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 IN = ROOT / "data" / "human_eval" / "sample_200.csv"
 OUT = ROOT / "data" / "human_eval" / "sample_200_filled.csv"
-DIMS = ["instruction_following", "coding", "math_reasoning",
-        "world_knowledge", "planning_agentic", "creative_synthesis"]
+DIMS = [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis",
+]
 
 # Order: (instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis)
 ANNOTATIONS = [
@@ -228,16 +236,14 @@ def main() -> None:
         rdr = csv.DictReader(f)
         for r in rdr:
             rows_in.append(r)
-    assert len(rows_in) == len(ANNOTATIONS), \
-        f"CSV has {len(rows_in)} rows but ANNOTATIONS has {len(ANNOTATIONS)}"
+    assert len(rows_in) == len(ANNOTATIONS), f"CSV has {len(rows_in)} rows but ANNOTATIONS has {len(ANNOTATIONS)}"
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["query_id", "split_type", "query"] + DIMS + ["notes"])
-        for r, scores in zip(rows_in, ANNOTATIONS):
-            w.writerow([r["query_id"], r["split_type"], r["query"]] +
-                       list(scores) + ["claude_manual"])
+        for r, scores in zip(rows_in, ANNOTATIONS, strict=False):
+            w.writerow([r["query_id"], r["split_type"], r["query"]] + list(scores) + ["claude_manual"])
     print(f"wrote {len(rows_in)} Claude-annotated rows to {OUT}")
 
 

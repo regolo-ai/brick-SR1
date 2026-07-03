@@ -3,19 +3,27 @@
 Uses linear-weighted kappa for ordinal scoring (0.0, 0.3, 0.5, 0.7, 1.0).
 Output report + decision flag (kappa >= 0.4 means push to HF Hub OK).
 """
+
 from __future__ import annotations
+
 import csv
 import json
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ANNOTATED = ROOT / "data" / "human_eval" / "sample_200_filled.csv"
 REF = ROOT / "data" / "human_eval" / "judge_ref.json"
 OUT = ROOT / "data" / "human_eval" / "kappa_report.json"
 
-DIMS = ["instruction_following", "coding", "math_reasoning",
-        "world_knowledge", "planning_agentic", "creative_synthesis"]
+DIMS = [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis",
+]
 
 BINS = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]  # bin boundaries (use indices 0..4 as ordinal categories)
 
@@ -34,7 +42,7 @@ def cohens_kappa_weighted(y1: list[int], y2: list[int], n_cat: int) -> float:
         return 0.0
     # confusion matrix
     M = [[0] * n_cat for _ in range(n_cat)]
-    for a, b in zip(y1, y2):
+    for a, b in zip(y1, y2, strict=False):
         M[a][b] += 1
     # marginals
     row_marg = [sum(row) for row in M]

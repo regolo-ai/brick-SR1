@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -57,7 +56,14 @@ CATEGORY_PROTOCOLS = {
 
 # Paper skill vectors (capability order: coding, creative_synthesis,
 # instruction_following, math_reasoning, planning_agentic, world_knowledge).
-CAPS = ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"]
+CAPS = [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge",
+]
 PAPER_SKILLS = {
     "qwen3.5-9b": [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876],
     "deepseek-v4-flash": [0.820939, 0.657845, 0.863112, 0.934963, 0.62055, 0.488518],
@@ -65,7 +71,7 @@ PAPER_SKILLS = {
 }
 
 PRIOR_STRENGTH = 8.0
-MAX_K = 120          # cap per category: extract cost ceiling
+MAX_K = 120  # cap per category: extract cost ceiling
 K_GRID = list(range(20, MAX_K + 1, 10))
 BOOTSTRAP = 400
 SEED = 42
@@ -130,7 +136,7 @@ def calibrate_k(pool: list[str], correctness: dict, mu: float, rnd: random.Rando
             accs = {m: smoothed_acc(sum(correctness[q][m] for q in subset), k, mu) for m in models}
             ordered = sorted(models, key=lambda m: accs[m])
             ok = True
-            for a, b in zip(ordered, ordered[1:]):
+            for a, b in zip(ordered, ordered[1:], strict=False):
                 lo_b, _ = cis[b]
                 _, hi_a = cis[a]
                 if hi_a >= lo_b:  # overlap
@@ -197,25 +203,33 @@ def main() -> None:
 
         for qid in chosen:
             q = questions[qid]
-            probe_lines.append(json.dumps({
-                "query_id": qid,
-                "category": cat,
-                "protocol": meta[qid][1],
-                "query": q["query"],
-                "expected_answer": q.get("expected_answer"),
-            }, ensure_ascii=False))
+            probe_lines.append(
+                json.dumps(
+                    {
+                        "query_id": qid,
+                        "category": cat,
+                        "protocol": meta[qid][1],
+                        "query": q["query"],
+                        "expected_answer": q.get("expected_answer"),
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
     body = "\n".join(probe_lines)
     subset_hash = hashlib.sha256(body.encode()).hexdigest()[:16]
-    header = json.dumps({
-        "_meta": True,
-        "version": 1,
-        "subset_hash": subset_hash,
-        "capabilities": CAPS,
-        "prior_strength": PRIOR_STRENGTH,
-        "categories": header_categories,
-        "note": "Frozen probe set for brick skills extract. Anchors map probe accuracy onto the paper skill scale (piecewise linear).",
-    }, ensure_ascii=False)
+    header = json.dumps(
+        {
+            "_meta": True,
+            "version": 1,
+            "subset_hash": subset_hash,
+            "capabilities": CAPS,
+            "prior_strength": PRIOR_STRENGTH,
+            "categories": header_categories,
+            "note": "Frozen probe set for brick skills extract. Anchors map probe accuracy onto the paper skill scale (piecewise linear).",
+        },
+        ensure_ascii=False,
+    )
 
     OUT.write_text(header + "\n" + body + "\n")
     print(f"wrote {len(probe_lines)} questions + header to {OUT} (hash {subset_hash})")

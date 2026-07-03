@@ -54,7 +54,7 @@ func TestActiveAllowRestrictsCandidates(t *testing.T) {
 // TestIntersectAllowMultimodal: the multimodal caller allowlist is AND-ed with
 // active_models. Candidacy = handles_modality AND active.
 func TestIntersectAllowMultimodal(t *testing.T) {
-	active := map[string]bool{"large": true, "fit": true} // active_models
+	active := map[string]bool{"large": true, "fit": true}   // active_models
 	modality := map[string]bool{"fit": true, "small": true} // caller (handles modality)
 	got := intersectAllow(modality, active)
 	if len(got) != 1 || !got["fit"] {

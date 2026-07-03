@@ -8,10 +8,10 @@ Usage:
 
 Salva data/raw/<source_id>.jsonl con campi nativi + commit hash in data/reports/lockfile.yaml.
 """
+
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import sys
 from pathlib import Path
@@ -156,6 +156,7 @@ def _append_lockfile(source_id, repo, config, split, revision, n_taken):
         "retrieved_utc": utc_now_iso(),
     }
     import yaml
+
     with open(lockfile, "w") as f:
         yaml.safe_dump(entries, f, default_flow_style=False, sort_keys=True)
 
@@ -168,7 +169,11 @@ def main():
     args = ap.parse_args()
 
     sources = load_yaml(configs_dir() / "sources.yaml")
-    hf_sources = {sid: cfg for sid, cfg in sources.items() if not sid.startswith("_") and isinstance(cfg, dict) and cfg.get("repo")}
+    hf_sources = {
+        sid: cfg
+        for sid, cfg in sources.items()
+        if not sid.startswith("_") and isinstance(cfg, dict) and cfg.get("repo")
+    }
 
     if args.list:
         for sid in hf_sources:

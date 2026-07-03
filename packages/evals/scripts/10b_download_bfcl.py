@@ -4,6 +4,7 @@
 Stratifica 500 task tra categorie {simple, multiple, parallel, parallel_multiple, irrelevance}.
 Output: data/raw/bfcl_v4.jsonl
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,10 @@ CATEGORIES = {
     "simple": {"questions": "BFCL_v3_simple.json", "answers": "possible_answer/BFCL_v3_simple.json"},
     "multiple": {"questions": "BFCL_v3_multiple.json", "answers": "possible_answer/BFCL_v3_multiple.json"},
     "parallel": {"questions": "BFCL_v3_parallel.json", "answers": "possible_answer/BFCL_v3_parallel.json"},
-    "parallel_multiple": {"questions": "BFCL_v3_parallel_multiple.json", "answers": "possible_answer/BFCL_v3_parallel_multiple.json"},
+    "parallel_multiple": {
+        "questions": "BFCL_v3_parallel_multiple.json",
+        "answers": "possible_answer/BFCL_v3_parallel_multiple.json",
+    },
     "irrelevance": {"questions": "BFCL_v3_irrelevance.json", "answers": None},
 }
 
@@ -41,6 +45,7 @@ QUOTE = {
 
 def _load_jsonl_from_hub(filename: str) -> list[dict]:
     from huggingface_hub import hf_hub_download
+
     path = hf_hub_download(
         repo_id=REPO,
         filename=filename,
@@ -48,7 +53,7 @@ def _load_jsonl_from_hub(filename: str) -> list[dict]:
         token=hf_token(),
     )
     out = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -61,6 +66,7 @@ def _load_jsonl_from_hub(filename: str) -> list[dict]:
 
 def main():
     from huggingface_hub import HfApi
+
     api = HfApi(token=hf_token())
     files = set(api.list_repo_files(repo_id=REPO, repo_type="dataset"))
     print(f"BFCL repo has {len(files)} files")
@@ -125,7 +131,9 @@ def main():
                     n_with_gt += 1
         all_rows.extend(sample)
 
-    print(f"\nground_truth populated: {n_with_gt} (non-irrelevance) + {n_irrelevance} (irrelevance, gt=[] by design) = {n_with_gt + n_irrelevance}/{len(all_rows)}")
+    print(
+        f"\nground_truth populated: {n_with_gt} (non-irrelevance) + {n_irrelevance} (irrelevance, gt=[] by design) = {n_with_gt + n_irrelevance}/{len(all_rows)}"
+    )
 
     out_path = data_dir("raw") / "bfcl_v4.jsonl"
     n = save_jsonl(out_path, ({**r, "_source_id": "bfcl_v4"} for r in all_rows))
@@ -133,10 +141,11 @@ def main():
 
     # lockfile
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     revision = None
     try:

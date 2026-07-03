@@ -12,9 +12,3 @@ pub mod modernbert_classifier;
 // Re-export classifier types
 pub use batch_processor::*;
 pub use modernbert_classifier::*;
-
-// Test modules
-#[cfg(test)]
-pub mod batch_processor_test;
-#[cfg(test)]
-pub mod modernbert_classifier_test;

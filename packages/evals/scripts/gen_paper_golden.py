@@ -21,7 +21,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[1] / "baselines"
 sys.path.insert(0, str(BASE))
 
-from sweep_knob_aggressive import effective_knob_params  # type: ignore
+from sweep_knob_aggressive import effective_knob_params  # type: ignore  # noqa: E402
 
 OUT = (
     Path(__file__).resolve().parents[3]
@@ -58,7 +58,11 @@ LOCKED = {
 
 # Paper skill vectors (Table 7) + normalized costs.
 MODELS = [
-    {"model": "qwen", "skill_vector": [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876], "cost_weight": 0.10},
+    {
+        "model": "qwen",
+        "skill_vector": [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876],
+        "cost_weight": 0.10,
+    },
     {"model": "ds4", "skill_vector": [0.820939, 0.657845, 0.863112, 0.934963, 0.62055, 0.488518], "cost_weight": 0.40},
     {"model": "kimi", "skill_vector": [0.904272, 0.751595, 0.87018, 0.943892, 0.641863, 0.344074], "cost_weight": 0.60},
 ]
@@ -78,7 +82,7 @@ def score_case(prob: list[float], tau_q: float, eff: dict[str, float]) -> list[d
         under_sum = 0.0
         over_sum = 0.0
         expected = 0.0
-        for p, s in zip(prob, m["skill_vector"]):
+        for p, s in zip(prob, m["skill_vector"], strict=False):
             requirement = p * zq
             model_value = p * logit(s)
             under = max(0.0, requirement - model_value)

@@ -138,6 +138,7 @@ impl DebertaV3SequenceClassifier {
 /// ```no_run
 /// use candle_spatial_router::model_architectures::traditional::deberta_v3::DebertaV3Classifier;
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// // Load prompt injection detection model
 /// let classifier = DebertaV3Classifier::new(
 ///     "protectai/deberta-v3-base-prompt-injection",
@@ -152,6 +153,8 @@ impl DebertaV3SequenceClassifier {
 /// if label == "INJECTION" && confidence > 0.9 {
 ///     println!("⚠️ Prompt injection detected!");
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub struct DebertaV3Classifier {
     /// Internal classification model
@@ -339,8 +342,13 @@ impl DebertaV3Classifier {
     ///
     /// ## Example
     /// ```no_run
+    /// # use candle_spatial_router::model_architectures::traditional::deberta_v3::DebertaV3Classifier;
+    /// # fn main() -> anyhow::Result<()> {
+    /// # let classifier = DebertaV3Classifier::new("protectai/deberta-v3-base-prompt-injection", false)?;
     /// let (label, confidence) = classifier.classify_text("Hello world")?;
     /// println!("Predicted: {} ({:.1}%)", label, confidence * 100.0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn classify_text(&self, text: &str) -> Result<(String, f32)> {
         // Tokenize input
@@ -387,11 +395,16 @@ impl DebertaV3Classifier {
     ///
     /// ## Example
     /// ```no_run
+    /// # use candle_spatial_router::model_architectures::traditional::deberta_v3::DebertaV3Classifier;
+    /// # fn main() -> anyhow::Result<()> {
+    /// # let classifier = DebertaV3Classifier::new("protectai/deberta-v3-base-prompt-injection", false)?;
     /// let texts = vec!["Text 1", "Text 2", "Text 3"];
     /// let results = classifier.classify_batch(&texts)?;
     /// for (text, (label, conf)) in texts.iter().zip(results.iter()) {
     ///     println!("{}: {} ({:.1}%)", text, label, conf * 100.0);
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn classify_batch(&self, texts: &[&str]) -> Result<Vec<(String, f32)>> {
         // Tokenize batch

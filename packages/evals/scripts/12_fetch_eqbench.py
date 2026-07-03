@@ -8,9 +8,9 @@ Tenta multiple sorgenti possibili:
 
 Output: data/raw/eqbench_creative_v3.jsonl (target 96 prompt)
 """
+
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -23,6 +23,7 @@ TARGET_N = 96
 
 def try_http_manifest(url: str) -> list[dict] | None:
     import requests
+
     try:
         r = requests.get(url, timeout=30)
         if r.status_code != 200:
@@ -57,6 +58,7 @@ def try_http_manifest(url: str) -> list[dict] | None:
 def try_hf_repo(repo_id: str) -> list[dict] | None:
     try:
         from datasets import load_dataset
+
         ds = load_dataset(repo_id, split="train", token=hf_token(), trust_remote_code=False)
         rows = list(ds)
         if rows and any(("prompt" in r) or ("writing_prompt" in r) or ("question" in r) for r in rows):
@@ -77,7 +79,11 @@ def expand_iterations(rows: list[dict], target_n: int = 96) -> list[dict]:
     out = []
     for r in rows:
         for i in range(1, iters_per_prompt + 1):
-            new_row = {**r, "iteration": i, "_base_id": r.get("id") or r.get("name") or hash(r.get("prompt") or r.get("question", ""))}
+            new_row = {
+                **r,
+                "iteration": i,
+                "_base_id": r.get("id") or r.get("name") or hash(r.get("prompt") or r.get("question", "")),
+            }
             out.append(new_row)
             if len(out) >= target_n:
                 return out[:target_n]
@@ -92,7 +98,11 @@ def main():
     rows = try_http_manifest(manifest_url) if manifest_url else None
 
     if not rows:
-        for repo in ("Disya/eq-bench-creative-writing-v3", "EQ-Bench/creative-writing-v3", "EQ-Bench/eq-bench-v3-prompts"):
+        for repo in (
+            "Disya/eq-bench-creative-writing-v3",
+            "EQ-Bench/creative-writing-v3",
+            "EQ-Bench/eq-bench-v3-prompts",
+        ):
             print(f"trying HF repo: {repo}")
             rows = try_hf_repo(repo)
             if rows:
@@ -120,10 +130,11 @@ def main():
     print(f"saved {n} eqbench rows -> {out_path}")
 
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     entries["eqbench_creative_v3"] = {
         "manifest_url": manifest_url,

@@ -9,6 +9,7 @@ Strategia: prompt-meta source-specific a Regolo qwen3.5-122b → 5 esempi
     data/fewshot_pools/<source_id>.json
 + SHA256 in lockfile.
 """
+
 from __future__ import annotations
 
 import json
@@ -172,10 +173,11 @@ def main():
 
     # Lockfile
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     for sid, info in results.items():
         entries[f"fewshot_synthetic_{sid}"] = {

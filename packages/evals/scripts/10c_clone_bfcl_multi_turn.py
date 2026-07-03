@@ -11,6 +11,7 @@ Composite (in `unused_datasets/`) escluso perché deprecato in BFCL v4.
 
 Output: `data/raw/bfcl_v4_multi_turn.jsonl` (165 righe) + entry in lockfile.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,7 @@ SEED = 42
 
 
 def _load_jsonl(path: Path) -> list[dict]:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -49,7 +50,9 @@ def _load_possible_answer(path: Path) -> dict[str, list[list[str]]]:
 def main() -> int:
     if not BFCL_DATA.exists():
         print(f"[FAIL] BFCL clone not found at {BFCL_DATA}")
-        print("Run: cd external && git clone --filter=blob:none --sparse https://github.com/ShishirPatil/gorilla.git bfcl")
+        print(
+            "Run: cd external && git clone --filter=blob:none --sparse https://github.com/ShishirPatil/gorilla.git bfcl"
+        )
         print("     cd bfcl && git sparse-checkout set berkeley-function-call-leaderboard")
         return 1
 
@@ -97,7 +100,7 @@ def main() -> int:
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     entries["bfcl_v4_multi_turn"] = {
         "source": "external/bfcl/berkeley-function-call-leaderboard/bfcl_eval/data",

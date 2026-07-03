@@ -18,20 +18,19 @@ Design:
 
 Output: `(correct: bool|None, meta: dict)`.
 """
+
 from __future__ import annotations
 
-import os
 import re
-from pathlib import Path
 from typing import Any, Protocol
 
 from ..io_utils import repo_root
-
 
 # --- Disponibilità --------------------------------------------------------
 
 try:
     from ..openrouter_judge_client import OpenRouterJudgeClient  # noqa: F401
+
     AVAILABLE = True
     _IMPORT_ERR = ""
 except Exception as e:  # pragma: no cover
@@ -117,7 +116,8 @@ def _load_yaml_rubrics() -> dict[str, str]:
         return {}
     try:
         import yaml  # type: ignore
-        with open(p, "r", encoding="utf-8") as f:
+
+        with open(p, encoding="utf-8") as f:
             doc = yaml.safe_load(f) or {}
         rubrics = doc.get("judge_rubrics") or {}
         if not isinstance(rubrics, dict):
@@ -136,6 +136,7 @@ def get_rubric(rubric_id: str) -> str | None:
 
 
 # --- Judge client protocol (per dependency injection nei test) ------------
+
 
 class JudgeClient(Protocol):
     """Interfaccia minima richiesta dal grader."""
@@ -170,7 +171,7 @@ def parse_decision(text: str) -> str | None:
         return None
     # Last non-empty line preferred (robust against fictional "Decision: accept"
     # inside the candidate response leaked into prompt)
-    lines = [l for l in text.strip().splitlines() if l.strip()]
+    lines = [line for line in text.strip().splitlines() if line.strip()]
     if lines:
         m = _DECISION_RE.search(lines[-1])
         if m:
@@ -210,6 +211,7 @@ def _judge_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 
 # --- Public grader --------------------------------------------------------
+
 
 def _extract_judge_content(resp: dict) -> str:
     """Estrai content da una OpenAI-compatible chat response."""

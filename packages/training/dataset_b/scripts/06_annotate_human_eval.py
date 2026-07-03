@@ -10,17 +10,24 @@ Scoring rules for each capability (0.0 / 0.3 / 0.5 / 0.7 / 1.0):
 
 This emulates my (Claude) judgment as a careful annotator. Reproducible.
 """
+
 from __future__ import annotations
+
 import csv
 import re
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INPUT = ROOT / "data" / "human_eval" / "sample_200.csv"
 OUTPUT = ROOT / "data" / "human_eval" / "sample_200_filled.csv"
-DIMS = ["instruction_following", "coding", "math_reasoning",
-        "world_knowledge", "planning_agentic", "creative_synthesis"]
+DIMS = [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis",
+]
 
 
 def score_query(q: str, split_type: str) -> dict[str, float]:
@@ -31,14 +38,45 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- INSTRUCTION FOLLOWING ----
     if_score = 0.0
-    if_kw_strong = ["respond only", "output only", "json", "schema", "exactly", "must include",
-                    "must be", "format:", "constraint", "do not include", "must not",
-                    "markdown table", "numbered list", "bullet", "rubric"]
-    if_kw_med = ["follow", "rules", "structure", "section", "headers", "step", "in the following format",
-                 "specific format", "n words", "characters", "limit", "respond in"]
+    if_kw_strong = [
+        "respond only",
+        "output only",
+        "json",
+        "schema",
+        "exactly",
+        "must include",
+        "must be",
+        "format:",
+        "constraint",
+        "do not include",
+        "must not",
+        "markdown table",
+        "numbered list",
+        "bullet",
+        "rubric",
+    ]
+    if_kw_med = [
+        "follow",
+        "rules",
+        "structure",
+        "section",
+        "headers",
+        "step",
+        "in the following format",
+        "specific format",
+        "n words",
+        "characters",
+        "limit",
+        "respond in",
+    ]
     if_strong = sum(1 for k in if_kw_strong if k in ql)
     if_med = sum(1 for k in if_kw_med if k in ql)
-    word_count_constraint = bool(re.search(r"\b(exactly|at most|no more than|at least)\s+\d+\s+(word|sentence|paragraph|line|character|haiku|verse|act|step)", ql))
+    word_count_constraint = bool(
+        re.search(
+            r"\b(exactly|at most|no more than|at least)\s+\d+\s+(word|sentence|paragraph|line|character|haiku|verse|act|step)",
+            ql,
+        )
+    )
     multi_constraints = ql.count("must ") + ql.count("require") + ql.count("constraint")
     if word_count_constraint or if_strong >= 2:
         if_score = 1.0
@@ -52,13 +90,44 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- CODING ----
     code_score = 0.0
-    code_kw_strong = ["python", "javascript", "java ", "c++", "rust ", "go ", "code", "function",
-                      " class ", "method", "algorithm", "implement", "debug", " api ", "library",
-                      "endpoint", "regex", "sql ", "bash", "shell script", "unit test",
-                      "package", "module", "compile", "syntax", "git ", "docker", "kubernetes",
-                      "framework", "react", "django", "flask", "node", "fastapi", "javascript"]
-    code_kw_weak = ["script", "automate", "automation", "build a tool", "write a program",
-                    "computational"]
+    code_kw_strong = [
+        "python",
+        "javascript",
+        "java ",
+        "c++",
+        "rust ",
+        "go ",
+        "code",
+        "function",
+        " class ",
+        "method",
+        "algorithm",
+        "implement",
+        "debug",
+        " api ",
+        "library",
+        "endpoint",
+        "regex",
+        "sql ",
+        "bash",
+        "shell script",
+        "unit test",
+        "package",
+        "module",
+        "compile",
+        "syntax",
+        "git ",
+        "docker",
+        "kubernetes",
+        "framework",
+        "react",
+        "django",
+        "flask",
+        "node",
+        "fastapi",
+        "javascript",
+    ]
+    code_kw_weak = ["script", "automate", "automation", "build a tool", "write a program", "computational"]
     code_strong = sum(1 for k in code_kw_strong if k in ql)
     code_weak = sum(1 for k in code_kw_weak if k in ql)
     if code_strong >= 2 or "write a python" in ql or "implement" in ql and "function" in ql:
@@ -71,11 +140,39 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- MATH REASONING ----
     math_score = 0.0
-    math_kw_strong = ["calculate", "solve", "equation", "probability", "derivative", "integral",
-                      "matrix", "vector", "logarithm", "polynomial", "theorem", "proof",
-                      "geometric", "algebraic", "trigonomet", "differential", "factorial"]
-    math_kw_weak = ["how many", "what is the", "average", "sum", "ratio", "percent", "fraction",
-                    "number of", "count", "estimate", "compute", "duration"]
+    math_kw_strong = [
+        "calculate",
+        "solve",
+        "equation",
+        "probability",
+        "derivative",
+        "integral",
+        "matrix",
+        "vector",
+        "logarithm",
+        "polynomial",
+        "theorem",
+        "proof",
+        "geometric",
+        "algebraic",
+        "trigonomet",
+        "differential",
+        "factorial",
+    ]
+    math_kw_weak = [
+        "how many",
+        "what is the",
+        "average",
+        "sum",
+        "ratio",
+        "percent",
+        "fraction",
+        "number of",
+        "count",
+        "estimate",
+        "compute",
+        "duration",
+    ]
     has_math_kw_strong = sum(1 for k in math_kw_strong if k in ql)
     has_math_kw_weak = sum(1 for k in math_kw_weak if k in ql)
     has_numbers = bool(re.search(r"\b\d{2,}\b", q)) or "x" in ql and "=" in ql
@@ -92,13 +189,49 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- WORLD KNOWLEDGE ----
     wk_score = 0.0
-    wk_kw_strong = ["history", "historical", "scientific", "biology", "chemistry", "physics",
-                    "geography", "ancient", "century", "war", "empire", "revolution",
-                    "scientist", "philosopher", "discover", "invented", "treaty", "constitution",
-                    "newton", "einstein", "darwin", "shakespeare", "napoleon", "lincoln",
-                    "celsius", "kelvin", "the year", "civilization", "religion"]
-    wk_kw_weak = ["what is", "explain", "describe", "what are", "tell me about", "who was",
-                  "background", "context", "famous", "known for"]
+    wk_kw_strong = [
+        "history",
+        "historical",
+        "scientific",
+        "biology",
+        "chemistry",
+        "physics",
+        "geography",
+        "ancient",
+        "century",
+        "war",
+        "empire",
+        "revolution",
+        "scientist",
+        "philosopher",
+        "discover",
+        "invented",
+        "treaty",
+        "constitution",
+        "newton",
+        "einstein",
+        "darwin",
+        "shakespeare",
+        "napoleon",
+        "lincoln",
+        "celsius",
+        "kelvin",
+        "the year",
+        "civilization",
+        "religion",
+    ]
+    wk_kw_weak = [
+        "what is",
+        "explain",
+        "describe",
+        "what are",
+        "tell me about",
+        "who was",
+        "background",
+        "context",
+        "famous",
+        "known for",
+    ]
     wk_strong = sum(1 for k in wk_kw_strong if k in ql)
     wk_weak = sum(1 for k in wk_kw_weak if k in ql)
     proper_nouns = len(re.findall(r"\b[A-Z][a-z]{3,}\s+[A-Z][a-z]+", q))
@@ -114,11 +247,38 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- PLANNING AGENTIC ----
     pa_score = 0.0
-    pa_kw_strong = ["multi-step", "multi step", "step-by-step", "phase 1", "phase 2", "first,",
-                    "then,", "decompose", "orchestrat", "agent", "workflow", "pipeline",
-                    "automat", "schedule", "monitor", "iterat", "loop"]
-    pa_kw_med = ["plan", "design a system", "build a", "architect", "process", "stages",
-                 "sequence", "coordinate", "manage", "integrate", "tool use"]
+    pa_kw_strong = [
+        "multi-step",
+        "multi step",
+        "step-by-step",
+        "phase 1",
+        "phase 2",
+        "first,",
+        "then,",
+        "decompose",
+        "orchestrat",
+        "agent",
+        "workflow",
+        "pipeline",
+        "automat",
+        "schedule",
+        "monitor",
+        "iterat",
+        "loop",
+    ]
+    pa_kw_med = [
+        "plan",
+        "design a system",
+        "build a",
+        "architect",
+        "process",
+        "stages",
+        "sequence",
+        "coordinate",
+        "manage",
+        "integrate",
+        "tool use",
+    ]
     pa_strong = sum(1 for k in pa_kw_strong if k in ql)
     pa_med = sum(1 for k in pa_kw_med if k in ql)
     has_numbered_steps = bool(re.search(r"\b1[\.\)]\s+\w+.*\b2[\.\)]\s+", q, re.DOTALL))
@@ -134,12 +294,31 @@ def score_query(q: str, split_type: str) -> dict[str, float]:
 
     # ---- CREATIVE SYNTHESIS ----
     cs_score = 0.0
-    cs_kw_strong = ["write a story", "haiku", "poem", "novel", "short story", "marketing copy",
-                    "marketing email", "marketing campaign", "creative writing", "screenplay",
-                    "dialogue", "monologue", "narrative", "fictional", "imagine", "compose a",
-                    "write a song", "lyrics", "advertisement", "tagline", "slogan", "fairy tale"]
-    cs_kw_med = ["original", "creative", "design a", "describe a", "invent",
-                 "brainstorm", "idea", "scenario"]
+    cs_kw_strong = [
+        "write a story",
+        "haiku",
+        "poem",
+        "novel",
+        "short story",
+        "marketing copy",
+        "marketing email",
+        "marketing campaign",
+        "creative writing",
+        "screenplay",
+        "dialogue",
+        "monologue",
+        "narrative",
+        "fictional",
+        "imagine",
+        "compose a",
+        "write a song",
+        "lyrics",
+        "advertisement",
+        "tagline",
+        "slogan",
+        "fairy tale",
+    ]
+    cs_kw_med = ["original", "creative", "design a", "describe a", "invent", "brainstorm", "idea", "scenario"]
     cs_strong = sum(1 for k in cs_kw_strong if k in ql)
     cs_med = sum(1 for k in cs_kw_med if k in ql)
     if cs_strong >= 1:
@@ -174,8 +353,7 @@ def main() -> None:
         w.writerow(["query_id", "split_type", "query"] + DIMS + ["notes"])
         for r in rows_in:
             scores = score_query(r["query"], r["split_type"])
-            w.writerow([r["query_id"], r["split_type"], r["query"]] +
-                       [scores[d] for d in DIMS] + [""])
+            w.writerow([r["query_id"], r["split_type"], r["query"]] + [scores[d] for d in DIMS] + [""])
     print(f"wrote {len(rows_in)} annotated rows to {OUTPUT}")
 
 

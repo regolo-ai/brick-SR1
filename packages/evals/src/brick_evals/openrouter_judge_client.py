@@ -6,11 +6,11 @@ Pattern simile a `regolo_client.py` (sync) ma async via httpx.AsyncClient per
 Default model: openai/gpt-5.4-mini ($0.75/$4.50 per M token, 400K ctx).
 Auth: OPENROUTER_API_KEY o OPENROUTER_KEY env var.
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any
 
 import httpx
 
@@ -23,6 +23,7 @@ def _load_key() -> str:
     k = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_KEY")
     if not k:
         from pathlib import Path
+
         env_path = Path(__file__).resolve().parents[2] / ".env"
         if env_path.exists():
             for line in env_path.read_text().splitlines():
@@ -104,7 +105,7 @@ class OpenRouterJudgeClient:
                 r = await self._client.post(url, headers=self._headers(), json=body)
                 if r.status_code == 429 or r.status_code >= 500:
                     # backoff: 1, 2, 4, 8, 16s
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     last_err = httpx.HTTPStatusError(
                         f"status {r.status_code}: {r.text[:200]}", request=r.request, response=r
                     )
@@ -114,13 +115,13 @@ class OpenRouterJudgeClient:
             except httpx.HTTPStatusError as e:
                 last_err = e
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                 else:
                     raise
             except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_err = e
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                 else:
                     raise
         if last_err:

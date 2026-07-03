@@ -6,6 +6,7 @@
 
 Repo: massaindustries/dataset-A-routing-eval (public).
 """
+
 from __future__ import annotations
 
 import copy
@@ -15,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from brick_evals.io_utils import data_dir, hf_token, load_jsonl, load_yaml, configs_dir, save_jsonl
+from brick_evals.io_utils import configs_dir, data_dir, hf_token, load_jsonl, load_yaml, save_jsonl
 
 REPO_ID = "massaindustries/dataset-A-routing-eval"
 
@@ -49,6 +50,7 @@ def serialize_for_arrow(rows: list[dict]) -> list[dict]:
 
 def make_dataset_card(rows: list[dict]) -> str:
     from collections import Counter
+
     by_dim = Counter(r["dimension"] for r in rows)
     by_src = Counter(r["source"] for r in rows)
     n_gated = sum(1 for r in rows if r.get("gated"))
@@ -99,7 +101,7 @@ def make_dataset_card(rows: list[dict]) -> str:
         # find license from sources.yaml by source_label
         lic = "?"
         gated = False
-        for sid, scfg in sources_yaml.items():
+        for _sid, scfg in sources_yaml.items():
             if isinstance(scfg, dict) and scfg.get("source_label") == s:
                 lic = scfg.get("license", "?")
                 gated = scfg.get("gated", False)
@@ -110,30 +112,44 @@ def make_dataset_card(rows: list[dict]) -> str:
     lines.append("## Schema")
     lines.append("")
     lines.append("```json")
-    lines.append(json.dumps({
-        "query_id": "q_NNNNN",
-        "query": "string (prompt completo, incluso few-shot)",
-        "dimension": "instruction_following | coding | math_reasoning | world_knowledge | creative_synthesis | planning_agentic",
-        "source": "source_label",
-        "shots": "int (5 o 0)",
-        "input_tokens_qwen": "int",
-        "input_tokens_deepseek": "int",
-        "input_tokens_kimi": "int",
-        "expected_answer": {"type": "discriminated union", "payload": "typed per type (JSON-encoded for Arrow uniform schema)"},
-        "few_shot_examples": "list[dict] (JSON-encoded for Arrow uniform schema)",
-        "evaluation_protocol_id": "string (vedi protocols.yaml)",
-        "gated": "bool (true = query='<masked>' for GAIA/GPQA license compliance)",
-        "license": "per-source",
-        "length_band": "short|med|long",
-    }, indent=2))
+    lines.append(
+        json.dumps(
+            {
+                "query_id": "q_NNNNN",
+                "query": "string (prompt completo, incluso few-shot)",
+                "dimension": "instruction_following | coding | math_reasoning | world_knowledge | creative_synthesis | planning_agentic",
+                "source": "source_label",
+                "shots": "int (5 o 0)",
+                "input_tokens_qwen": "int",
+                "input_tokens_deepseek": "int",
+                "input_tokens_kimi": "int",
+                "expected_answer": {
+                    "type": "discriminated union",
+                    "payload": "typed per type (JSON-encoded for Arrow uniform schema)",
+                },
+                "few_shot_examples": "list[dict] (JSON-encoded for Arrow uniform schema)",
+                "evaluation_protocol_id": "string (vedi protocols.yaml)",
+                "gated": "bool (true = query='<masked>' for GAIA/GPQA license compliance)",
+                "license": "per-source",
+                "length_band": "short|med|long",
+            },
+            indent=2,
+        )
+    )
     lines.append("```")
     lines.append("")
 
     lines.append("## Reproducibility caveats")
     lines.append("")
-    lines.append("- Tokens: Qwen tokenizer ufficiale (esatto). DeepSeek + Kimi sono proxy via V3 / K2.5 → mismatch ±2-5%.")
-    lines.append("- Creative custom (`Custom-Validated`): generato via Regolo `qwen3.5-122b` (fuori-pool). Anthropic API non supporta seed; il file `generated.jsonl` è input statico (SHA256 in lockfile).")
-    lines.append("- Gated datasets (`GAIA-L1L2`, `GPQA-Diamond`): query mascherate (`query='<masked>'`) per compliance license. Per ripopolare con i prompt originali, accept terms on HF UI per i source dataset, poi run `99_unmask_gated.py` localmente.")
+    lines.append(
+        "- Tokens: Qwen tokenizer ufficiale (esatto). DeepSeek + Kimi sono proxy via V3 / K2.5 → mismatch ±2-5%."
+    )
+    lines.append(
+        "- Creative custom (`Custom-Validated`): generato via Regolo `qwen3.5-122b` (fuori-pool). Anthropic API non supporta seed; il file `generated.jsonl` è input statico (SHA256 in lockfile)."
+    )
+    lines.append(
+        "- Gated datasets (`GAIA-L1L2`, `GPQA-Diamond`): query mascherate (`query='<masked>'`) per compliance license. Per ripopolare con i prompt originali, accept terms on HF UI per i source dataset, poi run `99_unmask_gated.py` localmente."
+    )
     lines.append("")
 
     lines.append("## Citation")
@@ -161,7 +177,6 @@ def main():
 
     # Push
     from huggingface_hub import HfApi, login
-    from datasets import Dataset
 
     login(token=hf_token())
 
@@ -176,7 +191,7 @@ def main():
     print(f"creating repo {REPO_ID}...")
     api.create_repo(repo_id=REPO_ID, repo_type="dataset", private=False, exist_ok=True)
 
-    print(f"uploading data file...")
+    print("uploading data file...")
     api.upload_file(
         path_or_fileobj=str(serialized_path),
         path_in_repo="data/train.jsonl",

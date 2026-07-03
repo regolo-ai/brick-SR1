@@ -3,11 +3,10 @@
 
 Output: data/raw/tau_bench.jsonl (max ~165 task: ~115 retail + ~50 airline)
 """
+
 from __future__ import annotations
 
 import json
-import os
-import random
 import subprocess
 import sys
 from pathlib import Path
@@ -117,10 +116,11 @@ def main():
 
     # Lockfile
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     entries["tau_bench"] = {
         "repo": GIT_URL,

@@ -1,4 +1,5 @@
 """Test scripts/115_aggregate_panel.py: majority vote 2/3 panel aggregation."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -19,6 +20,7 @@ def agg():
 
 
 # --- majority_vote --------------------------------------------------------
+
 
 def test_vote_unanimous_accept(agg):
     assert agg.majority_vote([True, True, True]) == (True, "3-0")
@@ -56,6 +58,7 @@ def test_vote_all_abstention(agg):
 
 # --- aggregate_row --------------------------------------------------------
 
+
 def _judge_row(qid, proto, correct, decision, cost, model):
     return {
         "query_id": qid,
@@ -74,7 +77,9 @@ def _judge_row(qid, proto, correct, decision, cost, model):
 def test_aggregate_judge_row_majority(agg):
     rows = {
         "openai/gpt-5.4-mini": _judge_row("q1", "rubric_judge", True, "accept", 0.0019, "openai/gpt-5.4-mini"),
-        "mistralai/mistral-small-2603": _judge_row("q1", "rubric_judge", True, "accept", 0.0003, "mistralai/mistral-small-2603"),
+        "mistralai/mistral-small-2603": _judge_row(
+            "q1", "rubric_judge", True, "accept", 0.0003, "mistralai/mistral-small-2603"
+        ),
         "z-ai/glm-5-turbo": _judge_row("q1", "rubric_judge", False, "reject", 0.0026, "z-ai/glm-5-turbo"),
     }
     out = agg.aggregate_row("q1", rows)
@@ -108,7 +113,9 @@ def test_aggregate_missing_judge_treated_as_abstention(agg):
     # query_id present in only 2 of 3 files -> third judge is an abstention
     rows = {
         "openai/gpt-5.4-mini": _judge_row("q3", "rubric_judge", True, "accept", 0.002, "openai/gpt-5.4-mini"),
-        "mistralai/mistral-small-2603": _judge_row("q3", "rubric_judge", True, "accept", 0.0003, "mistralai/mistral-small-2603"),
+        "mistralai/mistral-small-2603": _judge_row(
+            "q3", "rubric_judge", True, "accept", 0.0003, "mistralai/mistral-small-2603"
+        ),
         # z-ai/glm-5-turbo missing
     }
     out = agg.aggregate_row("q3", rows)

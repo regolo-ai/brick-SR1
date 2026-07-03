@@ -1,4 +1,5 @@
 """Inietta `src/` in sys.path per tutti i test del pacchetto."""
+
 import sys
 from pathlib import Path
 

@@ -108,10 +108,10 @@ func TestDecideMultimodalPlanFallbackWhenNoCapableModel(t *testing.T) {
 
 func TestMultimodalRoutingPlaceholder(t *testing.T) {
 	cases := map[multimodal.Modality]string{
-		{HasImage: true}:               "Analyze the attached image.",
-		{HasAudio: true}:               "Analyze the attached audio.",
+		{HasImage: true}:                 "Analyze the attached image.",
+		{HasAudio: true}:                 "Analyze the attached audio.",
 		{HasImage: true, HasAudio: true}: "Analyze the attached image and audio.",
-		{}:                             "Analyze the attached media.",
+		{}:                               "Analyze the attached media.",
 	}
 	for m, want := range cases {
 		if got := multimodalRoutingPlaceholder(m); got != want {

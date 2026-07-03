@@ -828,6 +828,7 @@ impl TraditionalModernBertClassifier {
     ///     ModernBertVariant, TraditionalModernBertClassifier
     /// };
     ///
+    /// # fn main() -> anyhow::Result<()> {
     /// // Load Extended32K base model with PII classifier weights
     /// let classifier = TraditionalModernBertClassifier::load_with_custom_base_model(
     ///     "/path/to/modernbert-base-32k",           // Base model path
@@ -838,6 +839,9 @@ impl TraditionalModernBertClassifier {
     ///
     /// // Now classify text with 32K context support
     /// let (class_id, confidence) = classifier.classify_text("My email is john@example.com")?;
+    /// # let _ = (class_id, confidence);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn load_with_custom_base_model(
         base_model_path: &str,

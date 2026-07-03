@@ -1,8 +1,9 @@
 """Few-shot prompt builder. Estrae 5 esempi dal train split disgiunti dall'eval, formatta CoT."""
+
 from __future__ import annotations
 
 import random
-from typing import Iterable
+from collections.abc import Iterable
 
 from .io_utils import configs_dir, deterministic_hash, load_yaml
 

@@ -1,8 +1,8 @@
 """Dedup helpers: MinHash+LSH (lessicale) + sentence-transformers + FAISS (semantico)."""
+
 from __future__ import annotations
 
 import re
-from typing import Iterable
 
 # Markers used in few-shot templates to separate the final query from the prefix.
 QUERY_MARKERS = (
@@ -85,10 +85,12 @@ def query_near_duplicates(lsh, sigs: dict, query_id: str) -> list[str]:
     return [qid for qid in matches if qid != query_id]
 
 
-def encode_embeddings(texts: list[str], model_name: str = "sentence-transformers/all-mpnet-base-v2", batch_size: int = 32):
+def encode_embeddings(
+    texts: list[str], model_name: str = "sentence-transformers/all-mpnet-base-v2", batch_size: int = 32
+):
     """Encode texts into normalized embeddings (CPU). Lazy import."""
-    from sentence_transformers import SentenceTransformer
     import numpy as np
+    from sentence_transformers import SentenceTransformer
 
     model = SentenceTransformer(model_name, device="cpu")
     emb = model.encode(

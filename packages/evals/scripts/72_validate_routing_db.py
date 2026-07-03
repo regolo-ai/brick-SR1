@@ -11,6 +11,7 @@ Checks:
 Usage:
     python3 scripts/72_validate_routing_db.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -51,6 +52,7 @@ def main():
     import gzip
     import json as _json
     from collections import Counter
+
     for cfg, fname in cfg_files.items():
         path = out_dir / cfg / fname
         size_mb = path.stat().st_size / 1e6
@@ -80,7 +82,7 @@ def main():
                     print(f"  FAIL: {dim} expected {exp}, got {by_dim.get(dim, 0)}")
                     ok = False
 
-    print(f"\n=== results: win-rate ===")
+    print("\n=== results: win-rate ===")
     results = pd.read_json(out_dir / "results" / "train.jsonl.gz", lines=True, compression="gzip")
     for m in ("qwen", "ds4", "kimi"):
         col = results[f"{m}_correct"]
@@ -98,7 +100,7 @@ def main():
         print(f"  WARN: {n_all_null} rows have no verdict for any model")
         print(results[all_null][["query_id", "dimension", "evaluation_protocol_id"]].head(10))
 
-    print(f"\n=== per-dimension win-rate ===")
+    print("\n=== per-dimension win-rate ===")
     for dim in EXPECTED_BY_DIM:
         sub = results[results["dimension"] == dim]
         n = len(sub)
@@ -110,14 +112,13 @@ def main():
             cells.append(f"{m}={acc:.3f}")
         print(f"  {dim:25s} (n={n:4d}): {' | '.join(cells)}")
 
-    print(f"\n=== verbose: response coverage ===")
+    print("\n=== verbose: response coverage ===")
     verbose = pd.read_json(out_dir / "verbose" / "train.jsonl.gz", lines=True, compression="gzip")
     for m in ("qwen", "ds4", "kimi"):
         nonempty = (verbose[f"{m}_response"].fillna("") != "").sum()
         print(f"  {m}_response non-empty: {nonempty}/{len(verbose)}")
 
-    print(f"\n=== verbose: individual judges (planning ST) ===")
-    planning_st = verbose[(verbose["dimension"] == "planning_agentic") & (verbose["query_id"].str.startswith("q_03"))]
+    print("\n=== verbose: individual judges (planning ST) ===")
     # heuristic: planning ST queries appear in graded panel; check non-null individual judges
     for m in ("qwen", "ds4", "kimi"):
         nonnull = verbose[f"{m}_judge_gpt54mini"].notna().sum()

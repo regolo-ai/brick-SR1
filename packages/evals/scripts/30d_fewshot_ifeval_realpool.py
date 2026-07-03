@@ -9,6 +9,7 @@ Strategy:
 
 Output: data/fewshot_pools/ifeval.json + lockfile.
 """
+
 from __future__ import annotations
 
 import json
@@ -170,7 +171,7 @@ def main():
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     entries["fewshot_synthetic_ifeval"] = {
         "model": "real-pool google/IFEval test + qwen3.5-122b@regolo answer + verifier (rev.4 v3)",

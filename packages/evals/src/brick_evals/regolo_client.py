@@ -2,11 +2,10 @@
 
 Modello: qwen3.5-122b (fuori-pool rispetto a {qwen3.5-9b, deepseek-v4-flash, kimi2.6}).
 """
+
 from __future__ import annotations
 
-import json
 import time
-from typing import Any
 
 import requests
 
@@ -67,14 +66,14 @@ class RegoloClient:
             try:
                 r = requests.post(url, headers=self._headers(), json=body, timeout=self.timeout)
                 if r.status_code == 429:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
                 r.raise_for_status()
                 return r.json()
             except requests.RequestException as e:
                 last_err = e
                 if attempt < self.max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                 else:
                     raise
         if last_err:

@@ -3,10 +3,10 @@
 
 Asserzioni hard: count corretti, no duplicate query_id, schema valido.
 """
+
 from __future__ import annotations
 
 import json
-import statistics
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path

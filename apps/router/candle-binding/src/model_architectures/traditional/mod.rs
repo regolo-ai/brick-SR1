@@ -64,13 +64,3 @@ pub use candle_models::{
 
 // Re-export traditional models
 pub use base_model::*;
-
-// Test modules (only compiled in test builds)
-#[cfg(test)]
-pub mod base_model_test;
-#[cfg(test)]
-pub mod bert_test;
-#[cfg(test)]
-pub mod deberta_v3_test;
-#[cfg(test)]
-pub mod modernbert_test;

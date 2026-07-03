@@ -9,6 +9,7 @@ Strategia generate-and-verify:
 3. Tieni top 5 con avg_score >= 4.0; se < 5 con avg>=4, top 5 by score (best effort)
 4. Salva file `data/fewshot_pools/<sid>.json` + lockfile SHA256
 """
+
 from __future__ import annotations
 
 import json
@@ -223,7 +224,7 @@ def main():
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     for sid, info in summary.items():
         entries[f"fewshot_synthetic_{sid}"] = {
@@ -236,7 +237,7 @@ def main():
     with open(lockfile, "w") as f:
         yaml.safe_dump(entries, f, default_flow_style=False, sort_keys=True)
 
-    print(f"\n[30c] summary:")
+    print("\n[30c] summary:")
     print(json.dumps(summary, indent=2))
 
 

@@ -4,14 +4,15 @@ Usage:
     python export_for_candle.py --ckpt outputs/top3/rank1/best \
         --output outputs/modernbert-winner/best
 """
+
 from __future__ import annotations
+
 import argparse
 import json
-import shutil
+import sys
 from pathlib import Path
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
-import sys
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(THIS_DIR))

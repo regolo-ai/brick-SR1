@@ -59,4 +59,3 @@ brick_cc_classify_fallback_total 1
 		t.Fatalf("fallback exposition drifted from bare `name value`: %v", err)
 	}
 }
-

@@ -19,6 +19,7 @@ Usage:
       --inputs a_graded.jsonl b_graded.jsonl c_graded.jsonl \\
       --output a_graded__panel.jsonl
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,6 @@ def aggregate_row(query_id: str, rows: dict[str, dict]) -> dict:
         return dict(any_row)
 
     # Protocollo judge → majority vote.
-    verdicts = [rows[m].get("correct") if m in rows else None for m in rows]
     final, vote_str = majority_vote([r.get("correct") for r in rows.values()])
 
     panel: dict[str, dict] = {}
@@ -102,7 +102,7 @@ def aggregate_row(query_id: str, rows: dict[str, dict]) -> dict:
 
 def _load(path: Path) -> dict[str, dict]:
     rows: dict[str, dict] = {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -123,8 +123,7 @@ def _judge_model_of(rows: dict[str, dict], fallback: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Aggrega graded file multi-giudice (majority vote 2/3)")
-    p.add_argument("--inputs", nargs="+", required=True, type=Path,
-                   help="≥2 graded JSONL (uno per giudice)")
+    p.add_argument("--inputs", nargs="+", required=True, type=Path, help="≥2 graded JSONL (uno per giudice)")
     p.add_argument("--output", required=True, type=Path, help="JSONL panel aggregato")
     args = p.parse_args(argv)
 

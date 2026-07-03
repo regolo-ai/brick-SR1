@@ -1,12 +1,14 @@
 """I/O utilities: JSONL read/write, deterministic hashing, HF auth, lockfile helpers."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 
 def deterministic_hash(obj: Any, length: int = 16) -> str:
@@ -35,7 +37,7 @@ def save_jsonl(path: str | Path, rows: Iterable[dict]) -> int:
 
 
 def load_jsonl(path: str | Path) -> Iterator[dict]:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -81,8 +83,7 @@ def openrouter_key() -> str:
     if Path(key_file).exists():
         return Path(key_file).read_text().strip().strip('"').strip("'")
     raise RuntimeError(
-        "OpenRouter key not found. Set OPENROUTER_API_KEY in env / .env, "
-        f"or place key in {key_file}."
+        "OpenRouter key not found. Set OPENROUTER_API_KEY in env / .env, " f"or place key in {key_file}."
     )
 
 
@@ -112,5 +113,6 @@ def configs_dir() -> Path:
 
 def load_yaml(path: str | Path) -> dict:
     import yaml
-    with open(path, "r", encoding="utf-8") as f:
+
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)

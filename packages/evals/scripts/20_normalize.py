@@ -12,6 +12,7 @@ Output: data/normalized/<source_id>.jsonl (schema parziale: query, expected_answ
         language, difficulty_band, length_band, dataset_release_date, contamination_risk,
         gated, license, source_label + raw row preserved as _raw)
 """
+
 from __future__ import annotations
 
 import argparse

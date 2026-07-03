@@ -13,16 +13,23 @@ Usage:
 
     # Under W&B Sweep agent: hyperparams arrive via CLI flags injected by agent
 """
+
 from __future__ import annotations
+
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import torch
-from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          DataCollatorWithPadding, EarlyStoppingCallback,
-                          Trainer, TrainingArguments, set_seed)
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    EarlyStoppingCallback,
+    Trainer,
+    TrainingArguments,
+    set_seed,
+)
 
 THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(THIS_DIR))
@@ -49,8 +56,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max_seq_length", type=int, default=512)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--output_dir", default="outputs")
-    ap.add_argument("--smoke", action="store_true",
-                    help="Quick sanity check: 10 samples, 1 step, no W&B")
+    ap.add_argument("--smoke", action="store_true", help="Quick sanity check: 10 samples, 1 step, no W&B")
     ap.add_argument("--no_wandb", action="store_true")
     return ap.parse_args()
 
@@ -67,10 +73,12 @@ def main() -> int:
 
     repo = MODEL_REPOS[args.model_size]
     print(f"[info] Training ModernBERT-{args.model_size} ({repo})")
-    print(f"[info] LR={args.learning_rate}  WD={args.weight_decay}  "
-          f"warmup={args.warmup_ratio}  epochs={args.num_train_epochs}  "
-          f"batch={args.per_device_train_batch_size}  "
-          f"gradacc={args.gradient_accumulation_steps}")
+    print(
+        f"[info] LR={args.learning_rate}  WD={args.weight_decay}  "
+        f"warmup={args.warmup_ratio}  epochs={args.num_train_epochs}  "
+        f"batch={args.per_device_train_batch_size}  "
+        f"gradacc={args.gradient_accumulation_steps}"
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(repo)
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -83,8 +91,7 @@ def main() -> int:
         attn_implementation="sdpa",
     )
 
-    train_ds, val_ds = build_train_val(
-        tokenizer, max_length=args.max_seq_length, seed=args.seed)
+    train_ds, val_ds = build_train_val(tokenizer, max_length=args.max_seq_length, seed=args.seed)
     if args.smoke:
         train_ds = train_ds.select(range(min(10, len(train_ds))))
         val_ds = val_ds.select(range(min(10, len(val_ds))))
@@ -105,10 +112,13 @@ def main() -> int:
         num_train_epochs=args.num_train_epochs,
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
-        adam_beta1=0.9, adam_beta2=0.98, adam_epsilon=1e-6,
+        adam_beta1=0.9,
+        adam_beta2=0.98,
+        adam_epsilon=1e-6,
         lr_scheduler_type="linear",
         optim="adamw_torch_fused",
-        bf16=True, fp16=False,
+        bf16=True,
+        fp16=False,
         max_grad_norm=1.0,
         eval_strategy="epoch",
         save_strategy="epoch",

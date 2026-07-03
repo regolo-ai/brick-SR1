@@ -33,8 +33,13 @@ impl BertSimilarity {
     /// * `Result<Self>` - Initialized BertSimilarity instance
     ///
     /// ## Examples
-    /// ```rust
+    /// ```rust,no_run
+    /// use candle_spatial_router::core::similarity::BertSimilarity;
+    ///
+    /// # fn main() -> anyhow::Result<()> {
     /// let similarity = BertSimilarity::new("sentence-transformers/all-MiniLM-L6-v2", false)?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(model_id: &str, use_cpu: bool) -> Result<Self> {
         let device = if use_cpu {

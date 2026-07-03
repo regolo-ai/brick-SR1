@@ -4,7 +4,6 @@ import importlib.util
 from collections import Counter
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "140_extract_model_skill_profiles.py"
 
 
@@ -18,14 +17,8 @@ def load_module():
 
 def test_compute_profiles_uses_bayesian_smoothing() -> None:
     mod = load_module()
-    correct = {
-        model: Counter({cap: 0 for cap in mod.CAPABILITIES})
-        for model in mod.MODEL_COLUMNS
-    }
-    support = {
-        model: Counter({cap: 0 for cap in mod.CAPABILITIES})
-        for model in mod.MODEL_COLUMNS
-    }
+    correct = {model: Counter({cap: 0 for cap in mod.CAPABILITIES}) for model in mod.MODEL_COLUMNS}
+    support = {model: Counter({cap: 0 for cap in mod.CAPABILITIES}) for model in mod.MODEL_COLUMNS}
 
     correct["qwen3.5-9b"]["coding"] = 1
     support["qwen3.5-9b"]["coding"] = 2

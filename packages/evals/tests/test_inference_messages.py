@@ -1,8 +1,8 @@
 """Test build_messages_for_row in 100_run_inference: distingue BFCL vs altri."""
+
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest

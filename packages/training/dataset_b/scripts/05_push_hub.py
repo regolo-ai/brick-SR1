@@ -2,6 +2,7 @@
 
 3 splits: train (full minus disagreement subset), human_eval (200), disagreement_review.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,9 +33,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    token = os.environ.get("HF_TOKEN") or (
-        HF_TOKEN_FILE.read_text().strip() if HF_TOKEN_FILE.exists() else None
-    )
+    token = os.environ.get("HF_TOKEN") or (HF_TOKEN_FILE.read_text().strip() if HF_TOKEN_FILE.exists() else None)
     if not token:
         print("[err] no HF token; set HF_TOKEN or write /root/.hf_token_regolo", file=sys.stderr)
         return 2
@@ -63,6 +62,7 @@ def main() -> int:
     he_csv = Path(args.human_eval)
     if he_csv.exists():
         import csv as _csv
+
         with he_csv.open() as f:
             rows = list(_csv.DictReader(f))
         Dataset.from_list(rows).push_to_hub(args.repo, config_name="human_eval", token=token)

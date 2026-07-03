@@ -1,9 +1,8 @@
 """3 tokenizer cache: qwen3.5-9b (ufficiale), deepseek-v4-flash (proxy V3), kimi2.6 (proxy K2.5)."""
+
 from __future__ import annotations
 
-import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from .io_utils import configs_dir, hf_token, load_yaml

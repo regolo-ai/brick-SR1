@@ -7,6 +7,7 @@ Dataset card: https://huggingface.co/datasets/massaindustries/dataset-B-modernbe
 `regolo/brick-modernbert-capability-classifier` ModernBERT-base model (see Brick paper
 Section 5 and packages/training/modernbert/).
 """
+
 from __future__ import annotations
 
 import argparse

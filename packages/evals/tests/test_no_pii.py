@@ -1,4 +1,5 @@
 """Sanity check: query del dataset non devono contenere PII evidenti."""
+
 import re
 import sys
 from pathlib import Path

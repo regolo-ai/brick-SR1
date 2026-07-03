@@ -1,4 +1,5 @@
 """Test schema validation."""
+
 import sys
 from pathlib import Path
 

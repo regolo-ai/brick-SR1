@@ -3,15 +3,22 @@
 Usage:
     python eval_human.py --ckpt outputs/top3/rank1/best --output eval_human.json
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import sys
 from pathlib import Path
 
 import torch
-from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          DataCollatorWithPadding, Trainer, TrainingArguments)
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    Trainer,
+    TrainingArguments,
+)
 
 THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(THIS_DIR))
@@ -28,18 +35,23 @@ def main() -> int:
 
     tokenizer = AutoTokenizer.from_pretrained(args.ckpt)
     model = AutoModelForSequenceClassification.from_pretrained(
-        args.ckpt, torch_dtype=torch.bfloat16,
-        attn_implementation="sdpa")
+        args.ckpt, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+    )
     ds = build_human_eval(tokenizer)
 
     targs = TrainingArguments(
         output_dir="/tmp/eval_out",
         per_device_eval_batch_size=args.batch_size,
-        bf16=True, report_to=[],
+        bf16=True,
+        report_to=[],
     )
-    trainer = Trainer(model=model, args=targs, processing_class=tokenizer,
-                      data_collator=DataCollatorWithPadding(tokenizer),
-                      compute_metrics=compute_metrics)
+    trainer = Trainer(
+        model=model,
+        args=targs,
+        processing_class=tokenizer,
+        data_collator=DataCollatorWithPadding(tokenizer),
+        compute_metrics=compute_metrics,
+    )
     metrics = trainer.evaluate(eval_dataset=ds)
     Path(args.output).write_text(json.dumps(metrics, indent=2))
     print(json.dumps(metrics, indent=2))

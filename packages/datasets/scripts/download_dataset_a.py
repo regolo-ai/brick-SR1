@@ -7,6 +7,7 @@ This is the eval dataset used in the Brick paper (Section 4): 5,504 stratified
 queries across 6 capability dimensions, with per-model verdicts for the 3-model
 pool (qwen3.5-9b, deepseek-v4-flash, kimi2.6).
 """
+
 from __future__ import annotations
 
 import argparse

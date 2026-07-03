@@ -10,6 +10,7 @@ Per ogni source:
 
 Output: data/final/evaluation_parameters_full.jsonl (tokens=0 placeholder, popolati da 50_)
 """
+
 from __future__ import annotations
 
 import json
@@ -62,8 +63,10 @@ def assemble():
 
         for r in rows_in:
             raw_query = r["query"]
-            template_id = select_template(r["expected_answer"]["type"], r["source_label"], shots) if False else select_template(
-                cfg["dimension"], r["source_label"], shots
+            template_id = (
+                select_template(r["expected_answer"]["type"], r["source_label"], shots)
+                if False
+                else select_template(cfg["dimension"], r["source_label"], shots)
             )
             # Render prompt
             extras = {}
@@ -108,6 +111,7 @@ def assemble():
 
     # Stratify summary
     from collections import Counter
+
     by_dim = Counter(r["dimension"] for r in all_rows)
     print("Distribution by dimension:")
     for d, c in sorted(by_dim.items()):

@@ -51,7 +51,7 @@ use candle_nn::{linear_no_bias, Embedding, Linear, Module, VarBuilder};
 /// - -inf for positions that should be masked
 ///
 /// Example for seq_len=4:
-/// ```
+/// ```text
 /// [[0,  -inf, -inf, -inf],
 ///  [0,   0,   -inf, -inf],
 ///  [0,   0,    0,   -inf],

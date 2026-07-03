@@ -114,8 +114,8 @@ func TestClientEffortToPreference(t *testing.T) {
 		{"high", 0.43},
 		{"xhigh", 0.452},
 		{"max", 0.52},
-		{"", 0.0},        // unset -> neutral
-		{"bogus", 0.0},   // unknown -> neutral
+		{"", 0.0},         // unset -> neutral
+		{"bogus", 0.0},    // unknown -> neutral
 		{"  HIGH ", 0.43}, // case + whitespace tolerant
 	}
 	for _, c := range cases {
@@ -192,11 +192,11 @@ func TestModeBiasForPreference(t *testing.T) {
 
 func TestAutonomousEffortLevel(t *testing.T) {
 	cases := []struct {
-		name string
-		tau  float64
+		name  string
+		tau   float64
 		under float64
-		pref float64
-		want int
+		pref  float64
+		want  int
 	}{
 		// mid (bias 0): pure ladder + stretch.
 		{"mid-easy-neutral", 0.55, 0.4, 0.0, 1},
@@ -205,9 +205,9 @@ func TestAutonomousEffortLevel(t *testing.T) {
 		{"mid-easy-headroom", 0.55, 0.10, 0.0, 1}, // no decrement
 		{"mid-medium-stretched", 0.72, 0.90, 0.0, 3},
 		// max (bias +2): the whole band shifts up.
-		{"max-medium", 0.72, 0.4, 1.0, 4},    // L2 + 2
+		{"max-medium", 0.72, 0.4, 1.0, 4},     // L2 + 2
 		{"max-hard-clamp", 0.88, 0.4, 1.0, 5}, // L4 + 2 -> clamp 5
-		{"max-easy", 0.55, 0.4, 1.0, 3},      // L1 + 2
+		{"max-easy", 0.55, 0.4, 1.0, 3},       // L1 + 2
 		// pro (bias +1).
 		{"pro-medium", 0.72, 0.4, 0.5, 3}, // L2 + 1
 		// eco (bias -2): band shifts down.

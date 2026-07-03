@@ -8,6 +8,7 @@ Prerequisiti:
 Input: data/final/evaluation_parameters_full.jsonl (locale, contiene gia' query non-masked).
 Se manca, ricostruisce dal masked variant + ri-download.
 """
+
 from __future__ import annotations
 
 import sys
@@ -15,12 +16,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from brick_evals.io_utils import data_dir, load_jsonl, save_jsonl
+from brick_evals.io_utils import data_dir, load_jsonl
 
 
 def main():
     full_path = data_dir("final") / "evaluation_parameters_full.jsonl"
-    masked_path = data_dir("final") / "evaluation_parameters_masked.jsonl"
 
     if full_path.exists():
         print(f"[OK] full variant esiste localmente: {full_path}")

@@ -20,9 +20,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"gopkg.in/yaml.v3"
 
-	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
+	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 func TestCache(t *testing.T) {

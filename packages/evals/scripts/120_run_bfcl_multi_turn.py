@@ -25,27 +25,26 @@ Usage:
   python scripts/120_run_bfcl_multi_turn.py --model qwen3.5-9b \\
       --output data/inference/qwen9b/multi_turn.jsonl --limit 5
 """
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
 import sys
-import time
-from collections import Counter
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from brick_evals.io_utils import configs_dir, load_jsonl, load_yaml, utc_now_iso  # noqa: E402
-from brick_evals.openrouter_client import OpenRouterClient  # noqa: E402
 from brick_evals.graders.bfcl_grader import (  # noqa: E402
-    _ast_parse_python,  # type: ignore
-    extract_calls,
     AVAILABLE as BFCL_AVAILABLE,
 )
+from brick_evals.graders.bfcl_grader import (  # noqa: E402
+    extract_calls,
+)
+from brick_evals.io_utils import configs_dir, load_jsonl, load_yaml, utc_now_iso  # noqa: E402
+from brick_evals.openrouter_client import OpenRouterClient  # noqa: E402
 
 # Stub model_config viene applicato da bfcl_grader: importing più moduli BFCL sicuro.
 sys.path.insert(0, str(ROOT / "external" / "bfcl" / "berkeley-function-call-leaderboard"))
@@ -56,7 +55,6 @@ from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (  # noqa:
 from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import (  # noqa: E402
     execute_multi_turn_func_call,
 )
-
 
 # Per multi-turn il response deve contenere SOLO la chiamata Python o "DONE".
 # DONE indica al runtime che il modello ha finito il turn (non ha più tool da chiamare).
@@ -85,14 +83,15 @@ Tool catalog (signatures for the available functions across the involved classes
 
 # --- Tool catalog --------------------------------------------------------
 
+
 def _build_tool_catalog(involved_classes: list[str]) -> str:
     """Crea un breve catalogo delle funzioni esposte dalle classi env, leggendo
     direttamente le docstring delle implementazioni."""
     import importlib
     import inspect
+
     from bfcl_eval.constants.executable_backend_config import (  # type: ignore
         CLASS_FILE_PATH_MAPPING,
-        STATELESS_CLASSES,
     )
 
     lines: list[str] = []
@@ -120,6 +119,7 @@ def _build_tool_catalog(involved_classes: list[str]) -> str:
 
 
 # --- Inference loop ------------------------------------------------------
+
 
 def _parse_model_response(content: str) -> tuple[list[str] | None, str]:
     """Estrae le call_string Python dall'output del modello.
@@ -188,7 +188,7 @@ async def run_single_task(
     api_calls = 0
 
     async with sem:
-        for turn_index, turn_messages in enumerate(questions):
+        for _turn_index, turn_messages in enumerate(questions):
             # Aggiungi user messages del turn corrente alla chat history
             chat_history.extend(turn_messages)
             steps_this_turn: list[list[str]] = []
@@ -245,9 +245,7 @@ async def run_single_task(
 
                 steps_this_turn.append(calls)
                 # Append tool execution feedback come messaggio user (formato BFCL ufficiale)
-                feedback = "\n".join(
-                    f"Result of `{c}`: {r}" for c, r in zip(calls, exec_results)
-                )
+                feedback = "\n".join(f"Result of `{c}`: {r}" for c, r in zip(calls, exec_results, strict=False))
                 chat_history.append({"role": "user", "content": feedback})
 
                 if step == max_iter - 1:
@@ -343,6 +341,7 @@ def _make_failure(task: dict, category: str, reason: str, *, model_alias: str, m
 
 
 # --- Orchestration --------------------------------------------------------
+
 
 def load_model_config(alias: str) -> dict:
     cfg = load_yaml(configs_dir() / "models.yaml")
@@ -459,7 +458,9 @@ async def main_async(args: argparse.Namespace) -> int:
     for cat, vals in sorted(by_cat.items()):
         graded = [v for v in vals if v is not None]
         if graded:
-            print(f"  {cat:30s} {sum(graded)}/{len(graded)} ({sum(graded)/len(graded)*100:.1f}%) [skipped={len(vals)-len(graded)}]")
+            print(
+                f"  {cat:30s} {sum(graded)}/{len(graded)} ({sum(graded)/len(graded)*100:.1f}%) [skipped={len(vals)-len(graded)}]"
+            )
         else:
             print(f"  {cat:30s} N/A (n_graded=0/{len(vals)})")
 
@@ -483,11 +484,24 @@ def main() -> None:
     p.add_argument("--max-iter", type=int, default=10, help="inner-loop max steps per turn")
     p.add_argument("--max-tokens", type=int, default=2048)
     p.add_argument("--concurrency", type=int, default=4)
-    p.add_argument("--max-budget", type=float, default=None, help="Hard cap (USD) sul cost cumulato. Abort + cancel pending tasks se superato.")
-    p.add_argument("--endpoint-url", default=None, help="Custom OpenAI-compatible base_url (es. http://localhost:30000/v1 per SGLang)")
+    p.add_argument(
+        "--max-budget",
+        type=float,
+        default=None,
+        help="Hard cap (USD) sul cost cumulato. Abort + cancel pending tasks se superato.",
+    )
+    p.add_argument(
+        "--endpoint-url",
+        default=None,
+        help="Custom OpenAI-compatible base_url (es. http://localhost:30000/v1 per SGLang)",
+    )
     p.add_argument("--endpoint-key", default=None, help="API key per endpoint custom (es. 'EMPTY' per SGLang locale)")
-    p.add_argument("--model-id-override", default=None, help="Override openrouter_id da models.yaml (es. 'Qwen/Qwen3.5-9B')")
-    p.add_argument("--extra-body", default=None, help="JSON extra_body inviato a ogni request (es. vLLM reasoning kwargs)")
+    p.add_argument(
+        "--model-id-override", default=None, help="Override openrouter_id da models.yaml (es. 'Qwen/Qwen3.5-9B')"
+    )
+    p.add_argument(
+        "--extra-body", default=None, help="JSON extra_body inviato a ogni request (es. vLLM reasoning kwargs)"
+    )
     args = p.parse_args()
     raise SystemExit(asyncio.run(main_async(args)))
 

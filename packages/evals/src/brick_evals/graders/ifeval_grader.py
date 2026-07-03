@@ -9,6 +9,7 @@ Il dataset finale mescola due famiglie di constraint check:
 Il grader carica entrambi i registry e li unisce (IFBench ha precedenza in caso di
 conflitto, perchA il set A8 piA9 recente).
 """
+
 from __future__ import annotations
 
 import sys
@@ -26,6 +27,7 @@ _REGISTRY: dict[str, Any] = {}
 
 try:
     from instruction_following_eval import instructions_registry as _ifeval_reg  # type: ignore
+
     _REGISTRY.update(_ifeval_reg.INSTRUCTION_DICT)
     _IFEVAL_OK = True
 except Exception:  # noqa: BLE001
@@ -33,6 +35,7 @@ except Exception:  # noqa: BLE001
 
 try:
     from ifbench import instructions_registry as _ifbench_reg  # type: ignore
+
     _REGISTRY.update(_ifbench_reg.INSTRUCTION_DICT)
     _IFBENCH_OK = True
 except Exception:  # noqa: BLE001

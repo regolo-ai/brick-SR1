@@ -1,4 +1,5 @@
 """Smoke tests Tier 1: invariant checks on report json files."""
+
 import json
 import sys
 from pathlib import Path

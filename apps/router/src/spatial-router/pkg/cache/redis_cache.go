@@ -15,10 +15,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"sigs.k8s.io/yaml"
 
-	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
+	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 // RedisCache provides a scalable semantic cache implementation using Redis with vector search

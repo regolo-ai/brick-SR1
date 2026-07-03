@@ -6,6 +6,7 @@ Idempotent: skips work if checkpoint file shows N records already done; appends.
 
 Run on the GPU host where SGLang serves the generator (default localhost:30000).
 """
+
 from __future__ import annotations
 
 import argparse

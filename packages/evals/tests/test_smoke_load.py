@@ -1,4 +1,5 @@
 """Smoke test: configs/sources.yaml legge correttamente, normalizers registry consistente."""
+
 import sys
 from pathlib import Path
 

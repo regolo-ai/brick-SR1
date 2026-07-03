@@ -12,6 +12,7 @@ Usage:
   python scripts/100_run_inference.py --model deepseek-v4-flash --limit-per-dim 20 \\
       --output data/inference/deepseek-v4-flash/dataset_a_smoke.jsonl
 """
+
 from __future__ import annotations
 
 import argparse
@@ -58,18 +59,18 @@ MAX_TOKENS_RULES: dict[tuple[str, str | None], int] = {
     # sotto max-model-len 65536 con l'input; creative 24576→40960 (16K thinking +
     # ~24K storia, 24576 dava solo ~8K → 20% finish=length).
     # NB: TEMP BUMP precedente (Kimi skip-retry): da rivedere quando si riprende Kimi.
-    ("coding", None): 49152,                  # 16K thinking + ~32K code, sotto max-model-len
-    ("math_reasoning", None): 49152,          # bump 32K→48K (math hard ~26K reasoning)
-    ("creative_synthesis", None): 40960,      # 16K thinking + ~24K storia (era 24576 → 20% trunc)
-    ("instruction_following", None): 32768,   # confermato pilota: 4/4 stop
-    ("world_knowledge", "mcq_letter"): 24576, # confermato pilota: 2/2 stop
+    ("coding", None): 49152,  # 16K thinking + ~32K code, sotto max-model-len
+    ("math_reasoning", None): 49152,  # bump 32K→48K (math hard ~26K reasoning)
+    ("creative_synthesis", None): 40960,  # 16K thinking + ~24K storia (era 24576 → 20% trunc)
+    ("instruction_following", None): 32768,  # confermato pilota: 4/4 stop
+    ("world_knowledge", "mcq_letter"): 24576,  # confermato pilota: 2/2 stop
     ("world_knowledge", "llm_judge_factual"): 24576,
     ("world_knowledge", None): 8192,
     # planning_agentic: BFCL response = tool_call breve; rubric_judge = piano multi-step
     # 2026-05-15 Kimi K2.6 retry-18: cap precedenti (4096 ST + 20480 PC) saturati nel
     # thinking → response vuote. K2.6 conta il thinking nel cap (al contrario di K2.5).
-    ("planning_agentic", "tool_call_match"): 8192,   # was 4096; Kimi K2.6 thinking-heavy anche su BFCL
-    ("planning_agentic", "rubric_judge"): 40960,     # was 20480; bump Kimi K2.6 (q_04213 saturava 28672 nel thinking)
+    ("planning_agentic", "tool_call_match"): 8192,  # was 4096; Kimi K2.6 thinking-heavy anche su BFCL
+    ("planning_agentic", "rubric_judge"): 40960,  # was 20480; bump Kimi K2.6 (q_04213 saturava 28672 nel thinking)
     ("planning_agentic", None): 8192,
 }
 
@@ -111,9 +112,7 @@ def build_messages_for_row(row: dict) -> list[dict]:
     if proto == "tool_call_match":
         payload = (row.get("expected_answer") or {}).get("payload") or {}
         specs = payload.get("function_specs") or []
-        system = _BFCL_SYSTEM_TEMPLATE.format(
-            functions_json=json.dumps(specs, ensure_ascii=False, indent=2)
-        )
+        system = _BFCL_SYSTEM_TEMPLATE.format(functions_json=json.dumps(specs, ensure_ascii=False, indent=2))
         return [
             {"role": "system", "content": system},
             {"role": "user", "content": query},
@@ -137,7 +136,7 @@ def load_done_ids(path: Path) -> set[str]:
     if not path.exists():
         return set()
     done = set()
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -262,9 +261,7 @@ async def process_row(
     # Circuit breaker: il watchdog (task asincrono) setta pbar["aborted"]=True
     # quando OpenRouter total_usage - baseline supera il cap. Qui propaghiamo cancel.
     if pbar.get("aborted"):
-        raise asyncio.CancelledError(
-            f"budget cap exceeded (API usage delta ${pbar.get('api_usage_delta',0):.4f})"
-        )
+        raise asyncio.CancelledError(f"budget cap exceeded (API usage delta ${pbar.get('api_usage_delta',0):.4f})")
 
     return record
 
@@ -398,13 +395,16 @@ async def run(
     if max_budget and endpoint_url is None:
         # Solo per OpenRouter (no custom endpoint). Carica chiave + baseline.
         from brick_evals.io_utils import openrouter_key
+
         api_key = endpoint_key or openrouter_key()
         baseline_usage = await fetch_openrouter_usage(api_key)
         if baseline_usage is None:
             print("[runner] WARNING: impossibile leggere baseline usage OpenRouter. Watchdog disabilitato.")
         else:
-            print(f"[runner] budget cap=${max_budget:.2f} | baseline usage=${baseline_usage:.4f} | "
-                  f"abort threshold=${baseline_usage + max_budget:.4f} (poll 30s)")
+            print(
+                f"[runner] budget cap=${max_budget:.2f} | baseline usage=${baseline_usage:.4f} | "
+                f"abort threshold=${baseline_usage + max_budget:.4f} (poll 30s)"
+            )
             watchdog_task = asyncio.create_task(
                 budget_watchdog(
                     api_key=api_key,

@@ -7,6 +7,7 @@ Strategia:
 3. Filtra `release_version == 'release_v6'` o `contest_date >= 2024-08-01`.
 4. Sample 1000 con seed=42.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,11 +41,12 @@ def main():
             print(f"  loaded {fname} -> {local}")
             if fname.endswith(".parquet"):
                 import pyarrow.parquet as pq
+
                 t = pq.read_table(local)
                 rows = t.to_pylist()
             else:
                 rows = []
-                with open(local, "r", encoding="utf-8") as f:
+                with open(local, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line:
@@ -81,10 +83,11 @@ def main():
 
     # Lockfile
     import yaml
+
     lockfile = data_dir("reports") / "lockfile.yaml"
     entries = {}
     if lockfile.exists():
-        with open(lockfile, "r") as f:
+        with open(lockfile) as f:
             entries = yaml.safe_load(f) or {}
     revision = None
     try:

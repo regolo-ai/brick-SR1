@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
+	candle_binding "github.com/regolo-ai/brick-SR1/candle-binding"
 )
 
 const (

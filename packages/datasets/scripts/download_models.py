@@ -9,6 +9,7 @@ These are loaded by the router at startup. Place them under a single root and
 point the router config at the resulting paths (config.yaml: capability_model,
 complexity_model).
 """
+
 from __future__ import annotations
 
 import argparse

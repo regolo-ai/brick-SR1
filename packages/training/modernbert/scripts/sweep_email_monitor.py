@@ -5,7 +5,9 @@ Run as background process locally:
         --sweep massa-industries/dataset-b-modernbert/0srgzjrg \
         --target 50 &
 """
+
 from __future__ import annotations
+
 import argparse
 import os
 import sys
@@ -26,6 +28,7 @@ def main() -> int:
 
     os.environ.setdefault("WANDB_API_KEY", Path("/root/.wandb_key").read_text().strip())
     import wandb
+
     api = wandb.Api()
 
     seen_milestones = set()
@@ -57,7 +60,9 @@ def main() -> int:
                     except Exception as e:
                         print(f"email error: {e}")
 
-            print(f"[{time.strftime('%H:%M:%S')}] finished={len(finished)} running={len(running)} pct={pct}% best={best}")
+            print(
+                f"[{time.strftime('%H:%M:%S')}] finished={len(finished)} running={len(running)} pct={pct}% best={best}"
+            )
             if pct >= 100:
                 break
         except Exception as e:

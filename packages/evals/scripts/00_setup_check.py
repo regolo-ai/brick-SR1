@@ -3,6 +3,7 @@
 
 Esegue check non-distruttivi e segnala blocking issues prima di lanciare la pipeline.
 """
+
 from __future__ import annotations
 
 import sys
@@ -41,7 +42,7 @@ def check_regolo_key() -> bool:
 
 
 def check_hf_repo(repo_id: str, *, gated_ok: bool = False) -> tuple[bool, str | None]:
-    from huggingface_hub import dataset_info, HfApi
+    from huggingface_hub import HfApi
     from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 
     api = HfApi(token=hf_token())
@@ -61,6 +62,7 @@ def check_hf_repo(repo_id: str, *, gated_ok: bool = False) -> tuple[bool, str | 
 def check_tokenizer(alias: str, hf_id: str) -> bool:
     try:
         from transformers import AutoTokenizer
+
         tok = AutoTokenizer.from_pretrained(hf_id, use_fast=True, token=hf_token(), trust_remote_code=False)
         v = tok.encode("hello world", add_special_tokens=False)
         print(f"  [OK] tokenizer {alias} -> {hf_id} (sample 'hello world' -> {len(v)} tokens)")
@@ -73,6 +75,7 @@ def check_tokenizer(alias: str, hf_id: str) -> bool:
 def check_bfcl_repo() -> bool:
     """BFCL non e' load_dataset-able. Verifica via list_repo_files."""
     from huggingface_hub import HfApi
+
     api = HfApi(token=hf_token())
     try:
         files = api.list_repo_files(repo_id="gorilla-llm/Berkeley-Function-Calling-Leaderboard", repo_type="dataset")
@@ -87,6 +90,7 @@ def check_bfcl_repo() -> bool:
 def check_taubench_github() -> bool:
     """Verifica che il repo GitHub tau-bench sia raggiungibile (HEAD request)."""
     import requests
+
     try:
         r = requests.head("https://github.com/sierra-research/tau-bench", timeout=10, allow_redirects=True)
         ok = r.status_code in (200, 301, 302)
@@ -100,6 +104,7 @@ def check_taubench_github() -> bool:
 def check_eqbench_manifest() -> bool:
     """Verifica reachability del manifest eqbench.com."""
     import requests
+
     candidates = [
         "https://eqbench.com/results/creative-writing-v3.json",
         "https://eqbench.com/creative_writing.html",
@@ -120,6 +125,7 @@ def check_eqbench_manifest() -> bool:
 def check_regolo_models() -> bool:
     try:
         from brick_evals.regolo_client import RegoloClient
+
         client = RegoloClient()
         models = client.list_models()
         ids = [m.get("id") for m in models]
@@ -164,7 +170,7 @@ def main() -> int:
 
     print("[3] Tokenizers (3 modelli pool)")
     models = load_yaml(configs_dir() / "models.yaml")
-    for key, cfg in models.items():
+    for _key, cfg in models.items():
         if not isinstance(cfg, dict) or cfg.get("provider") == "regolo":
             continue
         if alias := cfg.get("alias"):
