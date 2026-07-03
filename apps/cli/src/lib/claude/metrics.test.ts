@@ -103,6 +103,27 @@ describe('unifyEconomy', () => {
 
     expect(result.source).toBe('estimate');
   });
+
+  it('propagates savings_pct_vs_opus when the router reports it', () => {
+    const econ = economicsResponse({
+      most_expensive_model: 'claude-fable-5',
+      savings_pct: 80,
+      savings_pct_vs_opus: 60,
+    });
+    const result = unifyEconomy(econ, emptyMetrics());
+
+    expect(result.source).toBe('real');
+    expect(result.savedPctVsOpus).toBe(60);
+  });
+
+  it('leaves savedPctVsOpus undefined when the router omits it (opus unpriced or older router)', () => {
+    const econ = economicsResponse();
+    delete econ.savings_pct_vs_opus;
+    const result = unifyEconomy(econ, emptyMetrics());
+
+    expect(result.source).toBe('real');
+    expect(result.savedPctVsOpus).toBeUndefined();
+  });
 });
 
 describe('fetchEconomics', () => {

@@ -151,7 +151,6 @@ func locateScript(override string) (string, error) {
 		"deploy/addons/brick-complexity-server/server.py",
 		"../deploy/addons/brick-complexity-server/server.py",
 		"../../deploy/addons/brick-complexity-server/server.py",
-		"/root/forkGO/spatial-routing/deploy/addons/brick-complexity-server/server.py",
 	}
 	for _, p := range candidates {
 		if abs, err := filepath.Abs(p); err == nil {

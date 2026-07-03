@@ -162,6 +162,131 @@ func TestHandleEconomicsComputesSavings(t *testing.T) {
 	if !approxEqual(resp.SavingsPct, wantSavings, 1e-6) {
 		t.Fatalf("savings_pct wrong: got %v want %v", resp.SavingsPct, wantSavings)
 	}
+
+	// This pricing table has no "claude-opus" entry, so the vs-opus baseline
+	// is not computable and the field must be omitted (nil), not defaulted to
+	// a misleading 0.
+	if resp.SavingsPctVsOpus != nil {
+		t.Fatalf("expected savings_pct_vs_opus to be nil when opus absent from pricing, got %v", *resp.SavingsPctVsOpus)
+	}
+}
+
+// TestHandleEconomicsSavingsVsOpusDistinctFromMostExpensive verifies the
+// second, opus-anchored baseline. When the most expensive observed model is
+// NOT opus (e.g. Fable, priced above Opus), savings_pct (vs the most
+// expensive) and savings_pct_vs_opus must differ, and the vs-opus figure must
+// match a hand-computed absolute-price calculation.
+//
+//	haiku: in=1,  out=5    usage 1000 in / 1000 out
+//	fable: in=10, out=50   usage  100 in /  100 out   (most expensive)
+//	opus:  in=5,  out=25   usage   50 in /   50 out
+//
+//	actual absolute cost  = 1000*1+1000*5 + 100*10+100*50 + 50*5+50*25
+//	                      = 6000 + 6000 + 1500 = 13500
+//	all-opus baseline     = (1000+100+50)*5 + (1000+100+50)*25
+//	                      = 1150*5 + 1150*25 = 5750 + 28750 = 34500
+//	savings_vs_opus       = (1 - 13500/34500) * 100 = 60.8695...%
+func TestHandleEconomicsSavingsVsOpusDistinctFromMostExpensive(t *testing.T) {
+	pricingYAML := `
+- provider: anthropic
+  model: claude-haiku
+  input_price: 1
+  output_price: 5
+  currency: USD
+- provider: anthropic
+  model: claude-fable
+  input_price: 10
+  output_price: 50
+  currency: USD
+- provider: anthropic
+  model: claude-opus
+  input_price: 5
+  output_price: 25
+  currency: USD
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pricing.yaml")
+	if err := writeFile(path, pricingYAML); err != nil {
+		t.Fatalf("failed to write test pricing file: %v", err)
+	}
+
+	store := economics.NewStore()
+	store.RecordUsage("claude-haiku", 1000, 1000)
+	store.RecordUsage("claude-fable", 100, 100)
+	store.RecordUsage("claude-opus", 50, 50)
+
+	srv := &Server{economicsStore: store, pricingPath: path}
+
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet, "/api/v1/economics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeEconomicsResponse(t, rec)
+
+	if resp.MostExpensiveModel != "claude-fable" {
+		t.Fatalf("expected most_expensive_model=claude-fable, got %q", resp.MostExpensiveModel)
+	}
+	if resp.SavingsPctVsOpus == nil {
+		t.Fatalf("expected savings_pct_vs_opus to be present when opus is priced")
+	}
+
+	wantVsOpus := (1 - 13500.0/34500.0) * 100
+	if !approxEqual(*resp.SavingsPctVsOpus, wantVsOpus, 1e-6) {
+		t.Fatalf("savings_pct_vs_opus wrong: got %v want %v", *resp.SavingsPctVsOpus, wantVsOpus)
+	}
+	// The two baselines must genuinely differ here (fable is pricier than opus),
+	// otherwise the extra row would be redundant.
+	if approxEqual(resp.SavingsPct, *resp.SavingsPctVsOpus, 1e-6) {
+		t.Fatalf("savings_pct (%v) and savings_pct_vs_opus (%v) should differ when opus is not the most expensive model", resp.SavingsPct, *resp.SavingsPctVsOpus)
+	}
+}
+
+// TestHandleEconomicsSavingsVsOpusMatchesWhenOpusIsMostExpensive verifies that
+// when opus IS the most expensive observed model, the vs-opus baseline equals
+// the most-expensive baseline (savings_pct == savings_pct_vs_opus), so the CLI
+// can safely suppress the redundant second row.
+func TestHandleEconomicsSavingsVsOpusMatchesWhenOpusIsMostExpensive(t *testing.T) {
+	pricingYAML := `
+- provider: anthropic
+  model: claude-haiku
+  input_price: 1
+  output_price: 5
+  currency: USD
+- provider: anthropic
+  model: claude-opus
+  input_price: 5
+  output_price: 25
+  currency: USD
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pricing.yaml")
+	if err := writeFile(path, pricingYAML); err != nil {
+		t.Fatalf("failed to write test pricing file: %v", err)
+	}
+
+	store := economics.NewStore()
+	store.RecordUsage("claude-haiku", 1000, 1000)
+	store.RecordUsage("claude-opus", 100, 100)
+
+	srv := &Server{economicsStore: store, pricingPath: path}
+
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet, "/api/v1/economics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeEconomicsResponse(t, rec)
+
+	if resp.MostExpensiveModel != "claude-opus" {
+		t.Fatalf("expected most_expensive_model=claude-opus, got %q", resp.MostExpensiveModel)
+	}
+	if resp.SavingsPctVsOpus == nil {
+		t.Fatalf("expected savings_pct_vs_opus to be present")
+	}
+	if !approxEqual(resp.SavingsPct, *resp.SavingsPctVsOpus, 1e-6) {
+		t.Fatalf("with opus as most expensive, savings_pct (%v) and savings_pct_vs_opus (%v) should match", resp.SavingsPct, *resp.SavingsPctVsOpus)
+	}
 }
 
 // TestHandleEconomicsCacheAwareCost verifies prompt-cache tokens are surfaced
@@ -374,4 +499,3 @@ func TestHandleEconomicsMixedCurrencyRestrictsPoolToDominant(t *testing.T) {
 		t.Error("expected a non-empty note explaining the mixed-currency restriction")
 	}
 }
-

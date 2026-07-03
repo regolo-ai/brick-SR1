@@ -21,18 +21,39 @@ fraction of its cost. No cascades. No wasted calls. Drop-in `model: "brick"`.
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](#-datasets--models)
 
-**[Quickstart](#-quickstart-60-seconds) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [FAQ](#-faq) · [Paper](#-paper) · [Contributing](#-contributing)**
+**[Quickstart](#-quickstart) · [How it works](#-how-it-works) · [Benchmarks](#-results-dataset-a-n5504) · [Claude Code](#-brick--claude-code) · [Models](#-datasets--models) · [FAQ](#-faq) · [Paper](#-paper) · [Contributing](#-contributing)**
 
 </div>
 
 ---
 
-## ⚡ Quickstart (60 seconds)
+## ⚡ Quickstart
+
+The fastest working path today is the CLI, which self-hosts the router and wires it into
+**Claude Code** for you. Requires Node >= 18 and Docker.
+
+```bash
+git clone https://github.com/regolo-ai/brick-SR1.git
+cd brick-SR1/apps/cli && npm install && npm run build && npm link
+
+brick claude on     # starts the router + wires ANTHROPIC_BASE_URL in ~/.claude/settings.json
+```
+
+Then open a **new** Claude Code session and pick **brick-claude** in the `/model` picker.
+Every request now routes to haiku / sonnet / opus by capability and complexity. See
+[Brick + Claude Code](#-brick--claude-code) for modes, the effort picker, and the live
+`brick claude status` dashboard.
+
+<details>
+<summary><b>Prefer a raw OpenAI-compatible gateway (no CLI)?</b></summary>
+
+Once the Docker image is published (see [Distribution channels](#-develop)), you'll
+be able to run the gateway directly:
 
 ```bash
 docker run --rm -p 18000:18000 \
   -e REGOLO_API_KEY=$REGOLO_API_KEY \
-  ghcr.io/regolo-ai/brick:latest
+  ghcr.io/regolo-ai/brick:latest      # published at the next v2.1.0 tag
 ```
 
 Then call it like any OpenAI endpoint, just set `"model": "brick"`:
@@ -46,6 +67,10 @@ curl http://localhost:18000/v1/chat/completions \
 
 The `x-selected-model` response header tells you which backend Brick picked.
 That math prompt routes to a reasoning model; `"Hello"` routes to the cheapest one.
+
+Until then, `brick serve` (from the CLI above) runs the same router locally from source.
+
+</details>
 
 ---
 
@@ -129,7 +154,7 @@ forwarded directly to a vision model. Details in [apps/router/README.md](apps/ro
 
 ### A. Run the gateway (Docker)
 
-The [60-second quickstart](#-quickstart-60-seconds) above. See [docs/quickstart/quick.md](docs/quickstart/quick.md).
+A raw OpenAI-compatible endpoint, no CLI. See the [Quickstart](#-quickstart) and [docs/quickstart/quick.md](docs/quickstart/quick.md). (The published image ships at the next `v2.1.0` tag; until then use `brick serve` from path B.)
 
 ### B. CLI: self-host in one command
 

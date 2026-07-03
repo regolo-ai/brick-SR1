@@ -10,19 +10,19 @@ Goal: install `@regolo-ai/brick` from npm, run a guided init, start the gateway,
 
 ## Install
 
-From npm (recommended):
-
-```bash
-npm install -g @regolo-ai/brick
-brick --version
-```
-
-Or build from source:
+Build from source (the npm package is not yet published):
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
 cd apps/cli && npm install && npm run build
 npm link                # exposes `brick` globally
+brick --version
+```
+
+Once published (at the next `v2.1.0` tag), the one-line install will be:
+
+```bash
+npm install -g @regolo-ai/brick
 ```
 
 ## Init a profile
@@ -57,7 +57,7 @@ Result on disk:
 brick serve
 ```
 
-This pulls `ghcr.io/regolo-ai/brick:latest` if missing, then runs `docker compose up -d`. The CLI waits up to 90s for `GET /health` on `localhost:8000` (default port from your profile).
+This pulls `ghcr.io/regolo-ai/brick:latest` if missing, then runs `docker compose up -d`. The CLI waits up to 90s for `GET /health` on `localhost:18000` (default port from your profile).
 
 Check state:
 

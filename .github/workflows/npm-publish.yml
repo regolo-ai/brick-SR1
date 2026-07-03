@@ -25,15 +25,17 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
-          cache-dependency-path: apps/cli/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # Install from the repo-root lockfile (npm workspaces). apps/cli has no
+      # standalone lockfile; the root package-lock.json already pins the CLI
+      # workspace, so a single `npm ci` at the root is reproducible and covers
+      # apps/cli via the workspace graph.
       - name: npm ci
-        working-directory: apps/cli
         run: npm ci
 
       - name: Build
-        working-directory: apps/cli
-        run: npm run build
+        run: npm run build:cli
 
       - name: Verify package contents
         working-directory: apps/cli

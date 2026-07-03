@@ -439,6 +439,13 @@ function EconomyBox({
   const spentPct = Math.max(0, Math.min(100, 100 - ue.savedPct));
   const savedColor = ue.savedPct > 50 ? 'green' : ue.savedPct > 20 ? 'yellow' : 'gray';
   const baselineLabel = ue.source === 'real' ? `all-${ue.mostExpensiveModel}` : 'all-opus';
+  // Show the opus-anchored line only when the primary baseline is a pricier
+  // model than opus (e.g. Fable); when opus already IS the most expensive
+  // model the router returns an equal figure, so the extra row is redundant.
+  const showVsOpus =
+    ue.source === 'real' &&
+    ue.savedPctVsOpus !== undefined &&
+    !(ue.mostExpensiveModel ?? '').includes('opus');
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
@@ -457,6 +464,9 @@ function EconomyBox({
       {ue.source === 'real' ? (
         <>
           <Text dimColor>{`~${ue.savedPct.toFixed(0)}% cheaper than ${baselineLabel} (real token counts, cache-aware)`}</Text>
+          {showVsOpus && (
+            <Text dimColor>{`~${ue.savedPctVsOpus!.toFixed(0)}% cheaper than all-opus`}</Text>
+          )}
           <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} in + ${((ue.totalCacheReadTokens ?? 0) + (ue.totalCacheCreationTokens ?? 0)).toLocaleString()} cache / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
         </>
       ) : (

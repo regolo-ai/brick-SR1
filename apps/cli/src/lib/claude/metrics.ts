@@ -72,6 +72,10 @@ export type EconomicsResponse = {
   actual_cost_units: number;
   baseline_cost_units_all_expensive: number;
   savings_pct: number;
+  // Second, opus-anchored baseline: savings vs sending every priced request to
+  // claude-opus, independent of which model is the most expensive observed.
+  // Omitted by the router when opus is not priced in the active pool.
+  savings_pct_vs_opus?: number;
   pricing_available: boolean;
   note?: string;
 };
@@ -447,6 +451,11 @@ export type UnifiedEconomy = {
   totalCacheReadTokens?: number;
   totalOutputTokens?: number;
   mostExpensiveModel?: string;
+  // Opus-anchored savings (source === 'real' only): present when the router
+  // reports savings_pct_vs_opus, i.e. opus is priced in the active pool. Lets
+  // the dashboard show a "vs opus" figure even when a pricier model (Fable)
+  // owns the most-expensive baseline above.
+  savedPctVsOpus?: number;
   // Present only when source === 'estimate' (mirrors legacy Economy):
   totalRoutedReqs?: number;
 };
@@ -470,6 +479,7 @@ export function unifyEconomy(econ: EconomicsResponse | null, m: ParsedMetrics): 
       totalCacheReadTokens,
       totalOutputTokens,
       mostExpensiveModel: econ.most_expensive_model,
+      savedPctVsOpus: econ.savings_pct_vs_opus,
     };
   }
   const legacy = economy(m);

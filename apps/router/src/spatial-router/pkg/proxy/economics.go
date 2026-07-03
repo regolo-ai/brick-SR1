@@ -38,9 +38,22 @@ type economicsResponse struct {
 	ActualCostUnits    float64               `json:"actual_cost_units"`
 	BaselineCostUnits  float64               `json:"baseline_cost_units_all_expensive"`
 	SavingsPct         float64               `json:"savings_pct"`
-	PricingAvailable   bool                  `json:"pricing_available"`
-	Note               string                `json:"note,omitempty"`
+	// SavingsPctVsOpus is a second, opus-anchored baseline: the savings Brick
+	// achieved versus sending every priced request to claude-opus, regardless
+	// of which model is the most expensive one actually observed. It exists so
+	// the CLI can always show a "vs opus" figure even when a pricier model
+	// (e.g. Fable) dominates the most-expensive baseline above. Nil (omitted)
+	// when opus is not resolvable in the pricing table for the active pool, so
+	// a missing baseline is never rendered as a misleading 0%.
+	SavingsPctVsOpus *float64 `json:"savings_pct_vs_opus,omitempty"`
+	PricingAvailable bool     `json:"pricing_available"`
+	Note             string   `json:"note,omitempty"`
 }
+
+// opusBaselineModel is the fixed reference model for the vs-opus savings
+// baseline. Prefix-matched against pricing.yaml (so "claude-opus-4-8" resolves
+// to the "claude-opus" entry), mirroring PricingTable.Price semantics.
+const opusBaselineModel = "claude-opus"
 
 // handleEconomics reports real token usage per model, plus the "true"
 // savings Brick achieved versus a baseline where every request had been
@@ -122,11 +135,25 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 		inPool[m] = true
 	}
 
+	// Resolve opus's absolute price once (nil if the dominant-currency pool
+	// has no opus entry). The vs-opus baseline is computed from ABSOLUTE
+	// prices rather than the pool-relative cost ratios used for savings_pct,
+	// since opus may not be the most expensive model in the pool (Fable is
+	// pricier) and the pool-normalised units cancel against the wrong anchor.
+	opusEntry, opusPriced := table.Price(opusBaselineModel)
+	if opusPriced && opusEntry.Currency != dominantCurrency {
+		// An opus entry priced in a non-dominant currency cannot be compared
+		// with the dominant-currency traffic; treat as unavailable.
+		opusPriced = false
+	}
+
 	var (
-		models            []economicsModelStats
-		actualCostUnits   float64
-		baselineCostUnits float64
-		mostExpensive     string
+		models              []economicsModelStats
+		actualCostUnits     float64
+		baselineCostUnits   float64
+		mostExpensive       string
+		actualAbsoluteCost  float64 // sum over pool of real per-model $ cost
+		opusBaselineAbsCost float64 // same traffic, all priced at opus rates
 	)
 
 	for _, u := range snap {
@@ -164,6 +191,15 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 
 			actualCostUnits += row.EstimatedCostUnits
 			baselineCostUnits += effectiveInput + float64(u.OutputTokens)
+
+			// Opus-anchored baseline (absolute prices): this model's real cost
+			// vs the same tokens billed entirely at opus rates.
+			if opusPriced {
+				if entry, ok := pricedByModel[u.Model]; ok {
+					actualAbsoluteCost += effectiveInput*entry.InputPrice + float64(u.OutputTokens)*entry.OutputPrice
+					opusBaselineAbsCost += effectiveInput*opusEntry.InputPrice + float64(u.OutputTokens)*opusEntry.OutputPrice
+				}
+			}
 		}
 
 		models = append(models, row)
@@ -174,6 +210,15 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 	var savingsPct float64
 	if baselineCostUnits > 0 {
 		savingsPct = (1 - actualCostUnits/baselineCostUnits) * 100
+	}
+
+	// Opus-anchored savings: only meaningful when opus is priced in the
+	// dominant currency and there was real priced traffic to compare. Left
+	// nil (omitted from JSON) otherwise, so the CLI never shows a fake 0%.
+	var savingsPctVsOpus *float64
+	if opusPriced && opusBaselineAbsCost > 0 {
+		v := (1 - actualAbsoluteCost/opusBaselineAbsCost) * 100
+		savingsPctVsOpus = &v
 	}
 
 	note := ""
@@ -188,6 +233,7 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 		ActualCostUnits:    actualCostUnits,
 		BaselineCostUnits:  baselineCostUnits,
 		SavingsPct:         savingsPct,
+		SavingsPctVsOpus:   savingsPctVsOpus,
 		PricingAvailable:   true,
 		Note:               note,
 	})
