@@ -326,7 +326,7 @@ Per-component docs: [router](apps/router/README.md) · [CLI](apps/cli/README.md)
 | Channel | Status |
 |---|---|
 | Source clone + `npm link` | available |
-| Docker GHCR (`ghcr.io/regolo-ai/brick`) | pending first push (tag `v2.0.0`) |
+| Docker GHCR (`ghcr.io/regolo-ai/brick`) | pending first push (tag `v2.1.0`) |
 | npm (`@regolo-ai/brick`) | pending `NPM_TOKEN` secret |
 | Docker Hub mirror (`docker.io/regolo/brick`) | pending Docker Hub secrets |
 
