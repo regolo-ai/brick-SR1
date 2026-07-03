@@ -144,29 +144,44 @@ brick claude off    # restores ANTHROPIC_BASE_URL, optionally stops the router
 
 Use `brick claude on --no-start` to require an already-healthy router instead of auto-starting one, and `brick claude off --stop` / `--keep` to control the router without a prompt.
 
-### The 5 modes
+### The 5 modes: pick your cost/quality trade-off
+
+A mode is how you tell Brick how much to spend. Each one maps easy/medium/hard queries to a
+model tier, from cheapest (`eco`, always haiku) to strongest (`max`, always opus). Pick one
+and Brick handles the per-query routing inside it.
 
 <img width="1640" height="395" alt="Brick (4)" src="https://github.com/user-attachments/assets/77d0e69a-4f67-4a8b-beb0-757ea1d67d5f" />
 
 
 https://github.com/user-attachments/assets/396a41a2-822d-4916-a593-78e346ba5db9
 
+| Mode | r    | easy   | medium | hard   |
+|------|------|--------|--------|--------|
+| eco  | -1   | haiku  | haiku  | haiku  |
+| lite | -0.5 | haiku  | haiku  | sonnet |
+| mid  | 0    | haiku  | sonnet | opus   |
+| pro  | 0.5  | sonnet | sonnet | opus   |
+| max  | 1    | opus   | opus   | opus   |
 
+Switch with `brick claude mode` or directly via `brick claude <mode>`. `mid` is the default.
+On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium
+resolve to sonnet, hard to opus.
 
-Each mode sets a routing preference `r` and a complexity (easy/medium/hard) to model map. Switch with `brick claude mode` or directly via `brick claude <mode>`.
+### The effort picker just picks the mode
 
+The effort slider in Claude Code's `/model` picker is a shortcut for choosing the Brick mode
+(the model tier), not the thinking budget:
 
+| Effort | Mode |
+|--------|------|
+| low    | eco  |
+| medium | lite |
+| high   | mid  |
+| xhigh  | pro  |
+| max    | max  |
 
-
-
-`mid` is the default. (On 1M-context requests the map shifts up since Haiku has no 1M variant: easy and medium resolve to sonnet, hard to opus.)
-
-### How the effort picker works
-
-The effort slider in Claude Code's `/model` picker selects the **Brick mode** (the model tier), not the thinking budget
-
-### Reasoning effort 
-Reasoning effort itself is then decided **autonomously per request** from the router's own signals (query difficulty plus the chosen model's headroom). You pick the tier; Brick picks how hard to think.
+You pick the tier; how hard to think is then decided **autonomously per request** from the
+router's own signals (query difficulty plus the chosen model's headroom).
 
 ### Native models bypass the router
 
@@ -447,8 +462,8 @@ Pre-built PDF: [`docs/paper/paper.pdf`](docs/paper/paper.pdf) · compile with `c
 
 ## 📈 Star history
 
-<a href="https://star-history.com/#regolo-ai/brick-SR1&Date">
-  <img src="https://api.star-history.com/svg?repos=regolo-ai/brick-SR1&type=Date" alt="Star history chart" width="600">
+<a href="https://star-history.com/#regolo-ai/brick-sr1&Date">
+  <img src="https://api.star-history.com/svg?repos=regolo-ai/brick-sr1&type=Date" alt="Star history chart" width="600">
 </a>
 
 ---
