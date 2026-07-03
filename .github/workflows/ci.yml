@@ -37,9 +37,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Build Rust bindings (shared libs needed by CGO link)
         run: |
-          cd candle-binding && cargo build --release --no-default-features
-          cd ../ml-binding  && cargo build --release
-          cd ../nlp-binding && cargo build --release
+          (cd candle-binding && cargo build --release --no-default-features)
+          (cd ml-binding      && cargo build --release)
+          (cd nlp-binding     && cargo build --release)
           mkdir -p /tmp/libs
           cp candle-binding/target/release/libcandle_spatial_router.so /tmp/libs/
           cp ml-binding/target/release/libml_spatial_router.so         /tmp/libs/
