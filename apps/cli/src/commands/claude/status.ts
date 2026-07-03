@@ -216,10 +216,11 @@ export default class ClaudeStatus extends Command {
       const savedColor = ue.savedPct > 50 ? COLORS.green : ue.savedPct > 20 ? COLORS.yellow : COLORS.dim;
       if (ue.source === 'real') {
         this.log(
-          `  ${savedColor}saved ~${ue.savedPct.toFixed(0)}%${COLORS.reset} vs all-${ue.mostExpensiveModel}  ${COLORS.dim}(real token counts)${COLORS.reset}`
+          `  ${savedColor}saved ~${ue.savedPct.toFixed(0)}%${COLORS.reset} vs all-${ue.mostExpensiveModel}  ${COLORS.dim}(real token counts, cache-aware)${COLORS.reset}`
         );
+        const cacheTokens = (ue.totalCacheReadTokens ?? 0) + (ue.totalCacheCreationTokens ?? 0);
         this.log(
-          `  ${COLORS.dim}tokens: ${ue.totalInputTokens?.toLocaleString()} in / ${ue.totalOutputTokens?.toLocaleString()} out${COLORS.reset}`
+          `  ${COLORS.dim}tokens: ${ue.totalInputTokens?.toLocaleString()} in + ${cacheTokens.toLocaleString()} cache / ${ue.totalOutputTokens?.toLocaleString()} out${COLORS.reset}`
         );
       } else {
         this.log(

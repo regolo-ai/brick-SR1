@@ -50,10 +50,16 @@ var hopByHopHeaders = map[string]struct{}{
 
 // anthropicUsage is the token-usage shape of the Anthropic Messages API. Both
 // non-streaming responses (top-level "usage") and streaming events carry these
-// fields; only input/output tokens are needed for economics tracking.
+// fields. input_tokens covers ONLY the non-cached portion of the prompt; with
+// prompt caching active the bulk of the context arrives as
+// cache_read_input_tokens / cache_creation_input_tokens (this is why Claude
+// Code's context meter can read 200k while input_tokens is ~1k), so all four
+// counters are tracked for economics.
 type anthropicUsage struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
+	InputTokens              int64 `json:"input_tokens"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
 }
 
 // anthropicNonStreamEnvelope is the minimal shape of a non-streaming
@@ -432,7 +438,7 @@ func (s *Server) forwardAnthropicRequest(
 			usage = env.Usage
 		}
 	}
-	s.recordEconomicsUsage(selectedModel, usage.InputTokens, usage.OutputTokens)
+	s.recordEconomicsUsage(selectedModel, usage.InputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens, usage.OutputTokens)
 }
 
 // accumulateAnthropicSSEUsage feeds a raw chunk of an Anthropic SSE stream
@@ -475,6 +481,12 @@ func accumulateAnthropicSSEUsage(buf *bytes.Buffer, chunk []byte, maxBuf int, us
 			if ev.Message != nil {
 				if ev.Message.Usage.InputTokens != 0 {
 					usage.InputTokens = ev.Message.Usage.InputTokens
+				}
+				if ev.Message.Usage.CacheCreationInputTokens != 0 {
+					usage.CacheCreationInputTokens = ev.Message.Usage.CacheCreationInputTokens
+				}
+				if ev.Message.Usage.CacheReadInputTokens != 0 {
+					usage.CacheReadInputTokens = ev.Message.Usage.CacheReadInputTokens
 				}
 				if ev.Message.Usage.OutputTokens != 0 {
 					usage.OutputTokens = ev.Message.Usage.OutputTokens

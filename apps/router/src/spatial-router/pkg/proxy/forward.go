@@ -50,19 +50,21 @@ func injectStreamUsageOption(body []byte) []byte {
 	return body
 }
 
-// recordEconomicsUsage records prompt/completion token usage for model into
-// the server's economics store, if both a store and a non-empty model are
-// available. Best-effort: never called when usage is entirely zero (an
-// upstream response with no usage field parses to zero tokens). Shared by
-// both the OpenAI-compatible (Regolo) and Anthropic passthrough forwarders.
-func (s *Server) recordEconomicsUsage(model string, promptTokens, completionTokens int64) {
+// recordEconomicsUsage records one request's token usage for model into the
+// server's economics store, if both a store and a non-empty model are
+// available. cacheCreationTokens/cacheReadTokens carry Anthropic prompt-cache
+// counters (always 0 on the OpenAI-compatible path). Best-effort: never
+// called when usage is entirely zero (an upstream response with no usage
+// field parses to zero tokens). Shared by both the OpenAI-compatible (Regolo)
+// and Anthropic passthrough forwarders.
+func (s *Server) recordEconomicsUsage(model string, promptTokens, cacheCreationTokens, cacheReadTokens, completionTokens int64) {
 	if s.economicsStore == nil || model == "" {
 		return
 	}
-	if promptTokens == 0 && completionTokens == 0 {
+	if promptTokens == 0 && cacheCreationTokens == 0 && cacheReadTokens == 0 && completionTokens == 0 {
 		return
 	}
-	s.economicsStore.RecordUsage(model, promptTokens, completionTokens)
+	s.economicsStore.RecordCachedUsage(model, promptTokens, cacheCreationTokens, cacheReadTokens, completionTokens)
 }
 
 // forwardToBackend forwards the request to the selected backend and streams
@@ -254,7 +256,7 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		logging.Errorf("Error reading upstream SSE stream: %v", err)
 	}
 
-	s.recordEconomicsUsage(model, lastUsage.PromptTokens, lastUsage.CompletionTokens)
+	s.recordEconomicsUsage(model, lastUsage.PromptTokens, 0, 0, lastUsage.CompletionTokens)
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
@@ -284,7 +286,7 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	// alters forwarding if the body has no usage field or isn't JSON.
 	var env openAIUsageEnvelope
 	if jsonErr := json.Unmarshal(bodyBytes, &env); jsonErr == nil {
-		s.recordEconomicsUsage(model, env.Usage.PromptTokens, env.Usage.CompletionTokens)
+		s.recordEconomicsUsage(model, env.Usage.PromptTokens, 0, 0, env.Usage.CompletionTokens)
 	}
 
 	if maskModel != "" {

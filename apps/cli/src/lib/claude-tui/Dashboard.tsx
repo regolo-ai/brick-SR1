@@ -456,8 +456,8 @@ function EconomyBox({
       </Box>
       {ue.source === 'real' ? (
         <>
-          <Text dimColor>{`~${ue.savedPct.toFixed(0)}% cheaper than ${baselineLabel} (real token counts)`}</Text>
-          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} in / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
+          <Text dimColor>{`~${ue.savedPct.toFixed(0)}% cheaper than ${baselineLabel} (real token counts, cache-aware)`}</Text>
+          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} in + ${((ue.totalCacheReadTokens ?? 0) + (ue.totalCacheCreationTokens ?? 0)).toLocaleString()} cache / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
         </>
       ) : (
         <>

@@ -11,11 +11,19 @@ import (
 )
 
 // ModelUsage is the accumulated usage for one model.
+//
+// InputTokens counts only the non-cached portion of the prompt (Anthropic's
+// usage.input_tokens excludes prompt-cache reads/writes, which is why it can
+// be tiny next to Claude Code's context meter). Cache reads and writes are
+// tracked separately so cost math can weight them by their real price
+// multipliers. Older snapshot files without the cache fields load as zeroes.
 type ModelUsage struct {
-	Model        string `json:"model"`
-	Requests     int64  `json:"requests"`
-	InputTokens  int64  `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
+	Model                    string `json:"model"`
+	Requests                 int64  `json:"requests"`
+	InputTokens              int64  `json:"input_tokens"`
+	CacheCreationInputTokens int64  `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int64  `json:"cache_read_input_tokens,omitempty"`
+	OutputTokens             int64  `json:"output_tokens"`
 }
 
 // Store accumulates per-model token usage in memory and can snapshot to /
@@ -34,8 +42,16 @@ func NewStore() *Store {
 }
 
 // RecordUsage adds one request's token usage for a model to the running
-// totals. Safe to call concurrently.
+// totals. Safe to call concurrently. For providers that report prompt-cache
+// counters (Anthropic), use RecordCachedUsage instead.
 func (s *Store) RecordUsage(model string, inputTokens, outputTokens int64) {
+	s.RecordCachedUsage(model, inputTokens, 0, 0, outputTokens)
+}
+
+// RecordCachedUsage adds one request's token usage including prompt-cache
+// counters (cache_creation_input_tokens / cache_read_input_tokens from the
+// Anthropic Messages API) to the running totals. Safe to call concurrently.
+func (s *Store) RecordCachedUsage(model string, inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -43,6 +59,8 @@ func (s *Store) RecordUsage(model string, inputTokens, outputTokens int64) {
 	entry.Model = model
 	entry.Requests++
 	entry.InputTokens += inputTokens
+	entry.CacheCreationInputTokens += cacheCreationTokens
+	entry.CacheReadInputTokens += cacheReadTokens
 	entry.OutputTokens += outputTokens
 	s.usage[model] = entry
 }

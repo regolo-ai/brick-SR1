@@ -164,6 +164,50 @@ func TestHandleEconomicsComputesSavings(t *testing.T) {
 	}
 }
 
+// TestHandleEconomicsCacheAwareCost verifies prompt-cache tokens are surfaced
+// per model and weighted into cost by the Anthropic multipliers (writes 1.25x,
+// reads 0.1x the base input price), on both actual and baseline sides.
+//
+//	effectiveInput = 1000 + 1.25*400 + 0.1*10000 = 2500
+//	cheap:    2500/5 + 1000/5 = 700    (ratios 5.0 as in the plain test)
+//	baseline = 2500 + 1000 = 3500
+//	savings  = (1 - 700/3500) * 100 = 80%
+func TestHandleEconomicsCacheAwareCost(t *testing.T) {
+	store := economics.NewStore()
+	store.RecordCachedUsage("cheap", 1000, 400, 10000, 1000)
+	store.RecordUsage("expensive", 0, 0) // never recorded (all-zero); keep pool via a real call
+	store.RecordUsage("expensive", 1, 1)
+
+	srv := &Server{
+		economicsStore: store,
+		pricingPath:    writeTestPricingFile(t),
+	}
+
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet, "/api/v1/economics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeEconomicsResponse(t, rec)
+
+	byModel := make(map[string]economicsModelStats, len(resp.Models))
+	for _, m := range resp.Models {
+		byModel[m.Model] = m
+	}
+	cheap := byModel["cheap"]
+	if cheap.CacheCreationInputTokens != 400 || cheap.CacheReadInputTokens != 10000 {
+		t.Fatalf("cache token sums wrong: %+v", cheap)
+	}
+	if !approxEqual(cheap.EstimatedCostUnits, 700.0, 1e-6) {
+		t.Fatalf("cache-aware cost units wrong: got %v want 700", cheap.EstimatedCostUnits)
+	}
+	// expensive contributes 2 units to both sides; fold it into the check.
+	wantSavings := (1 - (700.0+2.0)/(3500.0+2.0)) * 100
+	if !approxEqual(resp.SavingsPct, wantSavings, 1e-6) {
+		t.Fatalf("savings_pct wrong: got %v want %v", resp.SavingsPct, wantSavings)
+	}
+}
+
 // TestHandleEconomicsMissingPricingFile verifies the endpoint stays usable
 // (200, token counts only) when pricing.yaml is absent.
 func TestHandleEconomicsMissingPricingFile(t *testing.T) {

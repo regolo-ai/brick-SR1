@@ -7,15 +7,28 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 )
 
+// Anthropic prompt-cache price multipliers relative to the base input-token
+// price: a 5-minute cache write costs 1.25x, a cache read 0.1x. Applied
+// identically to the actual cost and the all-expensive baseline (same cache
+// behaviour assumed on the baseline model), so savings_pct stays a pure
+// model-mix comparison while token costs reflect reality.
+// https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+const (
+	cacheWriteInputPriceMultiplier = 1.25
+	cacheReadInputPriceMultiplier  = 0.10
+)
+
 // economicsModelStats is the per-model row in the /api/v1/economics response.
 type economicsModelStats struct {
-	Model              string  `json:"model"`
-	Requests           int64   `json:"requests"`
-	InputTokens        int64   `json:"input_tokens"`
-	OutputTokens       int64   `json:"output_tokens"`
-	CostRatioIn        float64 `json:"cost_ratio_in"`
-	CostRatioOut       float64 `json:"cost_ratio_out"`
-	EstimatedCostUnits float64 `json:"estimated_cost_units"`
+	Model                    string  `json:"model"`
+	Requests                 int64   `json:"requests"`
+	InputTokens              int64   `json:"input_tokens"`
+	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
+	OutputTokens             int64   `json:"output_tokens"`
+	CostRatioIn              float64 `json:"cost_ratio_in"`
+	CostRatioOut             float64 `json:"cost_ratio_out"`
+	EstimatedCostUnits       float64 `json:"estimated_cost_units"`
 }
 
 // economicsResponse is the full body returned by GET /api/v1/economics.
@@ -118,11 +131,20 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 
 	for _, u := range snap {
 		row := economicsModelStats{
-			Model:        u.Model,
-			Requests:     u.Requests,
-			InputTokens:  u.InputTokens,
-			OutputTokens: u.OutputTokens,
+			Model:                    u.Model,
+			Requests:                 u.Requests,
+			InputTokens:              u.InputTokens,
+			CacheCreationInputTokens: u.CacheCreationInputTokens,
+			CacheReadInputTokens:     u.CacheReadInputTokens,
+			OutputTokens:             u.OutputTokens,
 		}
+
+		// Effective input tokens: cache writes/reads weighted by their price
+		// multipliers so a mostly-cached 200k context is billed as ~20k-worth
+		// of base-price input, matching real Anthropic invoicing.
+		effectiveInput := float64(u.InputTokens) +
+			cacheWriteInputPriceMultiplier*float64(u.CacheCreationInputTokens) +
+			cacheReadInputPriceMultiplier*float64(u.CacheReadInputTokens)
 
 		if inPool[u.Model] {
 			ratioIn, errIn := table.CostRatioIn(u.Model, pool)
@@ -130,7 +152,7 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 			if errIn == nil && errOut == nil && ratioIn > 0 && ratioOut > 0 {
 				row.CostRatioIn = ratioIn
 				row.CostRatioOut = ratioOut
-				row.EstimatedCostUnits = float64(u.InputTokens)/ratioIn + float64(u.OutputTokens)/ratioOut
+				row.EstimatedCostUnits = effectiveInput/ratioIn + float64(u.OutputTokens)/ratioOut
 			}
 			// ratioIn == 1.0 means this model's input price equals the max
 			// in the pool, i.e. it IS the most expensive model (by input
@@ -141,7 +163,7 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 			}
 
 			actualCostUnits += row.EstimatedCostUnits
-			baselineCostUnits += float64(u.InputTokens + u.OutputTokens)
+			baselineCostUnits += effectiveInput + float64(u.OutputTokens)
 		}
 
 		models = append(models, row)
@@ -179,10 +201,12 @@ func economicsResponseTokensOnly(snap []economics.ModelUsage, pricingAvailable b
 	models := make([]economicsModelStats, 0, len(snap))
 	for _, u := range snap {
 		models = append(models, economicsModelStats{
-			Model:        u.Model,
-			Requests:     u.Requests,
-			InputTokens:  u.InputTokens,
-			OutputTokens: u.OutputTokens,
+			Model:                    u.Model,
+			Requests:                 u.Requests,
+			InputTokens:              u.InputTokens,
+			CacheCreationInputTokens: u.CacheCreationInputTokens,
+			CacheReadInputTokens:     u.CacheReadInputTokens,
+			OutputTokens:             u.OutputTokens,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].Model < models[j].Model })

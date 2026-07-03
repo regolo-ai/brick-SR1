@@ -22,6 +22,14 @@
   source_url: https://platform.claude.com/docs/en/about-claude/pricing
   source: litellm:claude-opus-4-8
   fetched_at: '2026-07-03T10:35:10Z'
+- provider: anthropic
+  model: claude-fable
+  input_price: 10.0
+  output_price: 50.0
+  currency: USD
+  source_url: https://platform.claude.com/docs/en/about-claude/pricing
+  source: litellm:claude-fable-5
+  fetched_at: '2026-07-03T16:00:00Z'
 - provider: regolo
   model: qwen3.5-9b
   input_price: 0.07

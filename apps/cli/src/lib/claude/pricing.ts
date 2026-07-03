@@ -18,6 +18,7 @@ export const MODEL_PRICE: Array<[string, Price]> = [
   ['claude-haiku', { in: 1, out: 5 }],
   ['claude-sonnet', { in: 3, out: 15 }],
   ['claude-opus', { in: 5, out: 25 }],
+  ['claude-fable', { in: 10, out: 50 }],
 ];
 
 // Coding traffic skews toward output; blend input/output 1:3 to get a single

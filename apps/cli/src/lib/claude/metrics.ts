@@ -58,6 +58,8 @@ export type EconomicsModelStats = {
   model: string;
   requests: number;
   input_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
   output_tokens: number;
   cost_ratio_in: number;
   cost_ratio_out: number;
@@ -437,6 +439,12 @@ export type UnifiedEconomy = {
   savedPct: number;
   // Present only when source === 'real':
   totalInputTokens?: number;
+  // Anthropic prompt-cache counters (0 for routers that predate cache
+  // tracking): most of a long session's context arrives as cache reads,
+  // which is why totalInputTokens alone looks tiny next to Claude Code's
+  // context meter.
+  totalCacheCreationTokens?: number;
+  totalCacheReadTokens?: number;
   totalOutputTokens?: number;
   mostExpensiveModel?: string;
   // Present only when source === 'estimate' (mirrors legacy Economy):
@@ -451,11 +459,15 @@ export type UnifiedEconomy = {
 export function unifyEconomy(econ: EconomicsResponse | null, m: ParsedMetrics): UnifiedEconomy {
   if (econ && econ.pricing_available && econ.baseline_cost_units_all_expensive > 0) {
     const totalInputTokens = econ.models.reduce((sum, row) => sum + row.input_tokens, 0);
+    const totalCacheCreationTokens = econ.models.reduce((sum, row) => sum + (row.cache_creation_input_tokens ?? 0), 0);
+    const totalCacheReadTokens = econ.models.reduce((sum, row) => sum + (row.cache_read_input_tokens ?? 0), 0);
     const totalOutputTokens = econ.models.reduce((sum, row) => sum + row.output_tokens, 0);
     return {
       source: 'real',
       savedPct: econ.savings_pct,
       totalInputTokens,
+      totalCacheCreationTokens,
+      totalCacheReadTokens,
       totalOutputTokens,
       mostExpensiveModel: econ.most_expensive_model,
     };
