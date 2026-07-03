@@ -15,6 +15,32 @@ import {
 } from '../claude/settings-apply.js';
 import { info, ok, warn } from '../ui/banners.js';
 
+export type ClassifierComputeStatus = 'configured' | 'needs-key' | 'needs-choice';
+
+/**
+ * Decide, from a parsed config and the resolved Regolo key, whether the
+ * complexity classifier is ready. Pure (no I/O) so it is trivially testable.
+ *
+ * - Points at Regolo + key present  -> configured
+ * - Points at Regolo + key blank     -> needs-key (mode chosen, key missing)
+ * - Points somewhere else (local)    -> configured (local needs no key)
+ * - Neither clearly Regolo nor local -> needs-choice (ask local vs api)
+ */
+export function classifierComputeStatus(rawConfig: any, resolvedKey: string): ClassifierComputeStatus {
+  const csUrl: string = rawConfig?.complexity_service?.base_url ?? '';
+  const cmUrl: string = rawConfig?.skill_router?.complexity_model?.base_url ?? '';
+  const pointsAtRegolo =
+    csUrl.startsWith(REGOLO_CLASSIFIER_URL) || cmUrl.startsWith(REGOLO_CLASSIFIER_URL);
+  const anyUrl = (csUrl || cmUrl).trim() !== '';
+
+  if (pointsAtRegolo) {
+    return resolvedKey.trim() !== '' ? 'configured' : 'needs-key';
+  }
+  // A concrete non-Regolo URL means a local/custom classifier: no key needed.
+  if (anyUrl) return 'configured';
+  return 'needs-choice';
+}
+
 /**
  * Ensure a REGOLO_API_KEY is present when the profile uses the hosted Regolo
  * classifier. Prompts for it (interactive TTY only) when missing; a blank
