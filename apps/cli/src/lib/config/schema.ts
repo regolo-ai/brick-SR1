@@ -253,6 +253,7 @@ export const ConfigSchema = z.object({
     name: z.string(),
     description: z.string().optional(),
   }),
+  mom_registry: z.record(z.string()).optional(),
   providers: z.record(ProviderSchema).default({}),
   brick: BrickSchema.optional(),
   server_port: z.number().default(8000),

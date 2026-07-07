@@ -3,6 +3,10 @@
 
 .PHONY: help install build build-cli build-router test test-cli test-router test-python lint docker-build docker-build-router clean release-tag shellcheck go-lint markdown-lint yaml-lint
 
+# Auto-detect Docker build platform matching the host architecture.
+# Override with: make docker-build DOCKER_BUILD_PLATFORM=linux/amd64
+DOCKER_BUILD_PLATFORM := $(shell uname -m | sed 's/arm64/linux\/arm64/; s/x86_64/linux\/amd64/')
+
 help:
 	@echo "Brick monorepo targets:"
 	@echo "  install         install all workspace deps (npm + uv)"
@@ -28,7 +32,7 @@ build-cli:
 	cd apps/cli && npm run build
 
 build-router:
-	docker build -f apps/router/Dockerfile -t brick:dev .
+	docker build --platform $(DOCKER_BUILD_PLATFORM) -f apps/router/Dockerfile -t brick:dev .
 
 test: test-cli test-router test-python
 
@@ -45,7 +49,7 @@ lint:
 	pre-commit run --all-files
 
 docker-build:
-	docker build -f apps/router/Dockerfile -t ghcr.io/regolo-ai/brick:dev .
+	docker build --platform $(DOCKER_BUILD_PLATFORM) -f apps/router/Dockerfile -t ghcr.io/regolo-ai/brick:dev .
 
 clean:
 	find . -type d -name 'node_modules' -prune -exec rm -rf {} +

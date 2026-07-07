@@ -210,6 +210,9 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
 
   const cfg: BrickConfig = ConfigSchema.parse({
     model: { name: 'brick', description: 'Virtual multimodal routing model' },
+    mom_registry: {
+      'models/modernbert-capability-classifier': 'massaindustries/modernbert-capability-classifier',
+    },
     providers,
     brick,
     server_port: 8000,
