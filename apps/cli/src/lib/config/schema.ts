@@ -257,6 +257,19 @@ export const ConfigSchema = z.object({
   brick: BrickSchema.optional(),
   server_port: z.number().default(8000),
   auto_model_name: z.string().default('brick'),
+  // Model download registry: maps a local model path (e.g.
+  // "models/modernbert-capability-classifier") to its Hugging Face repo id, so the
+  // Go router downloads the model on first start (see MoMRegistry in apps/router
+  // pkg/config). Required whenever skill_router.enabled is true.
+  //
+  // Modeled explicitly so a config load -> parse -> save round-trip preserves it.
+  // ConfigSchema is a plain (non-passthrough) z.object, so any top-level key it
+  // does not declare is stripped by ConfigSchema.parse(); saveConfig() then dumps
+  // the stripped object. Every load->save path (mode switch, `brick add/remove`,
+  // `brick config edit`, config-ai edits, the wizard) would otherwise silently
+  // delete mom_registry, making the router crash-loop at startup with
+  // "model path models/modernbert-capability-classifier not found in mom_registry".
+  mom_registry: z.record(z.string()).optional(),
   provider_profiles: z.record(ProviderProfileSchema).default({}),
   provider_endpoints: z.array(ProviderEndpointSchema).default([]),
   default_model: z.string(),
