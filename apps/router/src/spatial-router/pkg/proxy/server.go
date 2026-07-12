@@ -132,9 +132,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register routes
 	mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
-	// /v1/responses intentionally not registered: handleBrickRequest only
-	// understands Chat Completions {messages:[...]} payloads and would silently
-	// drop the Responses API `input` field.
+	// /v1/responses adapts the OpenAI Responses protocol (Codex CLI 0.134+ speaks
+	// only this wire format) to the Chat Completions router core; see responses.go.
+	mux.HandleFunc("/v1/responses", s.handleResponses)
 	mux.HandleFunc("/v1/messages", s.handleAnthropicMessages) // Anthropic-native pass-through
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/health", s.handleHealth)

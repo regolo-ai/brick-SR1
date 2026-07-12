@@ -1,0 +1,36 @@
+{
+  "model": "gpt-5.6-sol",
+  "provider": "openai",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.9,
+    0.91,
+    0.86,
+    0.94,
+    0.92,
+    0.94
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "high",
+    "low",
+    "medium",
+    "medium",
+    "high",
+    "medium"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-12",
+  "notes": "Benchmark-derived skill vector for GPT-5.6 Sol (flagship tier, released 2026-07-09). OpenAI's launch suite is deliberately agentic and omits AIME/GPQA/MMLU/IFEval, so only coding and planning_agentic have direct public benchmarks (confidence high); math/world/instruction are anchored to the composite intelligence index (confidence medium); creative_synthesis is imputed (confidence low). Sourcing per dimension: coding=Terminal-Bench 2.1 88.8% (SOTA) + Artificial Analysis Coding Agent Index 80/100 (SOTA); planning_agentic=Agents' Last Exam 53.6 (SOTA, +13 over Fable 5) + OSWorld 2.0 62.6% (SOTA); math_reasoning + world_knowledge=Artificial Analysis Intelligence Index v4.1 Sol=59 (near-top), no standalone AIME/GPQA published; instruction_following=no public IFEval, estimated from the composite index; creative_synthesis=imputed as the mean of the known coordinates. Sources: openai.com/index/gpt-5-6, artificialanalysis.ai/articles/gpt-5-6-has-landed, vellum.ai/blog/gpt-5-6-benchmarks-explained. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}

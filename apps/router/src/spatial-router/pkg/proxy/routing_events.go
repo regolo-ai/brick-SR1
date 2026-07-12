@@ -32,9 +32,9 @@ type routingEvent struct {
 	// removed on this turn (0 outside smartsqueeze mode, or when nothing was
 	// cleared). Populated in both shadow and served sub-modes so the aggregator
 	// can report realized-vs-shadow savings.
-	EstSavedTokens int64   `json:"est_saved_tokens,omitempty"`
-	E2ELatencyMs   int64   `json:"e2e_latency_ms"`
-	ShadowNote     string  `json:"shadow_note,omitempty"`
+	EstSavedTokens int64  `json:"est_saved_tokens,omitempty"`
+	E2ELatencyMs   int64  `json:"e2e_latency_ms"`
+	ShadowNote     string `json:"shadow_note,omitempty"`
 }
 
 // routingEventLogger appends routingEvent records to a JSONL file. Writes are

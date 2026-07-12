@@ -254,4 +254,3 @@ func BenchmarkCompact(b *testing.B) {
 		}
 	}
 }
-

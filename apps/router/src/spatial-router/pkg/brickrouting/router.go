@@ -583,13 +583,20 @@ func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
 	return normalize(out), nil
 }
 
+// noLogprobWarn gates the "no usable logprobs" warning to once per process.
+// It is package-level rather than a complexityClient field because the client
+// is not always a long-lived singleton: ClassifyComplexityLabel (the Anthropic
+// passthrough model_map fallback) builds a fresh complexityClient per request,
+// so a per-instance sync.Once would never have fired and the warning would
+// flood the logs on every fallback classification.
+var noLogprobWarn sync.Once
+
 type complexityClient struct {
 	baseURL           string
 	bearerToken       string
 	protocol          string
 	modelName         string
 	defaultConfidence float64
-	noLogprobWarn     sync.Once
 	httpClient        *http.Client
 }
 
@@ -695,6 +702,27 @@ func (c *complexityClient) Classify(ctx context.Context, text string) (string, f
 		return c.classifyOpenAI(ctx, text)
 	}
 	return c.classifyBrick(ctx, text)
+}
+
+// ClassifyComplexityLabel builds a one-shot complexity classifier from cfg's
+// skill-router complexity_model config (with the same fallback to
+// complexity_service that the router core uses) and returns just the label
+// ("easy"/"medium"/"hard").
+//
+// It exists so callers outside the router core — notably the Anthropic
+// passthrough model_map fallback in pkg/proxy, which runs when the skill router
+// did not produce a label — share the exact protocol handling (brick /classify
+// vs OpenAI /v1/chat/completions), bearer-token expansion, and model-name
+// resolution as the skill router, instead of reimplementing a protocol-blind
+// POST /classify. Degrades to "medium" when cfg is nil or the classifier is
+// unavailable, so routing keeps working.
+func ClassifyComplexityLabel(ctx context.Context, cfg *config.RouterConfig, text string) string {
+	if cfg == nil {
+		return "medium"
+	}
+	c := newComplexityClient(cfg, cfg.SkillRouter.ComplexityModel)
+	label, _ := c.Classify(ctx, text)
+	return label
 }
 
 // classifyBrick calls the custom brick-complexity-server POST /classify endpoint
@@ -822,11 +850,17 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 	// so we cannot derive a calibrated confidence. Fall back to the configured
 	// default_confidence (default 0.5) instead of assuming full certainty, and
 	// warn once so the operator can enable logprobs or tune the default.
-	c.noLogprobWarn.Do(func() {
+	c.noLogprobWarnDo()
+	return label, c.defaultConfidence
+}
+
+// noLogprobWarnDo emits the "no usable logprobs" warning at most once per
+// process (see the package-level noLogprobWarn).
+func (c *complexityClient) noLogprobWarnDo() {
+	noLogprobWarn.Do(func() {
 		logging.Warnf("[Brick2] complexity openai endpoint returned no usable logprobs; "+
 			"using default_confidence=%.2f for routing (enable logprobs/top_logprobs on the "+
 			"endpoint for calibrated confidence, or set complexity_service.default_confidence)",
 			c.defaultConfidence)
 	})
-	return label, c.defaultConfidence
 }

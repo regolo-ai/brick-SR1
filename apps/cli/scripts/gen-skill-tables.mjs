@@ -33,7 +33,14 @@ const SEED = [
   { model: 'claude-sonnet-4-6', provider: 'anthropic', vector: [0.80, 0.85, 0.82, 0.89, 0.72, 0.88], confidence: C('high','medium','medium','high','medium','high'), imputed: [] },
   { model: 'claude-haiku-4-5', provider: 'anthropic', vector: [0.73, 0.65, 0.70, 0.81, 0.50, 0.77], confidence: C('medium','low','medium','high','medium','medium'), imputed: [] },
 
-  // ---- OpenAI ----
+  // ---- OpenAI ---- (creative_synthesis frequently NA in public OpenAI
+  // benchmarks -> imputed from model mean, confidence low. GPT-5.6's launch
+  // suite is deliberately agentic: no public AIME/GPQA/IFEval, so math/world/
+  // instruction are anchored to the composite intelligence index, confidence
+  // medium; coding + planning_agentic have direct agentic benchmarks.)
+  { model: 'gpt-5.6-sol',   provider: 'openai', vector: [0.90, 0.91, 0.86, 0.94, 0.92, 0.94], confidence: C('high','low','medium','medium','high','medium'), imputed: [1] },
+  { model: 'gpt-5.6-terra', provider: 'openai', vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88], confidence: C('high','low','medium','medium','high','medium'), imputed: [1] },
+  { model: 'gpt-5.6-luna',  provider: 'openai', vector: [0.80, 0.80, 0.75, 0.82, 0.83, 0.82], confidence: C('high','low','medium','medium','high','medium'), imputed: [1] },
   { model: 'gpt-5.5',      provider: 'openai', vector: [0.89, 0.65, 0.71, 0.92, 0.83, 0.94], confidence: C('high','low','medium','high','medium','high'), imputed: [] },
   { model: 'gpt-5.4',      provider: 'openai', vector: [0.77, 0.50, 0.68, 0.88, 0.75, 0.90], confidence: C('medium','low','medium','high','medium','high'), imputed: [] },
   { model: 'gpt-5.4-mini', provider: 'openai', vector: [0.34, 0.40, 0.65, 0.65, 0.55, 0.75], confidence: C('medium','low','medium','medium','low','medium'), imputed: [] },

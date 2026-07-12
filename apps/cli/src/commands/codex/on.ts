@@ -111,7 +111,7 @@ export default class CodexOn extends Command {
 
     writeCodexWiring({ wired: true, baseUrl, previousModel, previousModelProvider, previousProfile, createdFile });
 
-    ok(`Codex wired to Brick → ${baseUrl} (model_provider "brick", model "brick", wire_api=chat)`);
+    ok(`Codex wired to Brick → ${baseUrl} (model_provider "brick", model "brick", wire_api=responses)`);
     info(`patched ${codexConfigPath()}`);
     print();
     this.printHint();

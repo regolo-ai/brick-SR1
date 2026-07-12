@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -579,95 +578,19 @@ func accumulateAnthropicSSEUsage(buf *bytes.Buffer, chunk []byte, maxBuf int, us
 	}
 }
 
+// classifyAnthropicComplexity is the model_map fallback used only when the skill
+// router did not produce a complexity label (skill router disabled, its init or
+// route call failed, or the prompt was empty). It delegates to the same
+// complexity classifier the skill router uses so it honours the configured
+// protocol.
+//
+// Previously it unconditionally POSTed {base_url}/classify (the custom brick
+// protocol), ignoring complexity_service.protocol / skill_router.complexity_model
+// .protocol. With an OpenAI-compatible classifier (protocol: openai) that path
+// hit /classify on an endpoint that only serves /v1/chat/completions, so every
+// fallback request got a 403/404 and silently degraded to "medium".
 func classifyAnthropicComplexity(ctx context.Context, cfg *config.RouterConfig, prompt string) string {
-	baseURL, token, timeout := resolveComplexityEndpoint(cfg)
-	body, _ := json.Marshal(map[string]string{"text": prompt})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/classify", bytes.NewReader(body))
-	if err != nil {
-		logging.Warnf("AnthropicPassthrough: complexity fallback: %v", err)
-		return "medium"
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		logging.Warnf("AnthropicPassthrough: complexity fallback: %v", err)
-		return "medium"
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		logging.Warnf("AnthropicPassthrough: complexity fallback: status=%d", resp.StatusCode)
-		return "medium"
-	}
-
-	var decoded struct {
-		Label string `json:"label"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		logging.Warnf("AnthropicPassthrough: complexity fallback: %v", err)
-		return "medium"
-	}
-	label := strings.ToLower(strings.TrimSpace(decoded.Label))
-	if label != "easy" && label != "medium" && label != "hard" {
-		return "medium"
-	}
-	return label
-}
-
-func resolveComplexityEndpoint(cfg *config.RouterConfig) (string, string, time.Duration) {
-	timeout := 5 * time.Second
-	baseURL := ""
-	token := ""
-	if cfg != nil {
-		if cfg.SkillRouter.ComplexityModel.TimeoutSeconds > 0 {
-			timeout = time.Duration(cfg.SkillRouter.ComplexityModel.TimeoutSeconds) * time.Second
-		}
-		baseURL = strings.TrimRight(cfg.SkillRouter.ComplexityModel.BaseURL, "/")
-		// Expand env references (e.g. "${REGOLO_API_KEY}") just like
-		// ComplexityService.ResolveBearerToken does below. Without this an
-		// unexpanded literal is non-empty, so the ResolveBearerToken fallback
-		// is skipped and the router sends "Authorization: Bearer ${REGOLO_API_KEY}"
-		// verbatim, which the hosted classifier rejects with 403 (routing then
-		// silently falls back to "medium" for every request).
-		token = strings.TrimSpace(os.ExpandEnv(cfg.SkillRouter.ComplexityModel.BearerToken))
-		if token == "" && cfg.SkillRouter.ComplexityModel.BearerTokenFile != "" {
-			if resolved, err := os.ReadFile(cfg.SkillRouter.ComplexityModel.BearerTokenFile); err == nil {
-				token = strings.TrimSpace(string(resolved))
-			}
-		}
-		if cfg.ComplexityService != nil {
-			if cfg.ComplexityService.TimeoutSeconds > 0 && cfg.SkillRouter.ComplexityModel.TimeoutSeconds == 0 {
-				timeout = time.Duration(cfg.ComplexityService.TimeoutSeconds) * time.Second
-			}
-			if baseURL == "" {
-				baseURL = strings.TrimRight(cfg.ComplexityService.BaseURL, "/")
-				if baseURL == "" {
-					addr := cfg.ComplexityService.Address
-					if addr == "" {
-						addr = "127.0.0.1"
-					}
-					port := cfg.ComplexityService.Port
-					if port == 0 {
-						port = 8094
-					}
-					baseURL = formatHTTPEndpoint(addr, port)
-				}
-			}
-			if token == "" {
-				if resolved, err := cfg.ComplexityService.ResolveBearerToken(); err == nil {
-					token = resolved
-				}
-			}
-		}
-	}
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:8094"
-	}
-	return baseURL, token, timeout
+	return brickrouting.ClassifyComplexityLabel(ctx, cfg, prompt)
 }
 
 // requestRequestsContext1M reports whether any incoming Anthropic-Beta header
