@@ -286,10 +286,10 @@ type responsesUsage struct {
 // non-streaming path and inside the final response.completed SSE event.
 func responseObject(id, model, text string, usage responsesUsage, status string) map[string]interface{} {
 	return map[string]interface{}{
-		"id":         id,
-		"object":     "response",
-		"status":     status,
-		"model":      model,
+		"id":     id,
+		"object": "response",
+		"status": status,
+		"model":  model,
 		"output": []map[string]interface{}{
 			{
 				"type":   "message",
