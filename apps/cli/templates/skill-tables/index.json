@@ -28,6 +28,24 @@
       "source": "benchmark"
     },
     {
+      "model": "gpt-5.6-sol",
+      "provider": "openai",
+      "file": "gpt-5.6-sol.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "provider": "openai",
+      "file": "gpt-5.6-terra.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "provider": "openai",
+      "file": "gpt-5.6-luna.json",
+      "source": "benchmark"
+    },
+    {
       "model": "gpt-5.5",
       "provider": "openai",
       "file": "gpt-5.5.json",

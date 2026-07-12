@@ -1,0 +1,36 @@
+{
+  "model": "gpt-5.6-terra",
+  "provider": "openai",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.85,
+    0.85,
+    0.8,
+    0.88,
+    0.86,
+    0.88
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "high",
+    "low",
+    "medium",
+    "medium",
+    "high",
+    "medium"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-12",
+  "notes": "Benchmark-derived skill vector for GPT-5.6 Terra (balanced tier, released 2026-07-09). OpenAI's launch suite is deliberately agentic and omits AIME/GPQA/MMLU/IFEval, so only coding and planning_agentic have direct public benchmarks (confidence high); math/world/instruction are anchored to the composite intelligence index (confidence medium); creative_synthesis is imputed (confidence low). Sourcing per dimension: coding=Terminal-Bench 2.1 87.4% + Artificial Analysis Coding Agent Index 77.4/100; planning_agentic=Agents' Last Exam 50.4; math_reasoning + world_knowledge + instruction_following=Artificial Analysis Intelligence Index v4.1 Terra=55 (no standalone AIME/GPQA/IFEval published); creative_synthesis=imputed as the mean of the known coordinates. Sources: openai.com/index/gpt-5-6, artificialanalysis.ai/articles/gpt-5-6-has-landed, vellum.ai/blog/gpt-5-6-benchmarks-explained. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}
