@@ -2,9 +2,13 @@ package proxy
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 )
 
 func TestResponsesToChatMessages_StringInput(t *testing.T) {
@@ -154,5 +158,75 @@ func TestWriteResponsesJSON_Shape(t *testing.T) {
 	}
 	if obj.Usage.TotalTokens != 3 {
 		t.Errorf("usage wrong: %+v", obj.Usage)
+	}
+}
+
+// TestResponsesEndToEnd_NotFourOhFour is the regression guard for the fatal bug
+// this handler fixes: before /v1/responses was registered, wiring Codex with
+// wire_api="responses" made every request 404. This drives a Responses request
+// through the full stack (handler -> handleBrickRequest -> forwardToBackend) to
+// a fake OpenAI backend and asserts a 200 SSE Responses stream comes back with
+// the assistant text the backend produced.
+func TestResponsesEndToEnd_NotFourOhFour(t *testing.T) {
+	// Fake OpenAI backend: returns a non-streaming Chat Completion (the handler
+	// always calls upstream non-streaming).
+	var gotPath string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hi from codex"}}],"usage":{"prompt_tokens":7,"completion_tokens":4}}`))
+	}))
+	defer backend.Close()
+
+	cfg := &config.RouterConfig{
+		BrickExtension: config.BrickExtension{
+			Brick: config.BrickConfig{Enabled: true},
+		},
+		BackendModels: config.BackendModels{
+			ModelConfig: map[string]config.ModelParams{
+				"gpt-5.6-terra": {},
+			},
+		},
+		SkillRouter: config.SkillRouterConfig{
+			Enabled: true,
+			Models: []config.SkillRouterModelConfig{
+				{
+					Model:   "gpt-5.6-terra",
+					BaseURL: backend.URL + "/v1",
+					APIKey:  "sk-test-fake",
+				},
+			},
+		},
+	}
+	srv := &Server{cfg: cfg}
+
+	// A Codex-shaped Responses request. x-selected-model bypasses the skill
+	// router (which would need model weights loaded) and pins the backend.
+	body := `{"model":"gpt-5.6-terra","instructions":"be terse","input":"say hi","stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer client-key")
+	req.Header.Set("x-selected-model", "gpt-5.6-terra")
+	rec := httptest.NewRecorder()
+
+	srv.handleResponses(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Fatal("/v1/responses returned 404 — the bug this handler fixes")
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, b)
+	}
+	if gotPath != "/v1/chat/completions" {
+		t.Errorf("backend path = %q, want /v1/chat/completions (handler must translate to Chat)", gotPath)
+	}
+	out := rec.Body.String()
+	if !strings.Contains(out, "event: response.completed\n") {
+		t.Errorf("missing terminal response.completed event:\n%s", out)
+	}
+	if !strings.Contains(out, `"delta":"hi from codex"`) {
+		t.Errorf("assistant text not delivered in SSE stream:\n%s", out)
 	}
 }
