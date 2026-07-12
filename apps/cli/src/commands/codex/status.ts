@@ -107,7 +107,7 @@ export default class CodexStatus extends Command {
         activeProvider === 'brick' ? `${tick} brick` : `${cross} not brick`
       }`
     );
-    this.log(`  managed provider    ${blockPresent ? `${tick} present (wire_api=chat)` : `${cross} absent`}`);
+    this.log(`  managed provider    ${blockPresent ? `${tick} present (wire_api=responses)` : `${cross} absent`}`);
     if (legacyProfile === 'brick') {
       this.log(`  legacy profile      ${C.yellow}profile = "brick" still present${C.reset}`);
     }

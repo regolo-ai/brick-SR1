@@ -162,7 +162,7 @@ function managedBlock(baseUrl: string): string {
     '[model_providers.brick]',
     'name = "Brick (local router)"',
     `base_url = "${root}/v1"`,
-    'wire_api = "chat"',
+    'wire_api = "responses"',
     'requires_openai_auth = true',
     END,
   ].join('\n');

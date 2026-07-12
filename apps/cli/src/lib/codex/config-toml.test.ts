@@ -38,7 +38,7 @@ describe('codex config.toml wiring', () => {
     expect(getTopLevelModelProvider(text)).toBe('brick');
     expect(getTopLevelProfile(text)).toBeNull();
     expect(isWired(text)).toBe(true);
-    expect(text).toContain('wire_api = "chat"');
+    expect(text).toContain('wire_api = "responses"');
     expect(text).toContain('requires_openai_auth = true');
     expect(text).toContain('base_url = "http://localhost:8000/v1"');
     expect(text).not.toContain('[profiles.brick]');
