@@ -2,6 +2,7 @@ import { Command, Flags } from '@oclif/core';
 import { loadConfig } from '../../lib/config/load.js';
 import { readState } from '../../lib/config/paths.js';
 import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
+import { localBaseUrl } from '../../lib/net/local.js';
 import { ensureDefaultCodexProfile } from '../../lib/codex/bootstrap.js';
 import {
   wireCodex,
@@ -57,14 +58,14 @@ export default class CodexOn extends Command {
     // 1. Ensure the router is up and healthy before pointing Codex at it.
     if (!(await isHealthy(port))) {
       if (flags['no-start']) {
-        err(`router not healthy on http://localhost:${port} and --no-start given. run \`brick serve\` first.`);
+        err(`router not healthy on ${localBaseUrl(port)} and --no-start given. run \`brick serve\` first.`);
         this.exit(1);
       }
       info('router not responding — starting the Codex stack');
       try {
         const r = await ensureServing(profile);
         if (!r.healthy) {
-          err(`router did not become healthy on http://localhost:${port}. check \`brick logs\`.`);
+          err(`router did not become healthy on ${localBaseUrl(port)}. check \`brick logs\`.`);
           this.exit(1);
         }
       } catch (e: any) {
@@ -72,10 +73,10 @@ export default class CodexOn extends Command {
         this.exit(1);
       }
     } else {
-      ok(`router healthy on http://localhost:${port}`);
+      ok(`router healthy on ${localBaseUrl(port)}`);
     }
 
-    const baseUrl = `http://localhost:${port}`;
+    const baseUrl = localBaseUrl(port);
 
     // 2. Idempotent: already wired to the same URL and the TOML still points at Brick.
     const existing = readCodexWiring();

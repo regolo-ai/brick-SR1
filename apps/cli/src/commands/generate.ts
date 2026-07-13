@@ -1,6 +1,7 @@
 import { Args, Command, Flags } from '@oclif/core';
 import { chatCompletion } from '../lib/client/openai.js';
 import { loadConfig } from '../lib/config/load.js';
+import { localBaseUrl } from '../lib/net/local.js';
 
 export default class Generate extends Command {
   static description = 'One-shot completion against the router (prints assistant content to stdout)';
@@ -15,7 +16,7 @@ export default class Generate extends Command {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Generate);
     const cfg = await loadConfig(flags.profile);
-    const baseUrl = `http://localhost:${cfg.server_port}`;
+    const baseUrl = localBaseUrl(cfg.server_port);
     const messages = [];
     if (flags.system) messages.push({ role: 'system' as const, content: flags.system });
     messages.push({ role: 'user' as const, content: args.prompt });

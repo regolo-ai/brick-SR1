@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { paths, resolveProfile } from '../config/paths.js';
+import { localBaseUrl } from '../net/local.js';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -62,7 +63,7 @@ export async function* chatCompletionStream(opts: {
   selectedModel?: string;
   signal?: AbortSignal;
 }): AsyncGenerator<StreamChunk, void, unknown> {
-  const baseUrl = opts.baseUrl ?? `http://localhost:8000`;
+  const baseUrl = opts.baseUrl ?? localBaseUrl(8000);
   const key = opts.apiKey ?? (await readApiKey());
   const externalSignal = opts.signal;
   const ctrl = externalSignal ? null : new AbortController();
@@ -169,7 +170,7 @@ export async function chatCompletion(opts: {
   tools?: ToolDef[];
   toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
 }): Promise<ChatResult & { toolCalls?: ToolCall[]; assistantMessage?: ChatMessageWithTools }> {
-  const baseUrl = opts.baseUrl ?? `http://localhost:8000`;
+  const baseUrl = opts.baseUrl ?? localBaseUrl(8000);
   const key = opts.apiKey ?? (await readApiKey());
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 180000);

@@ -2,6 +2,7 @@ import { Command, Flags } from '@oclif/core';
 import React from 'react';
 import { render } from 'ink';
 import { DEFAULT_CODEX_PORT } from '../../lib/codex/bootstrap.js';
+import { localBaseUrl } from '../../lib/net/local.js';
 import {
   readCodexConfig,
   getTopLevelModel,
@@ -65,7 +66,7 @@ export default class CodexStatus extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(CodexStatus);
     const wiring = readCodexWiring();
-    const baseUrl = (flags.url ?? wiring?.baseUrl ?? `http://localhost:${DEFAULT_CODEX_PORT}`).replace(/\/$/, '');
+    const baseUrl = (flags.url ?? wiring?.baseUrl ?? localBaseUrl(DEFAULT_CODEX_PORT)).replace(/\/$/, '');
 
     const text = readCodexConfig();
     const blockPresent = isWired(text);

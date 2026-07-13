@@ -2,6 +2,7 @@ import { Args, Command, Flags } from '@oclif/core';
 import { chatCompletion } from '../lib/client/openai.js';
 import { loadConfig } from '../lib/config/load.js';
 import { print } from '../lib/ui/banners.js';
+import { localBaseUrl } from '../lib/net/local.js';
 import chalk from 'chalk';
 
 function fmtLatency(ms: number): string {
@@ -24,7 +25,7 @@ export default class Route extends Command {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Route);
     const cfg = await loadConfig(flags.profile);
-    const baseUrl = `http://localhost:${cfg.server_port}`;
+    const baseUrl = localBaseUrl(cfg.server_port);
     const maxTokens = flags['no-generate'] ? 1 : 8;
     const samples: { latencyMs: number; selectedModel?: string; thinkingApplied?: string; status: number; content: string }[] = [];
     for (let i = 0; i < flags.repeat; i++) {

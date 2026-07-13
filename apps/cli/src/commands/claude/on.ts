@@ -2,6 +2,7 @@ import { Command, Flags } from '@oclif/core';
 import { resolveProfile, listProfiles } from '../../lib/config/paths.js';
 import { loadConfig, loadConfigRaw } from '../../lib/config/load.js';
 import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
+import { localBaseUrl } from '../../lib/net/local.js';
 import { ensureDefaultProfile } from '../../lib/claude/bootstrap.js';
 import { getBaseUrl, setBaseUrl, settingsPath, hasBrickModelOption } from '../../lib/claude/settings.js';
 import { readWiring, writeWiring } from '../../lib/claude/wiring-state.js';
@@ -56,14 +57,14 @@ export default class ClaudeOn extends Command {
     // 1. Ensure the router is up and healthy before we point Claude Code at it.
     if (!(await isHealthy(port))) {
       if (flags['no-start']) {
-        err(`router not healthy on http://localhost:${port} and --no-start given. run \`brick serve\` first.`);
+        err(`router not healthy on ${localBaseUrl(port)} and --no-start given. run \`brick serve\` first.`);
         this.exit(1);
       }
       info('router not responding — starting it');
       try {
         const r = await ensureServing(profile);
         if (!r.healthy) {
-          err(`router did not become healthy on http://localhost:${port}. check \`brick logs\`.`);
+          err(`router did not become healthy on ${localBaseUrl(port)}. check \`brick logs\`.`);
           this.exit(1);
         }
       } catch (e: any) {
@@ -71,7 +72,7 @@ export default class ClaudeOn extends Command {
         this.exit(1);
       }
     } else {
-      ok(`router healthy on http://localhost:${port}`);
+      ok(`router healthy on ${localBaseUrl(port)}`);
     }
 
     // 2. Soft check: Claude Code hits /v1/messages, which needs the Anthropic passthrough.
@@ -83,7 +84,7 @@ export default class ClaudeOn extends Command {
       }
     } catch { /* non-blocking */ }
 
-    const baseUrl = `http://localhost:${port}`;
+    const baseUrl = localBaseUrl(port);
 
     // 3. Idempotent: already wired to the same URL AND the picker entry is
     // present → nothing to do. (A wiring written before the custom-model-option

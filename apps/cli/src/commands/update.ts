@@ -10,6 +10,7 @@ import { DEFAULT_CLAUDE_PROFILE } from '../lib/claude/bootstrap.js';
 import { DEFAULT_CODEX_PROFILE } from '../lib/codex/bootstrap.js';
 import { dockerCompose } from '../lib/docker/run.js';
 import { waitHealth } from '../lib/docker/serve.js';
+import { localBaseUrl } from '../lib/net/local.js';
 import { loadConfig } from '../lib/config/load.js';
 import { banner, ok, warn, err, info, print, header } from '../lib/ui/banners.js';
 
@@ -139,7 +140,7 @@ export default class Update extends Command {
         /* no readable config port; skip health probe */
       }
       if (port) {
-        info(`[${pr}] waiting for health on http://localhost:${port}/health ...`);
+        info(`[${pr}] waiting for health on ${localBaseUrl(port)}/health ...`);
         const healthy = await waitHealth(port);
         if (healthy) ok(`[${pr}] updated and healthy`);
         else warn(`[${pr}] recreated but health not OK yet — check \`brick logs ${pr}\``);

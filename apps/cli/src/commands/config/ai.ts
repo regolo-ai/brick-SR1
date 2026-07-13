@@ -6,6 +6,7 @@ import { paths, resolveProfile, readState } from '../../lib/config/paths.js';
 import { loadConfig } from '../../lib/config/load.js';
 import { AgentApp } from '../../lib/config-ai/AgentApp.js';
 import { err } from '../../lib/ui/banners.js';
+import { localBaseUrl } from '../../lib/net/local.js';
 
 // chatCompletion() appends "/v1/chat/completions"; keep this URL without /v1.
 const REGOLO_BASE_URL = 'https://api.regolo.ai';
@@ -44,7 +45,7 @@ export default class ConfigAi extends Command {
 
     if (state.runningProfile) {
       const runningCfg = await loadConfig(state.runningProfile);
-      baseUrl = `http://localhost:${runningCfg.server_port}`;
+      baseUrl = localBaseUrl(runningCfg.server_port);
       model = 'brick';
       backendLabel = `brick @ ${state.runningProfile}`;
     } else {

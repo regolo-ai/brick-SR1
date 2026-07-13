@@ -3,6 +3,7 @@ import { readWiring } from '../../../lib/claude/wiring-state.js';
 import { getBaseUrl as getSettingsBaseUrl } from '../../../lib/claude/settings.js';
 import { fetchRoutingStats, type RoutingModeStats } from '../../../lib/claude/metrics.js';
 import { banner, ok, warn, err, info, print, header } from '../../../lib/ui/banners.js';
+import { localBaseUrl } from '../../../lib/net/local.js';
 
 // Promotion-gate thresholds for taking the orchestrator (mode B) out of shadow,
 // mirrored from the design so the table can annotate progress. Median savings is
@@ -38,7 +39,7 @@ export default class ClaudeStatsRouting extends Command {
     const envUrl = process.env.ANTHROPIC_BASE_URL?.trim();
     const wiring = readWiring();
     const settingsUrl = getSettingsBaseUrl();
-    const effectiveUrl = flags.url ?? envUrl ?? wiring?.baseUrl ?? settingsUrl ?? 'http://localhost:8000';
+    const effectiveUrl = flags.url ?? envUrl ?? wiring?.baseUrl ?? settingsUrl ?? localBaseUrl(8000);
     const baseUrl = effectiveUrl.replace(/\/$/, '');
 
     const stats = await fetchRoutingStats(baseUrl);

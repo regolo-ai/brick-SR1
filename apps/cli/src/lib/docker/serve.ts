@@ -4,12 +4,13 @@ import { defaultImage, imageExists, pullImage } from './image.js';
 import { paths, updateState } from '../config/paths.js';
 import { loadConfig } from '../config/load.js';
 import { err, info, ok, warn } from '../ui/banners.js';
+import { localBaseUrl } from '../net/local.js';
 
 export async function waitHealth(port: number, timeoutMs = 90000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const r = await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(2000) });
+      const r = await fetch(`${localBaseUrl(port)}/health`, { signal: AbortSignal.timeout(2000) });
       if (r.ok) return true;
     } catch {}
     await new Promise((r) => setTimeout(r, 1500));
@@ -19,7 +20,7 @@ export async function waitHealth(port: number, timeoutMs = 90000): Promise<boole
 
 export async function isHealthy(port: number): Promise<boolean> {
   try {
-    const r = await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(2000) });
+    const r = await fetch(`${localBaseUrl(port)}/health`, { signal: AbortSignal.timeout(2000) });
     return r.ok;
   } catch {
     return false;
@@ -63,10 +64,10 @@ export async function ensureServing(
   const r = await dockerCompose(profile, ['up', '-d']);
   if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 800));
 
-  info(`waiting for health on http://localhost:${port}/health ...`);
+  info(`waiting for health on ${localBaseUrl(port)}/health ...`);
   const healthy = await waitHealth(port);
   if (!healthy) warn('health check did not become OK in 90s — container may still be starting; check `brick logs`');
-  else ok(`router ready at http://localhost:${port}/v1/chat/completions (model: brick · profile: ${profile})`);
+  else ok(`router ready at ${localBaseUrl(port)}/v1/chat/completions (model: brick · profile: ${profile})`);
 
   updateState({ runningProfile: profile });
   return { port, healthy };

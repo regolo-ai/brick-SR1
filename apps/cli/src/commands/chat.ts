@@ -5,6 +5,7 @@ import { loadConfig } from '../lib/config/load.js';
 import { paths, resolveProfile, readState } from '../lib/config/paths.js';
 import type { ThinkingMode } from '../lib/client/openai.js';
 import { App } from '../lib/chat-tui/App.js';
+import { localBaseUrl } from '../lib/net/local.js';
 
 export default class Chat extends Command {
   static description = 'Interactive chat (ink TUI: bottom input + scrolling history, Claude Code style)';
@@ -24,7 +25,7 @@ export default class Chat extends Command {
     if (state.runningProfile !== profile) this.warn(`requested profile '${profile}' but '${state.runningProfile}' is running — connecting to '${state.runningProfile}'.`);
     const target = state.runningProfile;
     const cfg = await loadConfig(target);
-    const baseUrl = `http://localhost:${cfg.server_port}`;
+    const baseUrl = localBaseUrl(cfg.server_port);
     const initialThinking = (flags.thinking as ThinkingMode | undefined) ?? 'auto';
 
     if (!process.stdin.isTTY) {

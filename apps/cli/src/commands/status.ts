@@ -4,6 +4,7 @@ import { loadConfig } from '../lib/config/load.js';
 import { resolveProfile, readState, listProfiles } from '../lib/config/paths.js';
 import { info, ok, warn, err, print } from '../lib/ui/banners.js';
 import { fetchMetrics, classifierPercentiles, totalRequests, fallbackPct, formatLatency } from '../lib/claude/metrics.js';
+import { localBaseUrl } from '../lib/net/local.js';
 
 export default class Status extends Command {
   static description = 'Show profiles, container state, and health';
@@ -26,7 +27,7 @@ export default class Status extends Command {
     let baseUrl: string | null = null;
     try {
       const cfg = await loadConfig(profile);
-      baseUrl = `http://localhost:${cfg.server_port}`;
+      baseUrl = localBaseUrl(cfg.server_port);
       const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
       if (r.ok) ok(`/health → ${r.status}`);
       else warn(`/health → ${r.status}`);

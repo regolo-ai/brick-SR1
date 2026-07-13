@@ -21,6 +21,7 @@ import { Dashboard } from '../../lib/claude-tui/Dashboard.js';
 import { readWiring } from '../../lib/claude/wiring-state.js';
 import { getBaseUrl as getSettingsBaseUrl } from '../../lib/claude/settings.js';
 import { R_BY_MODE, MODEL_MAP_BY_MODE, formatMap } from '../../lib/claude/modes.js';
+import { localBaseUrl } from '../../lib/net/local.js';
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -71,7 +72,7 @@ export default class ClaudeStatus extends Command {
     // fall back to the env var, then to settings.json, then to the hard default.
     const wiring = readWiring();
     const settingsUrl = getSettingsBaseUrl();
-    const effectiveUrl = flags.url ?? envUrl ?? wiring?.baseUrl ?? settingsUrl ?? 'http://localhost:8000';
+    const effectiveUrl = flags.url ?? envUrl ?? wiring?.baseUrl ?? settingsUrl ?? localBaseUrl(8000);
     const baseUrl = effectiveUrl.replace(/\/$/, '');
 
     // Determine what to show for ANTHROPIC_BASE_URL: env var, settings.json, or unset.
