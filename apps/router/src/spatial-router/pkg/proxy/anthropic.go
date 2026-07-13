@@ -513,6 +513,13 @@ func (s *Server) forwardAnthropicRequest(
 	if ev != nil {
 		ev.ServedModel = selectedModel
 		ev.CtxTokens = usage.InputTokens + usage.CacheReadInputTokens + usage.CacheCreationInputTokens
+		// Break out the token components so the offline replay can price this turn
+		// on both the served and the candidate model. InputTokens here is the fresh
+		// (non-cached) input; the two cache tiers are billed at their multipliers.
+		ev.FreshInputTokens = usage.InputTokens
+		ev.CacheReadTokens = usage.CacheReadInputTokens
+		ev.CacheCreationTokens = usage.CacheCreationInputTokens
+		ev.OutputTokens = usage.OutputTokens
 		ev.E2ELatencyMs = time.Since(start).Milliseconds()
 		ev.TS = time.Now().UTC().Format(time.RFC3339Nano)
 		s.routingEventLog.append(*ev)
