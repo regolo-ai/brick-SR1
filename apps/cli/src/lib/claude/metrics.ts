@@ -97,8 +97,22 @@ export type RoutingModeStats = {
   held_requests: number;
   latency_p50_ms: number;
   latency_p95_ms: number;
+  // Prefix-reprocessing cost a hold avoided. Only half the picture: it does not
+  // net out the extra cost of keeping a pricier model warm for the rest of the
+  // turn, so it reads optimistically. Kept for backward compatibility.
   median_switch_delta_price_units: number;
   median_switch_delta_price_units_held: number;
+  // Net-total counterfactual (see brick's pkg/proxy/replay.go): the same held
+  // turns priced twice, once as served and once under the no-sticky
+  // counterfactual (always follow the router's candidate), summed. Populated
+  // only when the router has a pricing table AND at least one turn in this
+  // mode carries the per-turn token breakdown; absent (undefined) otherwise —
+  // never rendered as a misleading zero.
+  priced_requests?: number;
+  held_turns_where_sticky_cheaper?: number;
+  held_turns_where_sticky_costlier?: number;
+  net_units_sticky_minus_no_sticky?: number;
+  savings_pct?: number;
 };
 
 export type RoutingStatsResponse = {

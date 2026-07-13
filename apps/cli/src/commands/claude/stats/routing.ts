@@ -60,19 +60,29 @@ export default class ClaudeStatsRouting extends Command {
       return;
     }
 
-    // Columns: mode | requests | sessions | held | savings(held, price units) | p50 | p95
+    // Columns: mode | requests | sessions | held | prefix-only save/held | net (honest) | p50 | p95.
+    // "save/held" is the optimistic prefix-reprocessing-avoided figure; "net" is
+    // the counterfactual total (sticky vs always-switch), shown only for turns
+    // the router could price (enriched log + pricing table available).
     const rows = [...stats.modes].sort((a, b) => a.mode.localeCompare(b.mode));
     print(
-      `${pad('mode', 14)}${pad('reqs', 7)}${pad('sessions', 10)}${pad('held', 6)}${pad('save/held', 12)}${pad('p50 ms', 9)}${pad('p95 ms', 9)}`
+      `${pad('mode', 14)}${pad('reqs', 7)}${pad('sessions', 10)}${pad('held', 6)}${pad('save/held', 12)}${pad('net (honest)', 14)}${pad('p50 ms', 9)}${pad('p95 ms', 9)}`
     );
     for (const m of rows) {
+      const net = m.net_units_sticky_minus_no_sticky !== undefined && m.savings_pct !== undefined
+        ? `${m.net_units_sticky_minus_no_sticky.toFixed(0)} (${m.savings_pct.toFixed(1)}%)`
+        : '—';
       print(
         `${pad(m.mode, 14)}${pad(String(m.requests), 7)}${pad(String(m.sessions), 10)}${pad(String(m.held_requests), 6)}` +
-          `${pad(m.median_switch_delta_price_units_held.toFixed(3), 12)}${pad(String(m.latency_p50_ms), 9)}${pad(String(m.latency_p95_ms), 9)}`
+          `${pad(m.median_switch_delta_price_units_held.toFixed(3), 12)}${pad(net, 14)}${pad(String(m.latency_p50_ms), 9)}${pad(String(m.latency_p95_ms), 9)}`
       );
     }
     print('');
     info(`total: ${stats.total_requests} requests across ${stats.total_sessions} sessions`);
+    const anyPriced = rows.some((m) => m.priced_requests !== undefined);
+    if (!anyPriced) {
+      info("'net (honest)' needs enriched routing events (per-turn token breakdown) + a loaded pricing table; showing prefix-only 'save/held' only for now.");
+    }
 
     this.printGate(rows);
   }
@@ -99,7 +109,14 @@ export default class ClaudeStatsRouting extends Command {
       print(`· p95 latency vs off: need an 'off' baseline (run mode off for a while to compare)`);
     }
 
-    print(`· median sticky savings: ${sticky.median_switch_delta_price_units_held.toFixed(3)} price units/held turn`);
-    info('the ~15% median-savings % target is reported by `brick claude status` (economics); this view tracks the raw signals + session/latency gates.');
+    if (sticky.net_units_sticky_minus_no_sticky !== undefined && sticky.savings_pct !== undefined) {
+      print(
+        `· net savings (sticky vs always-switch): ${sticky.net_units_sticky_minus_no_sticky.toFixed(0)} price units (${sticky.savings_pct.toFixed(1)}%), ${sticky.priced_requests} priced turns` +
+          (sticky.held_turns_where_sticky_costlier ? `, ${sticky.held_turns_where_sticky_costlier} held turn(s) where sticky cost MORE` : '')
+      );
+    } else {
+      print(`· median sticky savings (prefix-only, optimistic): ${sticky.median_switch_delta_price_units_held.toFixed(3)} price units/held turn`);
+    }
+    info('see docs/proof/sticky-savings.md for a worked example and how these numbers are computed.');
   }
 }

@@ -103,6 +103,12 @@ func TestForwardEmitsRoutingEvent(t *testing.T) {
 	if got.CtxTokens != 40000 { // 1000 input + 39000 cache_read + 0 cache_creation
 		t.Fatalf("ctx_tokens = %d, want 40000", got.CtxTokens)
 	}
+	// Per-turn token breakdown (fakeAnthropicSSE: 1000 fresh, 39000 cache-read, 0
+	// cache-write, 200 output) must be broken out for the counterfactual replay.
+	if got.FreshInputTokens != 1000 || got.CacheReadTokens != 39000 || got.CacheCreationTokens != 0 || got.OutputTokens != 200 {
+		t.Fatalf("token breakdown = fresh %d / read %d / create %d / out %d, want 1000/39000/0/200",
+			got.FreshInputTokens, got.CacheReadTokens, got.CacheCreationTokens, got.OutputTokens)
+	}
 	if got.E2ELatencyMs < 0 {
 		t.Fatalf("e2e_latency_ms = %d, want >= 0", got.E2ELatencyMs)
 	}

@@ -56,3 +56,53 @@ func TestAggregateRoutingEvents(t *testing.T) {
 		t.Fatalf("off p50/held-median = %d/%.2f, want 50/0.00", off.LatencyP50Ms, off.MedianSwitchDeltaHeld)
 	}
 }
+
+// TestMergeReplayIntoStats checks that the net-total counterfactual (from
+// replay.go) is merged into the per-mode stats when a pricing table is
+// available, alongside (not replacing) the prefix-only MedianSwitchDeltaHeld.
+func TestMergeReplayIntoStats(t *testing.T) {
+	table := writeReplayPricing(t)
+	// Same held turn as TestReplayHeldTurnStickyCheaper: sticky (opus) cheaper
+	// than the no-sticky (haiku) counterfactual on a 100k-token cached prefix.
+	log := `{"mode":"sticky","session_key":"s1","candidate_model":"claude-haiku-4-5","served_model":"claude-opus-4-8","fresh_input_tokens":0,"cache_read_tokens":100000,"cache_creation_tokens":0,"output_tokens":10,"est_switch_delta_price_units":100000,"e2e_latency_ms":10}`
+
+	resp := aggregateRoutingEvents(strings.NewReader(log))
+	mergeReplayIntoStats(&resp, replayCounterfactual(strings.NewReader(log), table))
+
+	if len(resp.Modes) != 1 {
+		t.Fatalf("got %d modes, want 1", len(resp.Modes))
+	}
+	m := resp.Modes[0]
+	if m.MedianSwitchDeltaHeld != 100000 {
+		t.Fatalf("prefix-only median held = %.0f, want 100000 (unaffected by merge)", m.MedianSwitchDeltaHeld)
+	}
+	if m.PricedRequests != 1 || m.HeldTurnsSticky != 1 || m.HeldTurnsWorse != 0 {
+		t.Fatalf("priced %d cheaper %d worse %d, want 1/1/0", m.PricedRequests, m.HeldTurnsSticky, m.HeldTurnsWorse)
+	}
+	if m.NetUnits == nil || *m.NetUnits >= 0 {
+		t.Fatalf("net_units = %v, want a populated negative value (sticky cheaper)", m.NetUnits)
+	}
+	if m.SavingsPct == nil {
+		t.Fatal("savings_pct should be populated when priced_turns > 0")
+	}
+}
+
+// TestMergeReplayIntoStats_NoPricingLeavesNetNil checks that when the log has
+// no enriched (priced) turns for a mode, the net fields stay nil rather than
+// silently reporting a misleading zero.
+func TestMergeReplayIntoStats_NoPricingLeavesNetNil(t *testing.T) {
+	table := writeReplayPricing(t)
+	// Legacy pre-enrichment record: no token breakdown, so PricedTurns stays 0.
+	log := `{"mode":"sticky","session_key":"s1","candidate_model":"claude-haiku-4-5","served_model":"claude-opus-4-8","ctx_tokens":40000,"est_switch_delta_price_units":1234.5,"e2e_latency_ms":10}`
+
+	resp := aggregateRoutingEvents(strings.NewReader(log))
+	mergeReplayIntoStats(&resp, replayCounterfactual(strings.NewReader(log), table))
+
+	m := resp.Modes[0]
+	if m.NetUnits != nil || m.SavingsPct != nil {
+		t.Fatalf("net fields should stay nil on legacy (unpriced) turns, got net=%v pct=%v", m.NetUnits, m.SavingsPct)
+	}
+	if m.MedianSwitchDeltaHeld != 1234.5 {
+		t.Fatalf("prefix-only median held = %.1f, want 1234.5 (still the honest fallback)", m.MedianSwitchDeltaHeld)
+	}
+}

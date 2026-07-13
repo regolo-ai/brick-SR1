@@ -35,6 +35,18 @@ type routingEvent struct {
 	EstSavedTokens int64  `json:"est_saved_tokens,omitempty"`
 	E2ELatencyMs   int64  `json:"e2e_latency_ms"`
 	ShadowNote     string `json:"shadow_note,omitempty"`
+
+	// Per-turn token breakdown, filled in after the response streams. These are
+	// the inputs the offline counterfactual replay (pkg/proxy/replay.go) needs to
+	// price a turn on both the served and the candidate model: fresh (uncached)
+	// input, the two prompt-cache tiers, and output. CtxTokens above is their
+	// input sum kept for backward compatibility; these break it out. omitempty so
+	// pre-enrichment log records (which lack them) round-trip unchanged and the
+	// replay degrades them to the prefix-only figure from EstSwitchDelta.
+	FreshInputTokens    int64 `json:"fresh_input_tokens,omitempty"`
+	CacheReadTokens     int64 `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens int64 `json:"cache_creation_tokens,omitempty"`
+	OutputTokens        int64 `json:"output_tokens,omitempty"`
 }
 
 // routingEventLogger appends routingEvent records to a JSONL file. Writes are

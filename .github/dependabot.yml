@@ -3,49 +3,89 @@ updates:
   # GitHub Actions used by the CI/CD workflows
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "ci"]
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   # npm: root workspace + CLI package
   - package-ecosystem: npm
     directory: "/"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
+    groups:
+      npm-root:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: "/apps/cli"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
+    groups:
+      npm-cli:
+        patterns: ["*"]
 
   # Go module: router
   - package-ecosystem: gomod
     directory: "/apps/router/src/spatial-router"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "go"]
+    groups:
+      gomod-router:
+        patterns: ["*"]
 
   # Rust crates: candle / ml / nlp bindings
   - package-ecosystem: cargo
     directory: "/apps/router/candle-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-candle:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/ml-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-ml:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/nlp-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-nlp:
+        patterns: ["*"]
 
   # Python: complexity classifier server
   - package-ecosystem: pip
     directory: "/deploy/addons/brick-complexity-server"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "python"]
+    groups:
+      pip-complexity-server:
+        patterns: ["*"]
