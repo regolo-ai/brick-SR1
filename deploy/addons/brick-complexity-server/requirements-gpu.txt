@@ -1,5 +1,5 @@
 --extra-index-url https://download.pytorch.org/whl/cu124
-torch>=2.6.0,<2.7
+torch>=2.13.0+cpu,<2.14
 # transformers>=5.0 is required to recognise the Qwen3.5 (qwen3_5) architecture;
 # 4.x raises "does not recognize this architecture". Floors below are the
 # versions validated in the torch 2.4.1->2.6.0 golden-set (label 0/40 drift).

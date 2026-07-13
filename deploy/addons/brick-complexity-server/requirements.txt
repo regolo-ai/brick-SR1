@@ -1,5 +1,5 @@
 --index-url https://download.pytorch.org/whl/cpu
-torch>=2.6.0
+torch>=2.13.0+cpu
 --extra-index-url https://pypi.org/simple/
 # transformers>=5.0 is required to recognise the Qwen3.5 (qwen3_5) architecture.
 transformers>=5.0.0
