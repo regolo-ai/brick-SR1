@@ -15,7 +15,7 @@ replace (
 require (
 	github.com/anthropics/anthropic-sdk-go v1.19.0
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/mark3labs/mcp-go v0.42.0-beta.1
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.10-0.20240819025435-512e3b98866a
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
