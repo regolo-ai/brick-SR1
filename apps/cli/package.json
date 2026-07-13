@@ -98,7 +98,7 @@
     "ink-text-input": "^6.0.0",
     "js-yaml": "^4.1.0",
     "react": "^19.2.5",
-    "zod": "^3.23.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
