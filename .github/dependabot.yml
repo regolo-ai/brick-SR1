@@ -3,6 +3,8 @@ updates:
   # GitHub Actions used by the CI/CD workflows
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "ci"]
@@ -13,6 +15,8 @@ updates:
   # npm: root workspace + CLI package
   - package-ecosystem: npm
     directory: "/"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
@@ -21,6 +25,8 @@ updates:
         patterns: ["*"]
   - package-ecosystem: npm
     directory: "/apps/cli"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
@@ -31,6 +37,8 @@ updates:
   # Go module: router
   - package-ecosystem: gomod
     directory: "/apps/router/src/spatial-router"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "go"]
@@ -41,6 +49,8 @@ updates:
   # Rust crates: candle / ml / nlp bindings
   - package-ecosystem: cargo
     directory: "/apps/router/candle-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
@@ -49,6 +59,8 @@ updates:
         patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/ml-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
@@ -57,6 +69,8 @@ updates:
         patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/nlp-binding"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
@@ -67,6 +81,8 @@ updates:
   # Python: complexity classifier server
   - package-ecosystem: pip
     directory: "/deploy/addons/brick-complexity-server"
+    target-branch: "dev"
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "python"]
