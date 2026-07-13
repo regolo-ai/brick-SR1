@@ -102,7 +102,7 @@
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.0.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.14",
     "ink-testing-library": "^4.0.0",
     "oclif": "^4",
