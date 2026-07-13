@@ -4,5 +4,5 @@ torch>=2.6.0
 # transformers>=5.0 is required to recognise the Qwen3.5 (qwen3_5) architecture.
 transformers>=5.0.0
 peft>=0.19.0
-aiohttp>=3.9.0
+aiohttp>=3.14.1
 accelerate>=1.0.0
