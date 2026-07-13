@@ -6,6 +6,9 @@ updates:
     schedule:
       interval: weekly
     labels: ["dependencies", "ci"]
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   # npm: root workspace + CLI package
   - package-ecosystem: npm
@@ -13,11 +16,17 @@ updates:
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
+    groups:
+      npm-root:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: "/apps/cli"
     schedule:
       interval: weekly
     labels: ["dependencies", "npm"]
+    groups:
+      npm-cli:
+        patterns: ["*"]
 
   # Go module: router
   - package-ecosystem: gomod
@@ -25,6 +34,9 @@ updates:
     schedule:
       interval: weekly
     labels: ["dependencies", "go"]
+    groups:
+      gomod-router:
+        patterns: ["*"]
 
   # Rust crates: candle / ml / nlp bindings
   - package-ecosystem: cargo
@@ -32,16 +44,25 @@ updates:
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-candle:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/ml-binding"
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-ml:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/apps/router/nlp-binding"
     schedule:
       interval: weekly
     labels: ["dependencies", "rust"]
+    groups:
+      cargo-nlp:
+        patterns: ["*"]
 
   # Python: complexity classifier server
   - package-ecosystem: pip
@@ -49,3 +70,6 @@ updates:
     schedule:
       interval: weekly
     labels: ["dependencies", "python"]
+    groups:
+      pip-complexity-server:
+        patterns: ["*"]
