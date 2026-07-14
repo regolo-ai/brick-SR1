@@ -4,6 +4,9 @@ import yaml from 'js-yaml';
 import { ensureDefaultCodexProfile } from '../../../lib/codex/bootstrap.js';
 import { loadConfigText } from '../../../lib/config/load.js';
 import { readCodexWiring } from '../../../lib/codex/wiring-state.js';
+import { paths } from '../../../lib/config/paths.js';
+import { readEnvValue } from '../../../lib/config/env-file.js';
+import { REGOLO_API_KEY_ENV } from '../../../lib/claude/settings-apply.js';
 import {
   DEFAULT_CONTEXT_K,
   LOCAL_DISCLAIMER,
@@ -18,7 +21,7 @@ import {
   runCodexThinkingRouting,
 } from '../../../lib/codex/runSettings.js';
 import { runCodexModelsPoolWizard } from '../../../lib/wizard/steps/codex-models-pool.js';
-import { banner, err, info, warn } from '../../../lib/ui/banners.js';
+import { banner, err, info, warn, ok } from '../../../lib/ui/banners.js';
 
 function reportRestart(res: SettingsApplyResult): void {
   if (res.routerWasRunning) {
@@ -131,10 +134,23 @@ export default class CodexSettings extends Command {
           p.note(LOCAL_DISCLAIMER, 'Local inference');
           await runCodexCompute('local', undefined, (c) => process.exit(c));
         } else {
-          p.note(REGOLO_API_KEY_HELP, 'Regolo API key');
-          const token = await p.password({ message: 'Regolo API key' });
-          if (p.isCancel(token)) continue;
-          await runCodexCompute('api', { token: String(token ?? '') }, (c) => process.exit(c));
+          // Regolo hosted classifier. Se la chiave e' gia' nel .env del profilo
+          // non richiederla di nuovo: se il compute e' gia' su API non c'e' nulla
+          // da fare (torna al menu), altrimenti riapplica API riusando la chiave
+          // salvata senza ri-prompt.
+          const existing = await readEnvValue(paths(profile).env, REGOLO_API_KEY_ENV);
+          if (existing && existing.trim() !== '') {
+            if (computeLabel === 'api') {
+              ok('Regolo API key already set; compute is on API.');
+              continue;
+            }
+            await runCodexCompute('api', undefined, (c) => process.exit(c));
+          } else {
+            p.note(REGOLO_API_KEY_HELP, 'Regolo API key');
+            const token = await p.password({ message: 'Regolo API key' });
+            if (p.isCancel(token)) continue;
+            await runCodexCompute('api', { token: String(token ?? '') }, (c) => process.exit(c));
+          }
         }
       } else if (section === 'modelrouting') {
         const onoff = await p.select({

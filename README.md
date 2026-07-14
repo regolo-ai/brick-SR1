@@ -137,6 +137,26 @@ brick claude off    # restores ANTHROPIC_BASE_URL, optionally stops the router
 
 Use `brick claude on --no-start` to require an already-healthy router instead of auto-starting one, and `brick claude off --stop` / `--keep` to control the router without a prompt.
 
+### Configure it: the `brick claude settings` menu
+
+Everything about *how* Brick routes lives behind one interactive menu:
+
+```bash
+brick claude settings
+```
+
+Each entry shows its current value and opens a submenu; the defaults are sane, so you only change what you care about. The first time, walk the list top to bottom, starting with **Models**:
+
+- **Models** — the pool of Claude models Brick may route to, plus the allowed thinking modes per model. Set this first: pick which of Haiku 4.5, Sonnet 4.6, Opus 4.8, Sonnet 5 and Fable 5 are in play. The skill-vector router only ever picks from this pool (a difficulty fallback map covers the case where the skill router is off).
+- **Context-awareness** — classify on the last *K* conversation turns instead of only the latest message, so routing reflects where the conversation is heading, not just the final line (default `K = 8`).
+- **Compute** — where the complexity classifier runs: `local` (an auto-spawned Qwen3.5-0.8B server, ~1.6 GB VRAM on GPU, or a few seconds per call on CPU) or `api` (the hosted Regolo `brick-complexity-pro` endpoint). For `api` you paste your Regolo API key once; it is saved in the profile `.env`, never in the YAML, and you are not asked again on later visits.
+- **Subagent routing** — also route Claude Code subagents that pin an explicit native model through Brick, instead of letting them bypass the router.
+- **Model routing** — on lets Brick pick the model by complexity; off pins every request to one fixed model.
+- **Thinking routing** — on lets Brick compute the reasoning effort per query; off forwards the client's own effort unchanged.
+- **Cache-aware routing** — how Brick handles a model switch mid-conversation to protect the prompt cache: `off` (per-request), `sticky`, `smartsqueeze`, or `orchestrator` (shadow). See [Cache-aware (sticky) routing](#cache-aware-sticky-routing) below for what each mode does.
+
+Every choice is written to the profile config and takes effect on the next request; no restart of your Claude Code session is needed.
+
 ### The 5 modes: pick your cost/quality trade-off
 
 A mode is how you tell Brick how much to spend. Each one maps easy/medium/hard queries to a model tier, from cheapest (`eco`, always haiku) to strongest (`max`, always opus), with `lite`, `mid` and `pro` in between. Pick one and Brick handles the per-query routing inside it.
