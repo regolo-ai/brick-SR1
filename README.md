@@ -137,26 +137,6 @@ brick claude off    # restores ANTHROPIC_BASE_URL, optionally stops the router
 
 Use `brick claude on --no-start` to require an already-healthy router instead of auto-starting one, and `brick claude off --stop` / `--keep` to control the router without a prompt.
 
-### Configure it: the `brick claude settings` menu
-
-Everything about *how* Brick routes lives behind one interactive menu:
-
-```bash
-brick claude settings
-```
-
-Each entry shows its current value and opens a submenu; the defaults are sane, so you only change what you care about. The first time, walk the list top to bottom, starting with **Models**:
-
-- **Models** — the pool of Claude models Brick may route to, plus the allowed thinking modes per model. Set this first: pick which of Haiku 4.5, Sonnet 4.6, Opus 4.8, Sonnet 5 and Fable 5 are in play. The skill-vector router only ever picks from this pool (a difficulty fallback map covers the case where the skill router is off).
-- **Context-awareness** — classify on the last *K* conversation turns instead of only the latest message, so routing reflects where the conversation is heading, not just the final line (default `K = 8`).
-- **Compute** — where the complexity classifier runs: `local` (an auto-spawned Qwen3.5-0.8B server, ~1.6 GB VRAM on GPU, or a few seconds per call on CPU) or `api` (the hosted Regolo `brick-complexity-pro` endpoint). For `api` you paste your Regolo API key once; it is saved in the profile `.env`, never in the YAML, and you are not asked again on later visits.
-- **Subagent routing** — also route Claude Code subagents that pin an explicit native model through Brick, instead of letting them bypass the router.
-- **Model routing** — on lets Brick pick the model by complexity; off pins every request to one fixed model.
-- **Thinking routing** — on lets Brick compute the reasoning effort per query; off forwards the client's own effort unchanged.
-- **Cache-aware routing** — how Brick handles a model switch mid-conversation to protect the prompt cache: `off` (per-request), `sticky`, `smartsqueeze`, or `orchestrator` (shadow). See [Cache-aware (sticky) routing](#cache-aware-sticky-routing) below for what each mode does.
-
-Every choice is written to the profile config and takes effect on the next request; no restart of your Claude Code session is needed.
-
 ### The 5 modes: pick your cost/quality trade-off
 
 A mode is how you tell Brick how much to spend. Each one maps easy/medium/hard queries to a model tier, from cheapest (`eco`, always haiku) to strongest (`max`, always opus), with `lite`, `mid` and `pro` in between. Pick one and Brick handles the per-query routing inside it.
@@ -177,11 +157,51 @@ Once you have picked the tier, how hard to think is decided **autonomously per r
 
 Selecting **opus**, **sonnet**, or **haiku** explicitly in the picker skips Brick entirely: the request is forwarded verbatim to that exact model, with no skill routing and no effort override. Only **brick-claude** runs the router.
 
-### Cache-aware (sticky) routing
+### Configuration: the `brick claude settings` menu
 
-Switching models mid-conversation invalidates the prompt cache: each provider's KV cache is per-model and opaque, so the new model has to reprocess the whole context at full input price. Brick's **sticky routing** keeps a conversation on its current model unless switching is actually worth it: downswitching to a cheaper model is always free, upswitching only happens when the estimated quality gain clears the cost of re-priming the cache. Enable it with `routing_mode: sticky` ([`brick claude settings mode`](#the-5-modes-pick-your-costquality-trade-off)). See [`docs/proof/sticky-savings.md`](docs/proof/sticky-savings.md) for measured savings on real traffic.
+Everything about *how* Brick routes lives behind one interactive menu:
 
-**`smartsqueeze`** takes the opposite tack: instead of avoiding switches, it makes them cheap. It keeps the same cache-aware hysteresis as `sticky`, but when a switch *is* taken it compacts the forwarded context (clearing older `tool_result` blocks, keeping recent turns raw) so the new model reprocesses a small prefix instead of the full one. The compaction is deterministic and model-agnostic (works across providers, not just Anthropic), never touches the system prompt or first user turn, and only fires on a switch (a warm cache is never disturbed). Enable it with `routing_mode: smartsqueeze`; it ships shadow-first (`compact_shadow_only: true` measures the saving without changing what is served) so you can quantify the win before turning it on.
+```bash
+brick claude settings
+```
+
+Each entry shows its current value and opens a submenu; the defaults are sane, so you only change what you care about. The first time, walk the list top to bottom, starting with **Models**. Every choice is written to the profile config and takes effect on the next request, with no restart of your Claude Code session.
+
+#### Models
+
+The pool of Claude models Brick may route to, plus the allowed thinking modes per model. Set this first: pick which of Haiku 4.5, Sonnet 4.6, Opus 4.8, Sonnet 5 and Fable 5 are in play. The skill-vector router only ever picks from this pool (a difficulty fallback map covers the case where the skill router is off).
+
+#### Context-awareness
+
+Classify on the last *K* conversation turns instead of only the latest message, so routing reflects where the conversation is heading, not just the final line (default `K = 8`).
+
+#### Compute: local vs hosted classifier
+
+Where the complexity classifier runs:
+
+- **`local`** — an auto-spawned Qwen3.5-0.8B server (~1.6 GB VRAM on GPU, or a few seconds per call on CPU).
+- **`api`** — the hosted Regolo `brick-complexity-pro` endpoint. You paste your Regolo API key once; it is saved in the profile `.env`, never in the YAML, and you are not asked again on later visits.
+
+#### Subagent routing
+
+Also route Claude Code subagents that pin an explicit native model through Brick, instead of letting them bypass the router.
+
+#### Model routing
+
+On lets Brick pick the model by complexity; off pins every request to one fixed model.
+
+#### Thinking routing
+
+On lets Brick compute the reasoning effort per query; off forwards the client's own effort unchanged.
+
+#### Cache-aware routing
+
+Switching models mid-conversation invalidates the prompt cache: each provider's KV cache is per-model and opaque, so the new model has to reprocess the whole context at full input price. This setting picks how Brick handles that:
+
+- **`off`** — per-request routing, no cross-turn memory. The default.
+- **`sticky`** — keep a conversation on its current model unless switching is actually worth it: downswitching to a cheaper model is always free, upswitching only happens when the estimated quality gain clears the cost of re-priming the cache. See [`docs/proof/sticky-savings.md`](docs/proof/sticky-savings.md) for measured savings on real traffic.
+- **`smartsqueeze`** — the opposite tack: instead of avoiding switches, make them cheap. Same cache-aware hysteresis as `sticky`, but when a switch *is* taken it compacts the forwarded context (clearing older `tool_result` blocks, keeping recent turns raw) so the new model reprocesses a small prefix instead of the full one. Deterministic and model-agnostic (works across providers, not just Anthropic), never touches the system prompt or first user turn, and only fires on a switch (a warm cache is never disturbed). Ships shadow-first (`compact_shadow_only: true` measures the saving without changing what is served) so you can quantify the win before turning it on.
+- **`orchestrator`** — shadow-mode v2 path: computed for evaluation, not yet served.
 
 ### Observability
 
@@ -389,7 +409,7 @@ Read the `x-selected-model` response header. Every `/v1/chat/completions` and `/
 <details>
 <summary><b>How do I trade cost against quality?</b></summary>
 
-Slide the `r` knob in `r ∈ [-1, 1]`. At `r = -1` Brick favors the cheapest capable model (max-saving), at `r = 1` it favors the strongest (max-quality). For Claude Code the same idea is exposed as 5 named modes, see [the 5 modes](#the-5-modes).
+Slide the `r` knob in `r ∈ [-1, 1]`. At `r = -1` Brick favors the cheapest capable model (max-saving), at `r = 1` it favors the strongest (max-quality). For Claude Code the same idea is exposed as 5 named modes, see [the 5 modes](#the-5-modes-pick-your-costquality-trade-off).
 </details>
 
 <details>
