@@ -106,3 +106,57 @@ func TestMergeReplayIntoStats_NoPricingLeavesNetNil(t *testing.T) {
 		t.Fatalf("prefix-only median held = %.1f, want 1234.5 (still the honest fallback)", m.MedianSwitchDeltaHeld)
 	}
 }
+
+// TestAggregateRoutingEvents_SmartsqueezeSavings checks that est_saved_tokens is
+// aggregated per mode: only turns with est_saved_tokens > 0 count as squeeze
+// turns, the total/median are correct, and priceSqueezeSavings prices the total
+// as a cold cache-write re-prefill on the mode's most-served model.
+func TestAggregateRoutingEvents_SmartsqueezeSavings(t *testing.T) {
+	log := strings.Join([]string{
+		`{"mode":"smartsqueeze","session_key":"s1","candidate_model":"claude-haiku-4-5","served_model":"claude-opus-4-8","est_saved_tokens":1000,"e2e_latency_ms":100}`,
+		`{"mode":"smartsqueeze","session_key":"s1","candidate_model":"claude-opus-4-8","served_model":"claude-opus-4-8","est_saved_tokens":3000,"e2e_latency_ms":120}`,
+		// no switch, nothing compacted -> est_saved_tokens absent: not a squeeze turn.
+		`{"mode":"smartsqueeze","session_key":"s2","candidate_model":"claude-opus-4-8","served_model":"claude-opus-4-8","est_switch_delta_price_units":0,"e2e_latency_ms":80}`,
+	}, "\n")
+
+	resp := aggregateRoutingEvents(strings.NewReader(log))
+	if len(resp.Modes) != 1 {
+		t.Fatalf("got %d modes, want 1 (smartsqueeze)", len(resp.Modes))
+	}
+	m := resp.Modes[0]
+	if m.SqueezeTurns != 2 {
+		t.Fatalf("squeeze_turns = %d, want 2 (only est_saved>0)", m.SqueezeTurns)
+	}
+	if m.EstTokensSavedTotal != 4000 {
+		t.Fatalf("est_tokens_saved_total = %d, want 4000", m.EstTokensSavedTotal)
+	}
+	// nearest-rank median of [1000,3000] -> index 1 -> 3000.
+	if m.EstTokensSavedMedian != 3000 {
+		t.Fatalf("est_tokens_saved_median = %d, want 3000", m.EstTokensSavedMedian)
+	}
+	if m.refServedModel != "claude-opus-4-8" {
+		t.Fatalf("refServedModel = %q, want claude-opus-4-8 (most served)", m.refServedModel)
+	}
+
+	// Price it: 4000 tokens as cold cache-write (1.25x) on opus (input 5.0) =>
+	// 4000 * 1.25 * 5.0 = 25000 units.
+	table := writeReplayPricing(t)
+	priceSqueezeSavings(&resp, table)
+	if resp.Modes[0].EstUnitsSaved == nil {
+		t.Fatal("squeeze_est_units_saved should be priced when tokens saved > 0")
+	}
+	if got := *resp.Modes[0].EstUnitsSaved; got != 25000 {
+		t.Fatalf("squeeze_est_units_saved = %.1f, want 25000", got)
+	}
+}
+
+// TestPriceSqueezeSavings_NoTokensLeavesUnitsNil ensures a mode that compacted
+// nothing keeps EstUnitsSaved nil (a missing figure, not a real zero).
+func TestPriceSqueezeSavings_NoTokensLeavesUnitsNil(t *testing.T) {
+	log := `{"mode":"sticky","session_key":"s1","candidate_model":"claude-haiku-4-5","served_model":"claude-opus-4-8","est_switch_delta_price_units":5.0,"e2e_latency_ms":100}`
+	resp := aggregateRoutingEvents(strings.NewReader(log))
+	priceSqueezeSavings(&resp, writeReplayPricing(t))
+	if resp.Modes[0].EstUnitsSaved != nil {
+		t.Fatalf("est_units_saved should stay nil with no compaction, got %v", resp.Modes[0].EstUnitsSaved)
+	}
+}

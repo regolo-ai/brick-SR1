@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 )
 
@@ -41,6 +42,21 @@ type routingModeStats struct {
 	HeldTurnsWorse    int      `json:"held_turns_where_sticky_costlier,omitempty"`
 	NetUnits          *float64 `json:"net_units_sticky_minus_no_sticky,omitempty"`
 	SavingsPct        *float64 `json:"savings_pct,omitempty"`
+
+	// Smartsqueeze compaction fields, populated from routingEvent.EstSavedTokens.
+	// SqueezeTurns is turns where the compactor cleared something (est_saved > 0);
+	// EstTokensSaved{Total,Median} summarize the prefix tokens removed. EstUnitsSaved
+	// prices that saving as an avoided cold re-prefill (cache-write tier) on the
+	// served model, filled only when a pricing table is available (see
+	// mergeReplayIntoStats); a nil pointer means "not priced", not a real zero.
+	SqueezeTurns         int      `json:"squeeze_turns,omitempty"`
+	EstTokensSavedTotal  int64    `json:"squeeze_est_tokens_saved_total,omitempty"`
+	EstTokensSavedMedian int64    `json:"squeeze_est_tokens_saved_median,omitempty"`
+	EstUnitsSaved        *float64 `json:"squeeze_est_units_saved,omitempty"`
+
+	// refServedModel is the mode's most-served model, used only as the pricing
+	// reference for EstUnitsSaved. Not serialized.
+	refServedModel string `json:"-"`
 }
 
 // routingStatsResponse is the /api/v1/routing/stats payload: one row per mode
@@ -91,9 +107,31 @@ func (s *Server) handleRoutingStats(w http.ResponseWriter, r *http.Request) {
 		if _, serr := f.Seek(0, io.SeekStart); serr == nil {
 			mergeReplayIntoStats(&resp, replayCounterfactual(f, s.pricingTable))
 		}
+		priceSqueezeSavings(&resp, s.pricingTable)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// priceSqueezeSavings fills EstUnitsSaved for each mode that compacted anything,
+// pricing the total tokens saved as an avoided cold re-prefill: the whole saved
+// prefix would have been re-read as a cache WRITE on the newly switched model, so
+// its value is turnCost(cacheWrite=savedTokens) on the mode's reference served
+// model. Left nil when there is nothing to price or the model is unknown, so a
+// missing figure is never read as a real zero.
+func priceSqueezeSavings(resp *routingStatsResponse, table *economics.PricingTable) {
+	for i := range resp.Modes {
+		m := &resp.Modes[i]
+		if m.EstTokensSavedTotal <= 0 || m.refServedModel == "" {
+			continue
+		}
+		price, ok := table.Price(m.refServedModel)
+		if !ok {
+			continue
+		}
+		units := turnCost(0, 0, m.EstTokensSavedTotal, 0, price)
+		m.EstUnitsSaved = &units
+	}
 }
 
 // mergeReplayIntoStats fills the net-total fields of resp.Modes from a replay
@@ -123,12 +161,14 @@ func mergeReplayIntoStats(resp *routingStatsResponse, replay ReplaySummary) {
 
 // routingModeAcc accumulates one mode's events before summarization.
 type routingModeAcc struct {
-	sessions   map[string]struct{}
-	latencies  []int64
-	deltas     []float64
-	deltasHeld []float64
-	requests   int
-	held       int
+	sessions    map[string]struct{}
+	latencies   []int64
+	deltas      []float64
+	deltasHeld  []float64
+	savedTokens []int64          // per-turn EstSavedTokens where > 0 (smartsqueeze)
+	servedSeen  map[string]int   // served model -> count, to pick a pricing reference
+	requests    int
+	held        int
 }
 
 // aggregateRoutingEvents parses a JSONL routing event stream (one routingEvent
@@ -153,7 +193,7 @@ func aggregateRoutingEvents(r io.Reader) routingStatsResponse {
 		total++
 		acc := byMode[ev.Mode]
 		if acc == nil {
-			acc = &routingModeAcc{sessions: map[string]struct{}{}}
+			acc = &routingModeAcc{sessions: map[string]struct{}{}, servedSeen: map[string]int{}}
 			byMode[ev.Mode] = acc
 		}
 		acc.requests++
@@ -163,6 +203,13 @@ func aggregateRoutingEvents(r io.Reader) routingStatsResponse {
 		}
 		acc.latencies = append(acc.latencies, ev.E2ELatencyMs)
 		acc.deltas = append(acc.deltas, ev.EstSwitchDelta)
+		if ev.ServedModel != "" {
+			acc.servedSeen[ev.ServedModel]++
+		}
+		// Smartsqueeze: a turn that actually compacted carries est_saved_tokens > 0.
+		if ev.EstSavedTokens > 0 {
+			acc.savedTokens = append(acc.savedTokens, ev.EstSavedTokens)
+		}
 		// A held turn is where sticky replaced the candidate: candidate != served
 		// (both known). Only these realize the avoided reprocessing cost.
 		if ev.CandidateModel != "" && ev.ServedModel != "" && ev.CandidateModel != ev.ServedModel {
@@ -182,6 +229,10 @@ func aggregateRoutingEvents(r io.Reader) routingStatsResponse {
 			LatencyP95Ms:          percentileInt64(acc.latencies, 0.95),
 			MedianSwitchDelta:     medianFloat(acc.deltas),
 			MedianSwitchDeltaHeld: medianFloat(acc.deltasHeld),
+			SqueezeTurns:          len(acc.savedTokens),
+			EstTokensSavedTotal:   sumInt64(acc.savedTokens),
+			EstTokensSavedMedian:  medianOfInt64(acc.savedTokens),
+			refServedModel:        mostFrequent(acc.servedSeen),
 		})
 	}
 	sort.Slice(modes, func(i, j int) bool { return modes[i].Mode < modes[j].Mode })
@@ -223,4 +274,37 @@ func medianFloat(vals []float64) float64 {
 		return s[n/2]
 	}
 	return (s[n/2-1] + s[n/2]) / 2
+}
+
+// sumInt64 totals a slice (0 for empty).
+func sumInt64(vals []int64) int64 {
+	var t int64
+	for _, v := range vals {
+		t += v
+	}
+	return t
+}
+
+// medianOfInt64 returns the nearest-rank median of vals (0 for empty), sorting a
+// copy. Nearest-rank (not averaged) matches percentileInt64's convention.
+func medianOfInt64(vals []int64) int64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	s := append([]int64(nil), vals...)
+	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	return s[len(s)/2]
+}
+
+// mostFrequent returns the key with the highest count (ties broken by string
+// order for determinism), or "" for an empty map.
+func mostFrequent(counts map[string]int) string {
+	best := ""
+	bestN := -1
+	for k, n := range counts {
+		if n > bestN || (n == bestN && k < best) {
+			best, bestN = k, n
+		}
+	}
+	return best
 }

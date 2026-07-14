@@ -113,6 +113,15 @@ export type RoutingModeStats = {
   held_turns_where_sticky_costlier?: number;
   net_units_sticky_minus_no_sticky?: number;
   savings_pct?: number;
+  // Smartsqueeze compaction savings: turns where the compactor cleared older
+  // tool_result blocks before forwarding a model switch (squeeze_turns), the
+  // prefix tokens removed, and their priced value as an avoided cold re-prefill
+  // on the served model. squeeze_est_units_saved is absent when the router has
+  // no pricing table — never rendered as a misleading zero.
+  squeeze_turns?: number;
+  squeeze_est_tokens_saved_total?: number;
+  squeeze_est_tokens_saved_median?: number;
+  squeeze_est_units_saved?: number;
 };
 
 export type RoutingStatsResponse = {

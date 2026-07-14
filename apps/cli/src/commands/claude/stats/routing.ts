@@ -66,16 +66,30 @@ export default class ClaudeStatsRouting extends Command {
     // the counterfactual total (sticky vs always-switch), shown only for turns
     // the router could price (enriched log + pricing table available).
     const rows = [...stats.modes].sort((a, b) => a.mode.localeCompare(b.mode));
+    // The smartsqueeze column only appears when some mode actually compacted, so
+    // the sticky/off view stays unchanged.
+    const anySqueeze = rows.some((m) => (m.squeeze_turns ?? 0) > 0);
+    const squeezeHead = anySqueeze ? pad('squeeze save', 16) : '';
     print(
-      `${pad('mode', 14)}${pad('reqs', 7)}${pad('sessions', 10)}${pad('held', 6)}${pad('save/held', 12)}${pad('net (honest)', 14)}${pad('p50 ms', 9)}${pad('p95 ms', 9)}`
+      `${pad('mode', 14)}${pad('reqs', 7)}${pad('sessions', 10)}${pad('held', 6)}${pad('save/held', 12)}${pad('net (honest)', 14)}${squeezeHead}${pad('p50 ms', 9)}${pad('p95 ms', 9)}`
     );
     for (const m of rows) {
       const net = m.net_units_sticky_minus_no_sticky !== undefined && m.savings_pct !== undefined
         ? `${m.net_units_sticky_minus_no_sticky.toFixed(0)} (${m.savings_pct.toFixed(1)}%)`
         : '—';
+      let squeeze = '';
+      if (anySqueeze) {
+        const turns = m.squeeze_turns ?? 0;
+        if (turns > 0) {
+          const units = m.squeeze_est_units_saved !== undefined ? m.squeeze_est_units_saved.toFixed(0) : '?';
+          squeeze = pad(`${units}u/${turns}t`, 16);
+        } else {
+          squeeze = pad('—', 16);
+        }
+      }
       print(
         `${pad(m.mode, 14)}${pad(String(m.requests), 7)}${pad(String(m.sessions), 10)}${pad(String(m.held_requests), 6)}` +
-          `${pad(m.median_switch_delta_price_units_held.toFixed(3), 12)}${pad(net, 14)}${pad(String(m.latency_p50_ms), 9)}${pad(String(m.latency_p95_ms), 9)}`
+          `${pad(m.median_switch_delta_price_units_held.toFixed(3), 12)}${pad(net, 14)}${squeeze}${pad(String(m.latency_p50_ms), 9)}${pad(String(m.latency_p95_ms), 9)}`
       );
     }
     print('');
@@ -83,6 +97,13 @@ export default class ClaudeStatsRouting extends Command {
     const anyPriced = rows.some((m) => m.priced_requests !== undefined);
     if (!anyPriced) {
       info("'net (honest)' needs enriched routing events (per-turn token breakdown) + a loaded pricing table; showing prefix-only 'save/held' only for now.");
+    }
+    const ss = rows.find((m) => m.mode === 'smartsqueeze' && (m.squeeze_turns ?? 0) > 0);
+    if (ss) {
+      const units = ss.squeeze_est_units_saved !== undefined ? `${ss.squeeze_est_units_saved.toFixed(0)} price units` : '(pricing table needed to value it)';
+      info(
+        `smartsqueeze: compacted ${ss.squeeze_turns} switch turn(s), ~${ss.squeeze_est_tokens_saved_total ?? 0} prefix tokens cleared (median ${ss.squeeze_est_tokens_saved_median ?? 0}/turn), avoided re-prefill worth ${units}.`
+      );
     }
 
     this.printGate(rows);
