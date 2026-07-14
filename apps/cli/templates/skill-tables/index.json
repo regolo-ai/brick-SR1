@@ -7,12 +7,24 @@
     "planning_agentic",
     "world_knowledge"
   ],
-  "date": "2026-06-13",
+  "date": "2026-07-14",
   "models": [
+    {
+      "model": "claude-fable-5",
+      "provider": "anthropic",
+      "file": "claude-fable-5.json",
+      "source": "benchmark"
+    },
     {
       "model": "claude-opus-4-8",
       "provider": "anthropic",
       "file": "claude-opus-4-8.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "claude-sonnet-5",
+      "provider": "anthropic",
+      "file": "claude-sonnet-5.json",
       "source": "benchmark"
     },
     {

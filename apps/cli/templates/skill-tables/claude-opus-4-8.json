@@ -11,10 +11,10 @@
   ],
   "skill_vector": [
     0.9,
-    0.92,
-    0.86,
-    0.93,
-    0.86,
+    0.9,
+    0.89,
+    0.95,
+    0.85,
     0.93
   ],
   "source": "benchmark",
@@ -23,7 +23,7 @@
     "low",
     "medium",
     "high",
-    "high",
+    "medium",
     "high"
   ],
   "imputed_capabilities": [
@@ -31,6 +31,6 @@
   ],
   "support": null,
   "subset_hash": null,
-  "date": "2026-06-13",
-  "notes": "Benchmark-derived skill vector, recalibrated 2026-06-13 from recent public AI-lab benchmarks, normalized to [0,1] on the 6 canonical capabilities. Sourcing per dimension: coding=SWE-bench Verified; instruction_following=IFEval + MMLU-Pro; math_reasoning=AIME + MATH; world_knowledge=GPQA Diamond; planning_agentic=tau-bench / agentic harness pass-rate; creative_synthesis=imputed (no clean public benchmark), estimated from instruction_following plus a lab-style writing prior. A `measured` extraction on the frozen probe set overrides this. See README.md."
+  "date": "2026-07-14",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then cross-model reconciled. Sourcing per dimension: coding=SWE-bench Verified 88.6%; instruction_following=estimated from 4.5/4.6 lineage (IFEval ~92, MMLU-Pro ~89) tempered by AA IFBench 62.2%; math_reasoning=AIME 2026 95.7% + USAMO 2026 96.7%; world_knowledge=GPQA Diamond 93.6%; planning_agentic=Terminal-Bench 2.1 74.6% + MCP-Atlas 82.2% (the tau2 Telecom 94.4% figure was de-weighted as display-only); creative_synthesis=imputed. Opus 4.8 sits just below the newer flagship Fable 5 overall but leads it on refresh-era math (USAMO/AIME 2026) and ties/edges it on GPQA. The matrix was rescaled to widen tier separation for routing. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }

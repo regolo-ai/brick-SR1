@@ -27,8 +27,8 @@ function baseCfg(): any {
       enabled: true,
       active_models: ['claude-sonnet-4-6', 'claude-opus-4-8'],
       models: [
-        { model: 'claude-opus-4-8', skill_vector: [0.9, 0.92, 0.86, 0.93, 0.86, 0.93], cost_weight: 1.0, use_reasoning: true },
-        { model: 'claude-sonnet-4-6', skill_vector: [0.82, 0.86, 0.83, 0.88, 0.76, 0.88], cost_weight: 0.4, use_reasoning: true },
+        { model: 'claude-opus-4-8', skill_vector: [0.9, 0.9, 0.89, 0.95, 0.85, 0.93], cost_weight: 1.0, use_reasoning: true },
+        { model: 'claude-sonnet-4-6', skill_vector: [0.68, 0.66, 0.72, 0.62, 0.62, 0.7], cost_weight: 0.4, use_reasoning: true },
       ],
     },
   };
@@ -81,7 +81,7 @@ describe('runModelsPoolWizard changes', () => {
     // skill_router.models seeded with the catalog vector for fable-5.
     const fable = cfg.skill_router.models.find((m: any) => m.model === 'claude-fable-5');
     expect(fable).toBeDefined();
-    expect(fable.skill_vector).toEqual([0.96, 0.94, 0.9, 0.95, 0.91, 0.96]);
+    expect(fable.skill_vector).toEqual([0.97, 0.95, 0.94, 0.98, 0.93, 0.92]);
     expect(fable.cost_weight).toBe(1.3);
     // model_config seeded with non-empty preferred_endpoints.
     expect(cfg.model_config['claude-fable-5'].preferred_endpoints).toEqual(['regolo']);

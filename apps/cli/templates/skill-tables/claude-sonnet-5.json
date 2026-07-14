@@ -1,0 +1,38 @@
+{
+  "model": "claude-sonnet-5",
+  "provider": "anthropic",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.82,
+    0.8,
+    0.83,
+    0.76,
+    0.8,
+    0.82
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "medium",
+    "low",
+    "low",
+    "medium",
+    "medium",
+    "low"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis",
+    "instruction_following",
+    "world_knowledge"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-14",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then cross-model reconciled. Claude Sonnet 5 (released 2026-06-30) led its system card with a non-standard suite (SWE-bench, Terminal-Bench 2.1, OSWorld, HLE, USAMO, GDPval) and did NOT publish GPQA/MMLU-Pro/AIME/IFEval, so three dims are imputed. Sourcing per dimension: coding=SWE-bench Verified 85.2% (third parties disagree 72.7/85.2/92.4); math_reasoning=USAMO 2026 79.5% (17-pt gap below Opus 4.8 96.7% — the key real signal); planning_agentic=Terminal-Bench 2.1 80.4% / OSWorld 81.2% (note: Terminal-Bench actually beats Opus 74.6%); instruction_following=imputed (unpublished); world_knowledge=imputed from HLE-with-tools 57.4% near-tie with Opus (GPQA unpublished); creative_synthesis=imputed. Kept strictly below Opus 4.8 on coding/math/world_knowledge to fix the routing collapse where the prior placeholder [0.87,0.89,0.85,0.90,0.83,0.90] tied Opus and won 0% traffic. The matrix was rescaled to widen tier separation for routing. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}

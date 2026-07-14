@@ -10,27 +10,27 @@
     "world_knowledge"
   ],
   "skill_vector": [
-    0.82,
-    0.86,
-    0.83,
-    0.88,
-    0.76,
-    0.88
+    0.68,
+    0.66,
+    0.72,
+    0.62,
+    0.62,
+    0.7
   ],
   "source": "benchmark",
   "confidence": [
     "high",
     "low",
     "medium",
-    "high",
     "medium",
-    "high"
+    "low",
+    "medium"
   ],
   "imputed_capabilities": [
     "creative_synthesis"
   ],
   "support": null,
   "subset_hash": null,
-  "date": "2026-06-13",
-  "notes": "Benchmark-derived skill vector, recalibrated 2026-06-13 from recent public AI-lab benchmarks, normalized to [0,1] on the 6 canonical capabilities. Sourcing per dimension: coding=SWE-bench Verified; instruction_following=IFEval + MMLU-Pro; math_reasoning=AIME + MATH; world_knowledge=GPQA Diamond; planning_agentic=tau-bench / agentic harness pass-rate; creative_synthesis=imputed (no clean public benchmark), estimated from instruction_following plus a lab-style writing prior. A `measured` extraction on the frozen probe set overrides this. See README.md."
+  "date": "2026-07-14",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then cross-model reconciled. Sourcing per dimension: coding=SWE-bench Verified 79.6%; instruction_following=IFEval 95 + MMLU-Pro 78.6; math_reasoning=MATH 89% (the AIME 95.6% figure was excluded: the Sonnet 4.6 system card flags it for contamination); world_knowledge=GPQA Diamond (de-inflated from the extended-thinking 89.9% headline; the tool-config variant is 70.8%); planning_agentic=tau2-bench (third-party); creative_synthesis=imputed. Math and world_knowledge were lowered from the raw single-agent numbers so the older Sonnet does not outrank the newer Sonnet 5 (reporting-artifact correction). The matrix was rescaled to widen tier separation for routing. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }

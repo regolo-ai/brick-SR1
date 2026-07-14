@@ -1,0 +1,36 @@
+{
+  "model": "claude-fable-5",
+  "provider": "anthropic",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.97,
+    0.95,
+    0.94,
+    0.98,
+    0.93,
+    0.92
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "high",
+    "low",
+    "medium",
+    "medium",
+    "medium",
+    "medium"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-14",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then cross-model reconciled. Claude Fable 5 (released 2026-06-09) is the newest flagship, above Opus 4.8 overall. Sourcing per dimension: coding=SWE-bench Verified 95.0% (independently confirmed by vals.ai, clearly tops Opus 88.6%); instruction_following=MMLU-Pro 91.5% (IFEval unpublished); math_reasoning=AIME 2026 saturated ~99% (Anthropic retired the benchmark); planning_agentic=Terminal-Bench 2.1 88.0% (system card); world_knowledge=GPQA Diamond 92.6% — deliberately kept slightly BELOW Opus 4.8 (93.6%), the one dimension where Fable trails, so it does not dominate every cell; creative_synthesis=imputed. Third-party sources of varying reliability (morphllm, vals.ai, artificialanalysis) were used alongside the system card. The matrix was rescaled to widen tier separation for routing. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}

@@ -10,27 +10,27 @@
     "world_knowledge"
   ],
   "skill_vector": [
-    0.7,
-    0.66,
-    0.72,
-    0.78,
-    0.54,
-    0.76
+    0.45,
+    0.45,
+    0.4,
+    0.35,
+    0.32,
+    0.45
   ],
   "source": "benchmark",
   "confidence": [
-    "medium",
+    "high",
     "low",
     "medium",
     "high",
-    "medium",
-    "medium"
+    "high",
+    "high"
   ],
   "imputed_capabilities": [
     "creative_synthesis"
   ],
   "support": null,
   "subset_hash": null,
-  "date": "2026-06-13",
-  "notes": "Benchmark-derived skill vector, recalibrated 2026-06-13 from recent public AI-lab benchmarks, normalized to [0,1] on the 6 canonical capabilities. Sourcing per dimension: coding=SWE-bench Verified; instruction_following=IFEval + MMLU-Pro; math_reasoning=AIME + MATH; world_knowledge=GPQA Diamond; planning_agentic=tau-bench / agentic harness pass-rate; creative_synthesis=imputed (no clean public benchmark), estimated from instruction_following plus a lab-style writing prior. Haiku 4.5 does not support reasoning effort. A `measured` extraction on the frozen probe set overrides this. See README.md."
+  "date": "2026-07-14",
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council (one web-research agent per Claude model) then cross-model reconciled. Sourcing per dimension: coding=SWE-bench Verified (standard mode 60.6%); instruction_following=IFBench 54.3% + MMLU-Pro 80%; math_reasoning=AIME 2025 (standard, no tools); world_knowledge=GPQA Diamond (standard 60.5%); planning_agentic=tau2-bench standard mode; creative_synthesis=imputed (no clean public benchmark). Standard-mode (non-extended-thinking) figures used for cross-model comparability, then the whole 5-model matrix was rescaled to widen tier separation for routing (haiku is the cheapest/floor tier). Haiku 4.5 does not support reasoning effort. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }
