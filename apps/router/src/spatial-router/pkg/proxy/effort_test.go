@@ -111,12 +111,12 @@ func TestClientEffortToPreference(t *testing.T) {
 	}{
 		{"low", -1.0},
 		{"medium", -0.5},
-		{"high", 0.43},
-		{"xhigh", 0.452},
-		{"max", 0.52},
+		{"high", 0.39},
+		{"xhigh", 0.45},
+		{"max", 0.47},
 		{"", 0.0},         // unset -> neutral
 		{"bogus", 0.0},    // unknown -> neutral
-		{"  HIGH ", 0.43}, // case + whitespace tolerant
+		{"  HIGH ", 0.39}, // case + whitespace tolerant
 	}
 	for _, c := range cases {
 		if got := clientEffortToPreference(c.effort); got != c.want {

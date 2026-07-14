@@ -92,7 +92,7 @@ skill_router:
       cost_weight: 0.4
       use_reasoning: true
     - model: claude-sonnet-5
-      skill_vector: [0.82, 0.80, 0.83, 0.76, 0.80, 0.82]
+      skill_vector: [0.87, 0.89, 0.85, 0.90, 0.83, 0.90]
       cost_weight: 0.6
       use_reasoning: true
     - model: claude-opus-4-8

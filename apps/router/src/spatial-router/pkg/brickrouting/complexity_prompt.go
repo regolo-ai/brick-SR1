@@ -16,24 +16,39 @@ const complexitySystemPrompt = "You are a query complexity classifier for an LLM
 	"- hard: Complex multi-step reasoning, expert knowledge, synthesis across domains\n\n" +
 	"Respond with only the label: easy, medium, or hard."
 
-// complexityLabels is the fixed label set (mirrors server.py LABELS).
-var complexityLabels = []string{"easy", "medium", "hard"}
-
-// normalizeComplexityLabel lowercases/trims a model-produced label and maps any
-// out-of-set value to "medium", the safe default shared with the brick path.
-func normalizeComplexityLabel(s string) string {
+// normalizeComplexityLabel lowercases/trims a model-produced label and reports
+// whether it is exactly one of the 3 accepted labels ("easy"/"medium"/"hard").
+// Deliberately strict: no fuzzy/substring tolerance. A misconfigured classifier
+// (wrong model name, wrong endpoint, generic chat model instead of the
+// classifier) tends to echo prose that happens to CONTAIN one of these words
+// ("this is not hard to do"), which a substring match would silently accept as
+// a confident verdict instead of surfacing the misconfiguration. Callers must
+// treat ok=false as a fallback-worthy error (log + metric), not a silent medium.
+func normalizeComplexityLabel(s string) (label string, ok bool) {
 	l := strings.ToLower(strings.TrimSpace(s))
 	switch l {
 	case "easy", "medium", "hard":
-		return l
+		return l, true
 	}
-	// Tolerate decorations a generic model may add ("Easy.", "hard\n", etc.).
-	for _, lab := range complexityLabels {
-		if strings.Contains(l, lab) {
-			return lab
-		}
+	return "medium", false
+}
+
+// stripProviderPrefix removes a leading "provider/" segment from a model
+// identifier so a download/registry coordinate ("regolo/brick-complexity-pro")
+// can be reused as an OpenAI-style API model name ("brick-complexity-pro").
+// Only the first single-segment prefix is stripped; names without a slash, or
+// with an empty tail, are returned unchanged so a genuinely slashless name is
+// never mangled. This is a defensive fallback: an explicit model_name always
+// wins over it (see newComplexityClient).
+func stripProviderPrefix(id string) string {
+	i := strings.IndexByte(id, '/')
+	if i <= 0 || i == len(id)-1 {
+		return id
 	}
-	return "medium"
+	// Only strip a single leading provider segment; keep any deeper path intact
+	// (e.g. "org/team/model" -> "team/model") since that is unusual but not ours
+	// to flatten. The hosted classifier names we emit are single-segment.
+	return id[i+1:]
 }
 
 // confidenceFromLogprobs computes a calibrated confidence for chosenLabel from

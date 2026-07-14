@@ -8,6 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
 
 // newTestOpenAIClient builds a complexityClient in openai mode pointed at url.
@@ -115,6 +118,25 @@ func TestClassifyOpenAI_ServerErrorFallsBack(t *testing.T) {
 	}
 }
 
+// TestStripProviderPrefix guards the defensive fallback that lets a stale
+// profile (model_id="regolo/brick-complexity-pro", no model_name) still send a
+// valid OpenAI model name to the hosted classifier.
+func TestStripProviderPrefix(t *testing.T) {
+	cases := map[string]string{
+		"regolo/brick-complexity-pro": "brick-complexity-pro",
+		"brick-complexity-pro":        "brick-complexity-pro", // no slash: unchanged
+		"":                            "",
+		"regolo/":                     "regolo/",  // empty tail: unchanged, not mangled
+		"/leading":                    "/leading", // leading slash: unchanged
+		"org/team/model":              "team/model",
+	}
+	for in, want := range cases {
+		if got := stripProviderPrefix(in); got != want {
+			t.Errorf("stripProviderPrefix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestConfidenceFromLogprobs(t *testing.T) {
 	alts := map[string]float64{"easy": -0.05, " medium": -2.0, "hard": -4.0}
 	conf, ok := confidenceFromLogprobs("easy", alts)
@@ -128,5 +150,63 @@ func TestConfidenceFromLogprobs(t *testing.T) {
 	}
 	if _, ok := confidenceFromLogprobs("hard", map[string]float64{"easy": -0.1}); ok {
 		t.Fatal("expected not-ok when chosen label absent")
+	}
+}
+
+// TestNormalizeComplexityLabel_StrictNoFuzzyMatch guards the deliberate
+// tightening from a substring/fuzzy match to an exact one. A misconfigured
+// classifier (wrong model name routed to a generic chat model, as happened in
+// production: the router sent "regolo/brick-complexity-pro" to an endpoint
+// that only recognizes "brick-complexity-pro") tends to echo ordinary prose
+// that happens to CONTAIN one of the three label words. The old fuzzy match
+// would silently accept "This is not hard to do." as a confident "hard"
+// verdict; the strict version must reject it and let the caller fall back.
+func TestNormalizeComplexityLabel_StrictNoFuzzyMatch(t *testing.T) {
+	cases := []struct {
+		in     string
+		want   string
+		wantOK bool
+	}{
+		{"easy", "easy", true},
+		{" Hard\n", "hard", true},
+		{"MEDIUM", "medium", true},
+		{"This is not hard to do.", "medium", false},
+		{"Hello! How can I help you today?", "medium", false},
+		{"", "medium", false},
+	}
+	for _, c := range cases {
+		got, ok := normalizeComplexityLabel(c.in)
+		if got != c.want || ok != c.wantOK {
+			t.Errorf("normalizeComplexityLabel(%q) = (%q,%v), want (%q,%v)", c.in, got, ok, c.want, c.wantOK)
+		}
+	}
+}
+
+// TestClassifyOpenAI_UnrecognizedLabelFallsBackAndCountsMetric exercises the
+// full classifyOpenAI path (not just the normalize helper) against a server
+// that echoes ordinary chat prose instead of a label — reproducing the
+// production incident where a chat model behind an unexpectedly-named
+// endpoint answered "The answer to 2 + 2 is 4." instead of "easy". Must
+// degrade to medium/1.0 (never fail the request) and must increment
+// BrickCCClassifyFallback so the misconfiguration is visible in
+// `brick claude status` / metrics instead of silently distorting routing.
+func TestClassifyOpenAI_UnrecognizedLabelFallsBackAndCountsMetric(t *testing.T) {
+	metrics.BrickCCClassifyFallback.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]any{"content": "The answer to 2 + 2 is 4."},
+			}},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	label, conf := newTestOpenAIClient(srv.URL).Classify(context.Background(), "what is 2+2")
+	if label != "medium" || conf != 1.0 {
+		t.Fatalf("got (%q,%v), want (medium,1.0) fallback on unrecognized label", label, conf)
+	}
+	if got := testutil.ToFloat64(metrics.BrickCCClassifyFallback.WithLabelValues()); got != 1 {
+		t.Fatalf("BrickCCClassifyFallback = %v, want 1", got)
 	}
 }

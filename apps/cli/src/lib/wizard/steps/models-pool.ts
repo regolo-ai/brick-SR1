@@ -48,7 +48,7 @@ const CLAUDE_MODELS = [
     value: 'claude-sonnet-5',
     label: 'Sonnet 5',
     hint: 'between Sonnet 4.6 and Opus',
-    skill_vector: [0.82, 0.8, 0.83, 0.76, 0.8, 0.82],
+    skill_vector: [0.87, 0.89, 0.85, 0.9, 0.83, 0.9],
     cost_weight: 0.6,
     use_reasoning: true,
   },

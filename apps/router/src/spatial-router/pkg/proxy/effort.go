@@ -194,13 +194,19 @@ func routingPreferenceOf(cfg *config.RouterConfig) float64 {
 //
 //	low    (r=-1.0): cheapest tier only (sonnet), minimal effort
 //	medium (r=-0.5): cost-conscious, sonnet
-//	high   (r=+0.43): opus on genuinely hard queries (~a third), sonnet otherwise
-//	xhigh  (r=+0.452): opus majority (~two thirds), sonnet on easy/medium
-//	max    (r=+0.52): opus for everything, maximum quality
+//	high   (r=+0.39): opus on genuinely hard queries (~40%), sonnet otherwise (~60%)
+//	xhigh  (r=+0.45): opus majority (~70%), sonnet on easy (~30%)
+//	max    (r=+0.47): opus for almost everything (~90%), sonnet only on the easiest
 //
-// NOTE: these anchors are matched to preference_power=2.2; raising the power back
-// toward the paper default (2.92) steepens the curve and collapses the high/xhigh
-// gap. Keep the two in sync when retuning.
+// NOTE: these anchors are matched to preference_power=2.2 AND a sonnet-5+opus
+// pool, tuned live against the hosted complexity classifier (so tau spans
+// easy/medium/hard, not a flat 0.72). They were re-tuned 2026-07-14 after a
+// classifier misconfiguration (see brickrouting complexity fallback hardening)
+// was masking the true curve: with a healthy classifier the old 0.43/0.452/0.52
+// anchors collapsed high==xhigh (both ~47%) and jumped max straight to 0% sonnet.
+// The current values give a graded 60/30/10 sonnet share. Raising preference_power
+// back toward the paper default (2.92) steepens the curve and re-collapses the
+// high/xhigh gap; keep the two in sync when retuning.
 func clientEffortToPreference(effort string) float64 {
 	switch strings.ToLower(strings.TrimSpace(effort)) {
 	case "low":
@@ -208,11 +214,11 @@ func clientEffortToPreference(effort string) float64 {
 	case "medium":
 		return -0.5
 	case "high":
-		return 0.43
+		return 0.39
 	case "xhigh":
-		return 0.452
+		return 0.45
 	case "max":
-		return 0.52
+		return 0.47
 	default:
 		return 0.0 // treat unknown as mid
 	}

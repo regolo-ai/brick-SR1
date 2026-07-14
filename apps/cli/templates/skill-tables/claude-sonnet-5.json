@@ -10,12 +10,12 @@
     "world_knowledge"
   ],
   "skill_vector": [
-    0.82,
-    0.8,
+    0.87,
+    0.89,
+    0.85,
+    0.9,
     0.83,
-    0.76,
-    0.8,
-    0.82
+    0.9
   ],
   "source": "benchmark",
   "confidence": [
@@ -34,5 +34,5 @@
   "support": null,
   "subset_hash": null,
   "date": "2026-07-14",
-  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then cross-model reconciled. Claude Sonnet 5 (released 2026-06-30) led its system card with a non-standard suite (SWE-bench, Terminal-Bench 2.1, OSWorld, HLE, USAMO, GDPval) and did NOT publish GPQA/MMLU-Pro/AIME/IFEval, so three dims are imputed. Sourcing per dimension: coding=SWE-bench Verified 85.2% (third parties disagree 72.7/85.2/92.4); math_reasoning=USAMO 2026 79.5% (17-pt gap below Opus 4.8 96.7% — the key real signal); planning_agentic=Terminal-Bench 2.1 80.4% / OSWorld 81.2% (note: Terminal-Bench actually beats Opus 74.6%); instruction_following=imputed (unpublished); world_knowledge=imputed from HLE-with-tools 57.4% near-tie with Opus (GPQA unpublished); creative_synthesis=imputed. Kept strictly below Opus 4.8 on coding/math/world_knowledge to fix the routing collapse where the prior placeholder [0.87,0.89,0.85,0.90,0.83,0.90] tied Opus and won 0% traffic. The matrix was rescaled to widen tier separation for routing. A `measured` extraction on the frozen probe set overrides this. See README.md."
+  "notes": "Benchmark-derived skill vector, recalibrated 2026-07-14 by a 5-model council then reverted the same day after live routing tests. Claude Sonnet 5 (released 2026-06-30) led its system card with a non-standard suite (SWE-bench, Terminal-Bench 2.1, OSWorld, HLE, USAMO, GDPval) and did NOT publish GPQA/MMLU-Pro/AIME/IFEval, so three dims are imputed. Sourcing per dimension: coding=SWE-bench Verified 85.2% (third parties disagree 72.7/85.2/92.4); math_reasoning=USAMO 2026 79.5%, a 17-point gap below Opus 4.8's 96.7%, the key real signal; planning_agentic=Terminal-Bench 2.1 80.4% / OSWorld 81.2% (note: Terminal-Bench actually beats Opus 74.6%); instruction_following=imputed (unpublished); world_knowledge=imputed from HLE-with-tools 57.4%, near-tie with Opus (GPQA unpublished); creative_synthesis=imputed. The council's first attempt widened the gap to opus ([0.82,0.80,0.83,0.76,0.80,0.82], synthetic max-separation) to fix a prior placeholder collapse where this exact vector tied opus and won 0% traffic at mode=mid. That widened vector was live-tested end to end against the Claude Code effort scale (low/medium/high/xhigh/max) and found to collapse the high/xhigh/max gradient to 0% sonnet-5 at every anchor tried: the gap to opus was too large for the pool's routing_preference range regardless of anchor tuning. This value restores the original vector. Combined with a retuned effort scale (see clientEffortToPreference in effort.go, retuned the same day, plus an unrelated complexity-classifier misconfiguration fix that was flattening every query to medium), the router now produces a working 60/30/10 sonnet-5 share across high/xhigh/max, measured live end-to-end. A `measured` extraction on the frozen probe set overrides this. See README.md."
 }

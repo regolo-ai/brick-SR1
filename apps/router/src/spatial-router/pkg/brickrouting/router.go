@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -654,14 +655,22 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 		protocol = "brick"
 	}
 
-	// ModelName (OpenAI protocol only): skill-router model_name, else its
-	// model_id, else the ComplexityService model_name.
+	// ModelName (OpenAI protocol only): the name sent as the request "model"
+	// field to the classifier endpoint. Precedence is chosen so a stale profile
+	// self-heals instead of silently sending a name the endpoint rejects:
+	//   1. complexity_model.model_name  (explicit, authoritative)
+	//   2. complexity_service.model_name (top-level hosted-classifier name)
+	//   3. complexity_model.model_id with any "provider/" prefix stripped
+	// model_id (e.g. "regolo/brick-complexity-pro") is a download/registry
+	// coordinate, not an API model name: passing it verbatim made the hosted
+	// endpoint 400 on every call, silently degrading all routing to "medium".
+	// Preferring the service model_name and stripping the prefix both avoid that.
 	modelName := strings.TrimSpace(skillCfg.ModelName)
-	if modelName == "" {
-		modelName = strings.TrimSpace(skillCfg.ModelID)
-	}
 	if modelName == "" && cfg.ComplexityService != nil {
 		modelName = strings.TrimSpace(cfg.ComplexityService.ModelName)
+	}
+	if modelName == "" {
+		modelName = stripProviderPrefix(strings.TrimSpace(skillCfg.ModelID))
 	}
 
 	// DefaultConfidence (OpenAI protocol, used only when the endpoint returns no
@@ -726,12 +735,17 @@ func ClassifyComplexityLabel(ctx context.Context, cfg *config.RouterConfig, text
 }
 
 // classifyBrick calls the custom brick-complexity-server POST /classify endpoint
-// ({"text":...} -> {"label","confidence"}).
+// ({"text":...} -> {"label","confidence"}). Any failure (transport, non-200,
+// decode, or a label outside easy/medium/hard) is logged at Error level with
+// enough detail to diagnose it (status code + response body, or the raw label),
+// counted in metrics.BrickCCClassifyFallback, and degrades routing to "medium"
+// so the request itself never fails on a broken classifier.
 func (c *complexityClient) classifyBrick(ctx context.Context, text string) (string, float64) {
 	body, _ := json.Marshal(map[string]string{"text": text})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/classify", bytes.NewReader(body))
 	if err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: building request: %v", err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -741,12 +755,15 @@ func (c *complexityClient) classifyBrick(ctx context.Context, text string) (stri
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: request to %s: %v", c.baseURL, err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		logging.Warnf("[Brick2] complexity fallback: status=%d", resp.StatusCode)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		logging.Errorf("[Brick2] complexity fallback: %s returned status=%d body=%q", c.baseURL, resp.StatusCode, respBody)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	var decoded struct {
@@ -754,13 +771,15 @@ func (c *complexityClient) classifyBrick(ctx context.Context, text string) (stri
 		Confidence float64 `json:"confidence"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: decoding /classify response: %v", err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	label := strings.ToLower(strings.TrimSpace(decoded.Label))
 	if label != "easy" && label != "medium" && label != "hard" {
-		label = "medium"
-		decoded.Confidence = 1.0
+		logging.Errorf("[Brick2] complexity fallback: /classify returned unrecognized label %q (want exactly easy/medium/hard)", decoded.Label)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
+		return "medium", 1.0
 	}
 	return label, decoded.Confidence
 }
@@ -768,7 +787,11 @@ func (c *complexityClient) classifyBrick(ctx context.Context, text string) (stri
 // classifyOpenAI calls an OpenAI-compatible POST /v1/chat/completions endpoint.
 // It sends the complexity SYSTEM_PROMPT plus the query, reads the label from the
 // first completion token, and derives confidence by softmaxing the easy/medium/
-// hard token logprobs when the server returns them (else 1.0).
+// hard token logprobs when the server returns them (else 1.0). Any failure
+// (transport, non-200, decode, empty choices, or a label outside easy/medium/
+// hard) is logged at Error level with enough detail to diagnose it and counted
+// in metrics.BrickCCClassifyFallback; routing degrades to "medium" so the
+// request itself never fails on a broken classifier.
 func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (string, float64) {
 	reqBody := map[string]any{
 		"model": c.modelName,
@@ -785,7 +808,8 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 	url := strings.TrimRight(c.baseURL, "/") + "/v1/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: building request: %v", err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -795,12 +819,15 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: request to %s (model=%s): %v", url, c.modelName, err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		logging.Warnf("[Brick2] complexity fallback: status=%d", resp.StatusCode)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned status=%d body=%q", url, c.modelName, resp.StatusCode, respBody)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 
@@ -822,15 +849,23 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		logging.Warnf("[Brick2] complexity fallback: %v", err)
+		logging.Errorf("[Brick2] complexity fallback: decoding %s response: %v", url, err)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 	if len(decoded.Choices) == 0 {
-		logging.Warnf("[Brick2] complexity fallback: empty choices")
+		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned no choices", url, c.modelName)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
 		return "medium", 1.0
 	}
 
-	label := normalizeComplexityLabel(decoded.Choices[0].Message.Content)
+	label, ok := normalizeComplexityLabel(decoded.Choices[0].Message.Content)
+	if !ok {
+		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned unrecognized label %q (want exactly easy/medium/hard)",
+			url, c.modelName, decoded.Choices[0].Message.Content)
+		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
+		return "medium", 1.0
+	}
 
 	// Confidence from logprobs of the first generated token, when present.
 	if lp := decoded.Choices[0].Logprobs; lp != nil && len(lp.Content) > 0 {
