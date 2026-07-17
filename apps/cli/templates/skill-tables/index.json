@@ -7,7 +7,7 @@
     "planning_agentic",
     "world_knowledge"
   ],
-  "date": "2026-07-14",
+  "date": "2026-07-17",
   "models": [
     {
       "model": "claude-fable-5",
@@ -109,6 +109,30 @@
       "model": "gemini-2.5-pro",
       "provider": "google",
       "file": "gemini-2.5-pro.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "glm5.2-beta",
+      "provider": "regolo",
+      "file": "glm5.2-beta.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "mistral-small-4-119b",
+      "provider": "regolo",
+      "file": "mistral-small-4-119b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "qwen3.5-122b",
+      "provider": "regolo",
+      "file": "qwen3.5-122b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gemma4-31b",
+      "provider": "regolo",
+      "file": "gemma4-31b.json",
       "source": "benchmark"
     }
   ]

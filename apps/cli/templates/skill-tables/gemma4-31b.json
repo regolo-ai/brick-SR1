@@ -1,0 +1,36 @@
+{
+  "model": "gemma4-31b",
+  "provider": "regolo",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.58,
+    0.62,
+    0.66,
+    0.58,
+    0.58,
+    0.72
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "medium",
+    "low",
+    "medium",
+    "low",
+    "low",
+    "medium"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-17",
+  "notes": "Weighted multi-source assessment for Google DeepMind Gemma 4 31B (dense, Apache 2.0, released 2026-04-02, built from Gemini 3 research lineage), served via Regolo as gemma4-31b. Revised 2026-07-17 after a dedicated capability-economics review that explicitly discounted several suspiciously large generational jumps flagged by independent reviewers -- most notably Codeforces ELO going 110->2150 in a single generation, called implausible by testers with no independent reproduction found; the AIME jump (20.8%->89.2%, ~4.3x) and tau2-bench jump (6.6%->86.4%, ~13x) show the same magnitude pattern and were discounted accordingly rather than taken at face value. coding=0.58: LiveCodeBench v6 80.0% (official, semi-corroborated: edges Qwen3.5-32B's 78.4%) and Codeforces ELO 2150 look strong but the latter is one of the flagged implausible jumps; SWE-bench Verified -- the more operationally relevant metric -- is genuinely contested: SWE-Rebench's live leaderboard lists only 41.6% (different/harder methodology), a single third-party review estimates ~64% (below GLM-5.1's 78% and Opus 4.7's 87.6%), and BenchLM.ai explicitly flags 'insufficient non-generated benchmark coverage' for this model; multiple sources say it trails Qwen3.6-27B (77.2% SWE-bench Verified) on real-world repo tasks despite winning on contest-style LiveCodeBench -- net: strong at algorithmic/contest coding, weak/uncertain at agentic real-world coding. creative_synthesis=0.62 (imputed): no direct creative-writing benchmark found in any source (official card or third-party); imputed as the mean of the other 5 measured coordinates per the README NA-imputation policy. instruction_following=0.66: no official IFEval figure surfaced from Google DeepMind, HF, or Kaggle despite targeted search; a benchmark aggregator reports 0.756 under unclear methodology (possibly a composite index rather than raw IFEval prompt-strict, so not fully trusted); MMLU-Pro 85.2% (official) used as the explicit fallback proxy per benchmark-map.md, but blended conservatively since MMLU-Pro measures knowledge/reasoning, not literal instruction-adherence. math_reasoning=0.58: official AIME 2026 (no tools) 89.2% treated with strong skepticism as part of the suspiciously large generational-leap pattern (alongside the implausible Codeforces jump and the tau2 jump), traces to a single self-reported source with zero independent reproduction found anywhere -- discounted well below the vendor's headline figure. planning_agentic=0.58: direct conflict between two sourcings for the same tau2-bench retail benchmark -- promotional/blog material reports 86.4% (vs Llama 4's 85.5%) while Together AI's own model-listing page reports 76.9% for the same benchmark with native function calling, with no arXiv paper corroborating either; given Gemma 3 scored only 6.6% on this same benchmark (making even 76.9% an ~11.6x jump), the lower, more soberly-sourced figure (official API provider page rather than promotional copy) was used and still discounted. world_knowledge=0.72: GPQA Diamond 84.3% (official) is the best-corroborated of Gemma 4's big jumps -- independent community evaluations reportedly place it within a fraction of a percent of Qwen 3.5's GPQA score (~85.8%), a genuine independent cross-check absent for the AIME/Codeforces/tau2 figures, and the 2x generational jump (42.4%->84.3%) is far less extreme than the ~4-13x jumps elsewhere, consistent with an industry-wide 2026 GPQA improvement rather than a single-model anomaly. Cross-model calibration: Artificial Analysis Intelligence Index confirmed at 29 (roughly on par with Claude Haiku 4.5's 30, i.e. small/mid-tier, not frontier; a '39' figure found elsewhere is likely a mislabeled 'points gained vs Gemma 3' delta, not the index score itself); LMArena Elo 1452, #3 open-weight text leaderboard (human-preference signal only, used as directional confirmation not to override the benchmark-derived vector). Economics: $0.12/M input, $0.35/M output via Google API; self-host minimum ~62GB VRAM FP16 (1x H100-80GB or 2x A100-40GB), ~31GB FP8, ~15-16GB NVFP4 (single RTX 4090/L4) -- modest footprint, realistic for independent re-benchmarking, which is recommended before trusting this vector at scale given the contested figures above. Also note: mid-July 2026 reports of silent weight updates (attention kernel changes, tool-calling fixes, vision resolution changes) under the same model name with no version bump -- any benchmark snapshot should be paired with a weight-download timestamp. Sources: https://benchlm.ai/models/gemma-4-31b, https://artificialanalysis.ai/models/gemma-4-31b, https://artificialanalysis.ai/articles/gemma-4-everything-you-need-to-know, https://www.together.ai/models/gemma-4-31b, https://tech-insider.org/google-gemma-4-open-model-benchmarks-2026/, https://tokencost.app/blog/gemma-4-pricing-benchmarks, https://aihaven.com/news/gemma-4-launches-april-2026/, https://huggingface.co/RedHatAI/gemma-4-31B-it-NVFP4. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}

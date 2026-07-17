@@ -1,0 +1,36 @@
+{
+  "model": "qwen3.5-122b",
+  "provider": "regolo",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [
+    0.62,
+    0.48,
+    0.7,
+    0.58,
+    0.66,
+    0.78
+  ],
+  "source": "benchmark",
+  "confidence": [
+    "medium",
+    "low",
+    "medium",
+    "low",
+    "medium",
+    "high"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-17",
+  "notes": "Weighted multi-source assessment for Alibaba Qwen3.5-122B-A10B (mid-tier multimodal MoE, 122B total/10B active, 256 experts, Gated Delta Networks + hybrid attention, 262K context, Apache 2.0, released 2026-02-24), served via Regolo as qwen3.5-122b. Revised 2026-07-17 after a dedicated capability-economics review that explicitly separated this mid-tier model's own figures from its DIFFERENT, larger flagship sibling Qwen3.5-397B-A17B (released 2026-02-16), which several earlier sources conflated. coding=0.62: SWE-bench Verified 72.0-72.4% for the 122B specifically, confirmed by 3 independent sources (apxml.com, DeepInfra, BenchLM) vs the flagship's 80.0% -- these are meaningfully different models. Terminal-Bench 2.0 is contested: apxml.com lists 41.6%, but that figure is byte-identical to apxml's separate Qwen3.5-27B page (a templating/scraping bug, distrusted), while DeepInfra/BenchLM report a more plausible 49.4%, closer to the flagship's 54.0%; that weaker agentic-coding number pulls this dimension down from what SWE-bench alone would suggest. creative_synthesis=0.48 (imputed): no direct benchmark found for the 122B-A10B specifically; the claimed 'top-13 LMArena creative writing' figure could not be verified for this model and appears to belong to the separate, larger, closed-preview Qwen3.5-Max-Preview -- held below the mechanical mean of the other 5 coordinates with a slight downward prior versus Western labs on English creative writing. instruction_following=0.70: IFEval 93.4% for the 122B (corroborated by llm-stats.com and digitalapplied.com), notably HIGHER than the flagship's own IFEval (92.6%) -- an inverse-scaling curiosity seen in other model families too, not an error; MMLU-Pro 86.1% agrees (apxml + DeepInfra). math_reasoning=0.58: NO AIME/MATH figure exists for the 122B-A10B specifically in any source found; every AIME number located (91.3%) is explicitly for the 397B-A17B flagship. Estimated by applying the flagship-to-122B ratio observed on other benchmarks (SWE-bench ratio ~0.90, GPQA ratio ~0.97-0.98) to the flagship's AIME, yielding a rough ~80-84% raw estimate, but math reasoning does not reliably scale the same way as SWE-bench/GPQA gaps, so this is deliberately discounted further and flagged low-confidence rather than treated as measured -- do not rely on this dimension for math-heavy routing decisions without independent verification. planning_agentic=0.66: BFCL-V4 72.2% (beats GPT-5-mini's 55.5% by ~30%) and tau2-bench 79.5% (vs GPT-5-mini 69.8%) are strong and corroborated by DeepInfra + Qwen's own model card, but BrowseComp swings widely by context-management strategy (63.8% aggregator vs 69.0-78.6% per Qwen's own card depending on context-folding vs discard-all pruning) and the weaker Terminal-Bench 2.0 number (41.6-49.4%) shows a real gap between narrow function-calling benchmarks and open-ended multi-step agency -- narrow tool-calling looks excellent, harder terminal-agent tasks do not. world_knowledge=0.78: best-attested dimension in this card -- GPQA Diamond converges tightly across 4+ independent sources in the mid-80s (HF model card 86.6%, DeepInfra 85.5%, AA-derived 84.85%, third-party 85.7%), all beating GPT-5-mini's 82.8%; MMLU-Pro 86.1% agrees. Economics/AA index: Artificial Analysis Intelligence Index confirmed live at 32.3 under the current v4.1 methodology (a commonly-cited '42' figure appears to be a stale index version, and a '56.6' figure found in one source could not be verified anywhere and is likely wrong -- do not use). No Regolo-specific pricing/latency was found published; external market pricing spans $0.12-$0.40/M input and $0.90-$3.20/M output across providers for the identical open weights, a >3x spread reflecting provider margin/quantization rather than model differences. Sources: https://apxml.com/models/qwen35-122b-a10b, https://deepinfra.com/blog/qwen3-5-122b-a10b-api-benchmarks, https://benchlm.ai/compare/qwen3-5-122b-a10b-vs-qwen3-6-35b-a3b, https://huggingface.co/Qwen/Qwen3.5-122B-A10B, https://www.digitalapplied.com/blog/qwen-3-5-medium-model-series-benchmarks-pricing-guide, https://benchlm.ai/compare/minimax-m3-vs-qwen3-5-122b-a10b. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}
