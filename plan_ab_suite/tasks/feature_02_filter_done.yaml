@@ -1,0 +1,8 @@
+id: feature_02_filter_done
+category: feature
+prompt: |
+  Il file feature_filter_test.go descrive un metodo Store.Filter che ancora non esiste. Implementa Filter(done bool) []*Task sullo Store (ritorna i task col Done richiesto, in ordine di inserimento) e aggiungi un flag --done al comando list che mostra solo i task completati. Esegui i test per verificare.
+setup: setup/feature_02_filter_done.sh
+check: checks/feature_02_filter_done.sh
+timeout_seconds: 720
+max_turns: 40

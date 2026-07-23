@@ -1,0 +1,8 @@
+id: feature_04_priority_validation
+category: feature
+prompt: |
+  Il file feature_priority_test.go descrive una validazione che ancora non esiste. Fai in modo che Store.Add accetti solo le priorita low, medium e high e ritorni un errore per qualsiasi altro valore. Esegui i test per verificare.
+setup: setup/feature_04_priority_validation.sh
+check: checks/feature_04_priority_validation.sh
+timeout_seconds: 720
+max_turns: 40

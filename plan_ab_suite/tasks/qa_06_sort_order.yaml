@@ -1,0 +1,7 @@
+id: qa_06_sort_order
+category: qa
+prompt: |
+  Nella tabella prodotta dal comando list, i task con quale priorita compaiono per primi? Rispondi con una sola parola.
+check: checks/qa_06_sort_order.sh
+timeout_seconds: 300
+max_turns: 15

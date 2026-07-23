@@ -1,0 +1,9 @@
+id: bugfix_05_empty_body_status
+category: bugfix
+prompt: |
+  go test ./... fallisce: POST /tasks con body vuoto risponde con lo status code sbagliato.
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_05_empty_body_status.sh
+check: checks/bugfix_05_empty_body_status.sh
+timeout_seconds: 720
+max_turns: 40

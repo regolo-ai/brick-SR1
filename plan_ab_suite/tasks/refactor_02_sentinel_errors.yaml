@@ -1,0 +1,11 @@
+id: refactor_02_sentinel_errors
+category: refactor
+prompt: |
+  In store.go gli errori sono fmt.Errorf con stringhe ripetute (invalid task id,
+  task not found, task already exists). Introduci errori sentinella esportati
+  (ErrInvalidID, ErrNotFound, ErrDuplicate) definiti una sola volta e usali in
+  tutti i punti dove oggi ci sono le stringhe, cosi i chiamanti possono usare
+  errors.Is. I test devono restare verdi.
+check: checks/refactor_02_sentinel_errors.sh
+timeout_seconds: 720
+max_turns: 40

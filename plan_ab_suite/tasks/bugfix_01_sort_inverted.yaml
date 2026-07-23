@@ -1,0 +1,9 @@
+id: bugfix_01_sort_inverted
+category: bugfix
+prompt: |
+  go test ./... fallisce: la tabella del comando list ordina le priorita al contrario (low prima di high).
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_01_sort_inverted.sh
+check: checks/bugfix_01_sort_inverted.sh
+timeout_seconds: 720
+max_turns: 40
