@@ -113,10 +113,12 @@ def snapshot(container: str, run_dir: Path, label: str, url: str) -> Path:
 
 
 def load_tasks(pattern: str):
+    """pattern: uno o piu glob separati da virgola (es. 'qa_0[13]*,bugfix_*')."""
+    globs = [g.strip() for g in pattern.split(",") if g.strip()]
     tasks = []
     for path in sorted(TASKS_DIR.glob("*.yaml")):
         t = yaml.safe_load(path.read_text())
-        if fnmatch.fnmatch(t["id"], pattern):
+        if any(fnmatch.fnmatch(t["id"], g) for g in globs):
             tasks.append(t)
     if not tasks:
         sys.exit(f"nessun task corrisponde a --tasks '{pattern}'")
