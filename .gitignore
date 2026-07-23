@@ -257,3 +257,7 @@ docs/paper/build/
 
 # Generated test reports
 apps/cli/test/random-session-report.md
+
+# plan_ab_suite: output e working copy della fixture
+plan_ab_suite/out/
+plan_ab_suite/.work/
