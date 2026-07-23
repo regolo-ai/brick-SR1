@@ -1,0 +1,9 @@
+id: bugfix_03_validate_empty
+category: bugfix
+prompt: |
+  go test ./... fallisce: gli ID vuoti vengono accettati come validi.
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_03_validate_empty.sh
+check: checks/bugfix_03_validate_empty.sh
+timeout_seconds: 720
+max_turns: 40

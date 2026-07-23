@@ -1,0 +1,8 @@
+id: feature_01_json_flag
+category: feature
+prompt: |
+  Il file feature_json_test.go descrive una funzione RenderJSON che ancora non esiste. Implementa RenderJSON(tasks []*Task) string in format.go (serializza i task come array JSON) e aggiungi un flag --json al comando list che la usa al posto della tabella. Esegui i test per verificare.
+setup: setup/feature_01_json_flag.sh
+check: checks/feature_01_json_flag.sh
+timeout_seconds: 720
+max_turns: 40

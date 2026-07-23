@@ -1,0 +1,9 @@
+id: bugfix_04_reset_nil
+category: bugfix
+prompt: |
+  go test ./... fallisce: dopo una chiamata a Reset, aggiungere un nuovo task manda il programma in panic.
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_04_reset_nil.sh
+check: checks/bugfix_04_reset_nil.sh
+timeout_seconds: 720
+max_turns: 40

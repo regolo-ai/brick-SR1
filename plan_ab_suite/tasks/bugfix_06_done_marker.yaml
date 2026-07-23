@@ -1,0 +1,9 @@
+id: bugfix_06_done_marker
+category: bugfix
+prompt: |
+  go test ./... fallisce: nella tabella del comando list la colonna DONE mostra la x sui task sbagliati.
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_06_done_marker.sh
+check: checks/bugfix_06_done_marker.sh
+timeout_seconds: 720
+max_turns: 40

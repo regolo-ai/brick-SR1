@@ -1,0 +1,7 @@
+id: qa_02_endpoints
+category: qa
+prompt: |
+  Quali endpoint HTTP espone il server e con quali metodi? Elenca metodo e path di ciascuno.
+check: checks/qa_02_endpoints.sh
+timeout_seconds: 300
+max_turns: 15

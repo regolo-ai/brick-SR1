@@ -1,0 +1,7 @@
+id: qa_08_done_command
+category: qa
+prompt: |
+  Cosa fa il comando done della CLI e quale metodo dello Store invoca? Rispondi in una frase.
+check: checks/qa_08_done_command.sh
+timeout_seconds: 300
+max_turns: 15

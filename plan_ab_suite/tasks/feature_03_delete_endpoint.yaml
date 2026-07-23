@@ -1,0 +1,8 @@
+id: feature_03_delete_endpoint
+category: feature
+prompt: |
+  Il file feature_delete_test.go descrive un endpoint HTTP che ancora non esiste. Implementa DELETE /tasks/{id}: risponde 204 se il task esisteva ed e stato rimosso, 404 se non esiste. Ti servira un metodo Delete sullo Store che mantenga coerente anche l'ordine di inserimento. Esegui i test per verificare.
+setup: setup/feature_03_delete_endpoint.sh
+check: checks/feature_03_delete_endpoint.sh
+timeout_seconds: 720
+max_turns: 40

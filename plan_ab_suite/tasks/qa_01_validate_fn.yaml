@@ -1,0 +1,7 @@
+id: qa_01_validate_fn
+category: qa
+prompt: |
+  Quale funzione di questo progetto valida gli ID dei task? Rispondi solo col nome della funzione.
+check: checks/qa_01_validate_fn.sh
+timeout_seconds: 300
+max_turns: 15

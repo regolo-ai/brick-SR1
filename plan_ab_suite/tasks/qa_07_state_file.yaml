@@ -1,0 +1,7 @@
+id: qa_07_state_file
+category: qa
+prompt: |
+  In quale file la CLI persiste i task tra una invocazione e la successiva? Rispondi solo col nome del file.
+check: checks/qa_07_state_file.sh
+timeout_seconds: 300
+max_turns: 15
