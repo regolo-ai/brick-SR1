@@ -47,7 +47,41 @@ type routingEvent struct {
 	CacheReadTokens     int64 `json:"cache_read_tokens,omitempty"`
 	CacheCreationTokens int64 `json:"cache_creation_tokens,omitempty"`
 	OutputTokens        int64 `json:"output_tokens,omitempty"`
+
+	// RateLimitHeaders captures the Anthropic plan/rate-limit state observed on
+	// the upstream response, keyed by the lowercase header name with the
+	// "anthropic-ratelimit-" prefix stripped (e.g. "unified-5h-utilization").
+	// The capture is prefix-generic so it works both for the unified headers a
+	// subscription (OAuth) account receives and for the per-API-key variants.
+	// This is the ground truth the plan-savings A/B suite reads to measure real
+	// Claude plan consumption per branch.
+	RateLimitHeaders map[string]string `json:"ratelimit_headers,omitempty"`
+
+	// RequestTag is an attribution tag set by test harnesses via the
+	// x-brick-ab-tag request header (stripped before forwarding upstream).
+	// Empty outside a harness run.
+	RequestTag string `json:"request_tag,omitempty"`
+
+	// UpstreamStatus is the HTTP status code returned by the Anthropic
+	// upstream, so offline analysis can detect 429s and exclude error turns.
+	UpstreamStatus int `json:"upstream_status,omitempty"`
+
+	// RequestedModel is the model the client asked for before any rewrite:
+	// "brick-*" on the routed path, the concrete claude-* name on the native
+	// passthrough path (where it equals ServedModel).
+	RequestedModel string `json:"requested_model,omitempty"`
+
+	// ClassifierPromptChars is the length in characters of the text sent to the
+	// complexity classifier for this request (0 on the native path). Basis for
+	// estimating the external classifier cost of a routed branch.
+	ClassifierPromptChars int64 `json:"classifier_prompt_chars,omitempty"`
 }
+
+// modePassthroughNative labels routing events emitted on the native-model
+// passthrough path (explicit claude-* model, skill router bypassed). It is a
+// proxy-local mode string, distinct from the config routing modes, so the
+// offline aggregators can separate plan traffic from brick-routed traffic.
+const modePassthroughNative = "passthrough_native"
 
 // routingEventLogger appends routingEvent records to a JSONL file. Writes are
 // serialized by a mutex and are best-effort: a write failure is logged and
