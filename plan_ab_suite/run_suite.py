@@ -146,9 +146,18 @@ def reset_fixture(task) -> None:
 
 
 def run_claude(task, model: str, tag: str, url: str, out_file: Path, timeout: int):
-    env = os.environ.copy()
+    # Env pulito: rimuove le variabili di una eventuale sessione Claude Code
+    # ospite (nested run) e qualsiasi ANTHROPIC_* ereditata, poi imposta solo
+    # cio che serve alla suite. HOME resta invariata (OAuth in ~/.claude).
+    env = {
+        k: v for k, v in os.environ.items()
+        if not k.startswith(("CLAUDE", "ANTHROPIC"))
+    }
     env["ANTHROPIC_BASE_URL"] = url
     env["ANTHROPIC_CUSTOM_HEADERS"] = f"x-brick-ab-tag: {tag}"
+    # Consente --dangerously-skip-permissions anche come root (ambiente
+    # containerizzato/dedicato: e il caso d'uso di questa suite headless).
+    env["IS_SANDBOX"] = "1"
     cmd = [
         "claude", "-p", task["prompt"],
         "--model", model,
