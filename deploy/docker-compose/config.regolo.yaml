@@ -1,0 +1,158 @@
+# Brick production profile for Regolo-managed servers.
+#
+# Every inference request (including the complexity classifier) is sent to the
+# Regolo OpenAI-compatible API.  There is intentionally no Anthropic, OpenAI,
+# OpenRouter, or local-model provider in this file.
+#
+# The Docker Compose deployment injects REGOLO_API_KEY. Do not put a real key
+# in this file or commit a .env file containing one.
+
+model:
+  name: brick
+  description: Brick router backed exclusively by Regolo models
+
+server_port: 8000
+auto_model_name: brick
+
+mom_registry:
+  models/modernbert-capability-classifier: regolo/modernbert-capability-classifier
+
+providers:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+
+provider_profiles:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+
+provider_endpoints:
+  - name: regolo
+    provider_profile: regolo
+    weight: 1
+
+default_model: qwen3.5-122b
+
+# Static credentials make this suitable for a Regolo-owned server: callers do
+# not need a separate upstream key. Each configured model uses the same Regolo
+# endpoint and the same injected credential. These IDs are a deliberately small
+# LLM-only pool selected from the official Regolo catalog (not image, OCR, STT,
+# embedding, reranking, or classifier models).
+model_config:
+  qwen3.5-9b:
+    preferred_endpoints: [regolo]
+    param_size: 9b
+    access_key: "${REGOLO_API_KEY}"
+  gemma4-31b:
+    preferred_endpoints: [regolo]
+    param_size: 31b
+    access_key: "${REGOLO_API_KEY}"
+  mistral-small-4-119b:
+    preferred_endpoints: [regolo]
+    param_size: 119b
+    access_key: "${REGOLO_API_KEY}"
+  qwen3.5-122b:
+    preferred_endpoints: [regolo]
+    param_size: 122b
+    reasoning_family: qwen3
+    access_key: "${REGOLO_API_KEY}"
+  glm5.2-beta:
+    preferred_endpoints: [regolo]
+    param_size: 753b
+    access_key: "${REGOLO_API_KEY}"
+
+reasoning_families:
+  qwen3:
+    type: chat_template_kwargs
+    parameter: enable_thinking
+default_reasoning_effort: medium
+
+# The hosted classifier is itself a Regolo model. This avoids operating a
+# separate GPU sidecar on the production servers.
+complexity_service:
+  enabled: true
+  base_url: https://api.regolo.ai
+  protocol: openai
+  model_name: brick-complexity-pro
+  bearer_token: "${REGOLO_API_KEY}"
+  timeout_seconds: 8
+  auto_spawn: false
+
+skill_router:
+  enabled: true
+  capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    repo_id: regolo/modernbert-capability-classifier
+    labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+    use_cpu: true
+  complexity_model:
+    model_id: regolo/brick-complexity-pro
+    base_model_id: Qwen/Qwen3.5-0.8B
+    base_url: https://api.regolo.ai
+    protocol: openai
+    model_name: brick-complexity-pro
+    bearer_token: "${REGOLO_API_KEY}"
+    timeout_seconds: 8
+    auto_spawn: false
+  math:
+    prior_strength: 8
+    tau: {easy: 0.55, medium: 0.72, hard: 0.88}
+    complexity_mu: 0.345170
+    complexity_bias: 0.822235
+    cost_penalty_beta: 0.230778
+    over_penalty_lambda: 0.045207
+    preference_power: 2.920351
+    max_mu_multiplier: 13.034935
+    max_bias_shift: 5.294173
+    max_cost_relief: 6559.073066
+    max_over_relief: 49.547940
+    min_mu_multiplier: 0.081493
+    min_bias_shift: -1.349259
+    min_cost_boost: 8.834043
+    min_over_boost: 1002.068256
+    tie_epsilon: 0.03
+    clip_min: 0.02
+    clip_max: 0.98
+  models:
+    - model: qwen3.5-9b
+      skill_vector: [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876]
+      use_reasoning: false
+      cost_weight: 0.10
+    - model: gemma4-31b
+      skill_vector: [0.58, 0.62, 0.66, 0.58, 0.58, 0.72]
+      use_reasoning: false
+      cost_weight: 0.40
+    - model: mistral-small-4-119b
+      skill_vector: [0.60, 0.46, 0.60, 0.79, 0.46, 0.73]
+      use_reasoning: false
+      cost_weight: 0.50
+    - model: qwen3.5-122b
+      skill_vector: [0.62, 0.48, 0.70, 0.58, 0.66, 0.78]
+      use_reasoning: true
+      reasoning_effort: medium
+      cost_weight: 1.00
+    - model: glm5.2-beta
+      skill_vector: [0.78, 0.72, 0.68, 0.89, 0.73, 0.83]
+      use_reasoning: true
+      reasoning_effort: medium
+      cost_weight: 2.00
+  keyword_rules:
+    - name: force_coder
+      mode: override
+      importance: 10
+      model: glm5.2-beta
+      operator: OR
+      keywords: [debug, refactor, compile, runtime, write a function, function that, class called]
+      case_sensitive: false
+    - name: coding_bias
+      mode: bias
+      importance: 8
+      capability: coding
+      operator: OR
+      keywords: [python, javascript, typescript, golang, rust, java, sql, bash, async, thread]
+      case_sensitive: false
+
+# No legacy decisions and, deliberately, no anthropic_passthrough block.
+decisions: []
