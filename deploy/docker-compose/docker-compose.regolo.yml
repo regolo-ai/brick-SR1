@@ -1,0 +1,24 @@
+# Regolo production deployment. From this directory run:
+#   REGOLO_API_KEY=... docker compose -f docker-compose.regolo.yml up -d
+#
+# Pin BRICK_TAG in the server environment for a reproducible rollout.
+services:
+  brick:
+    image: docker.io/regolo/brick:${BRICK_TAG:-latest}
+    ports:
+      - "${BRICK_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./config.regolo.yaml:/app/config/config.yaml:ro
+      - brick-regolo-model-cache:/app/models
+    environment:
+      REGOLO_API_KEY: ${REGOLO_API_KEY:?set REGOLO_API_KEY in the server environment}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  brick-regolo-model-cache:
