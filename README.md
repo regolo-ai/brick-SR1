@@ -255,73 +255,242 @@ Use `brick codex on --no-start` to require an already-healthy router instead of 
 
 ## 🔌 Use Brick on its own
 
-You do not need a coding agent. Brick is a plain OpenAI-compatible gateway you can call from any client, script, or app.
+Brick can run as a standalone OpenAI-compatible gateway. You can put it in front of a hosted pool (Regolo, OpenAI, Anthropic, or another compatible service), a local server such as Ollama/vLLM, or a mixture of both. The client only sees one virtual model: `brick`.
+
+### 1. Create a profile with `brick init`
+
+Start with the guided wizard:
 
 ```bash
-brick serve                       # docker compose up on http://localhost:18000
-brick chat                        # TUI chat against the local router
-brick route "what is 2+2?"        # print the routing decision for a prompt, no call made
+brick init                     # creates the default profile
+brick init work                # creates ~/.brick/profiles/work/
+brick init work                # re-run the wizard for an existing profile
 ```
 
-Call it like any OpenAI endpoint, just set `"model": "brick"`:
+The wizard asks, in order:
+
+1. which providers to enable and how to authenticate them;
+2. which models to discover or enter manually;
+3. which models belong to the skill-router pool;
+4. where the complexity classifier should run (`api` or `local`);
+5. the cost/quality mode, model routing, and dynamic thinking routing;
+6. optional keyword overrides and native image/audio support.
+
+It writes three profile files:
+
+```text
+~/.brick/profiles/<profile>/config.yaml       # router configuration
+~/.brick/profiles/<profile>/.env               # provider and classifier secrets
+~/.brick/profiles/<profile>/docker-compose.yml
+```
+
+Secrets are never written into YAML. For the hosted classifier, the YAML contains `${REGOLO_API_KEY}` and the real value lives in `.env`. Regolo models are discovered from `GET https://api.regolo.ai/v1/models`; if the endpoint is unavailable Brick uses its local model-catalog cache. A model enters the skill-router pool only when Brick can resolve a skill-card (bundled, cached, or downloaded from `regolo/brick-skill-tables`). To measure a missing card, use `brick skills extract <model>`.
+
+### 2. Start and inspect the router
 
 ```bash
-curl http://localhost:18000/v1/chat/completions \
+brick serve                    # starts the active profile with Docker Compose
+brick serve work               # starts a named profile
+brick serve --pull             # pull updated images first
+brick status                   # container and health status
+brick logs                     # follow router logs
+brick down                     # stop/remove containers; volumes remain
+```
+
+The listening address is `http://127.0.0.1:<server_port>` (the wizard defaults to port `8000`). The compose file mounts the profile YAML read-only, loads `.env`, and adds the classifier sidecar only in local-classifier mode.
+
+### 3. Call Brick like an OpenAI endpoint
+
+Use the virtual model name `brick`; the selected backend is returned in the `x-selected-model` response header.
+
+```bash
+curl http://127.0.0.1:8000/v1/chat/completions \
   -H "Authorization: Bearer $REGOLO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"brick","messages":[{"role":"user","content":"Prove that sqrt(2) is irrational"}]}'
 ```
 
-The `x-selected-model` response header tells you which backend Brick picked. That math prompt routes to a reasoning model; `"Hello"` routes to the cheapest one.
+For scripts and quick checks:
 
-### Configure the pool in `config.yaml`
+```bash
+brick generate "Summarize the trade-offs between REST and GraphQL"
+brick route "Prove that sqrt(2) is irrational"       # route and make a small completion
+brick route "..." --no-generate --json              # routing/latency data as JSON
+brick chat                                             # interactive terminal chat
+```
 
-Everything Brick decides comes from `config.yaml`. The core block is `skill_router`, where you declare the pool, each model's skill vector, and its cost weight:
+`generate` prints only the assistant answer. `chat` is an interactive TUI. `route` is useful when tuning the pool: it reports the selected model, applied thinking mode, HTTP status, and latency; `--repeat N` shows min/median/max.
+
+### 4. Understand the generated `config.yaml`
+
+The exact YAML can contain more fields, but these are the blocks that matter for a standalone setup:
+
+```yaml
+model:
+  name: brick
+  description: Virtual multimodal routing model
+server_port: 8000
+
+default_model: qwen3.5-122b
+
+providers:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+
+provider_profiles:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+provider_endpoints:
+  - name: regolo
+    provider_profile: regolo
+    weight: 1
+
+model_config:
+  qwen3.5-122b:
+    preferred_endpoints: [regolo]
+    param_size: 122b
+    reasoning_family: qwen3
+
+complexity_service:
+  enabled: true
+  protocol: openai
+  base_url: https://api.regolo.ai
+  model_name: brick-complexity-pro
+  bearer_token: ${REGOLO_API_KEY}
+  timeout_seconds: 8
+  auto_spawn: false
+
+skill_router:
+  enabled: true
+  dynamic_effort: true
+  capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    repo_id: regolo/modernbert-capability-classifier
+    use_cpu: true
+  complexity_model:
+    model_id: brick-complexity-pro
+    base_model_id: brick-complexity-pro
+    base_url: https://api.regolo.ai
+    timeout_seconds: 8
+    auto_spawn: false
+  math:
+    routing_preference: 0
+  models:
+    - model: qwen3.5-122b
+      skill_vector: [0.62, 0.48, 0.70, 0.58, 0.66, 0.78]
+      skill_source: benchmark
+      skill_confidence: [medium, low, medium, low, medium, high]
+      cost_weight: 0.6
+      use_reasoning: true
+  active_models: [qwen3.5-122b]
+  keyword_rules: []
+
+brick:
+  enabled: true
+  stt_model: faster-whisper-large-v3
+  stt_endpoint: https://api.regolo.ai/v1/audio/transcriptions
+  ocr_model: deepseek-ocr-2
+  ocr_endpoint: https://api.regolo.ai/v1/chat/completions
+  vision_model: qwen3.5-122b
+  vision_endpoint: https://api.regolo.ai/v1/chat/completions
+  ocr_min_text_length: 10
+```
+
+#### Providers and model endpoints
+
+`providers` describes a backend in the simplest form. `provider_profiles` gives it a reusable named profile, while `provider_endpoints` attaches that profile to the router with a weight. A model's `model_config.<id>.preferred_endpoints` determines where Brick may send it.
+
+For a custom OpenAI-compatible server:
+
+```yaml
+providers:
+  local:
+    type: openai_compatible
+    base_url: http://host.docker.internal:11434/v1
+provider_profiles:
+  local:
+    type: openai_compatible
+    base_url: http://host.docker.internal:11434/v1
+provider_endpoints:
+  - name: local
+    provider_profile: local
+    weight: 1
+model_config:
+  llama3.1:
+    preferred_endpoints: [local]
+    param_size: 8b
+```
+
+The API key belongs in `.env` (for example `OPENAI_API_KEY=...`), not in `config.yaml`. `brick add provider <id>` and `brick add model <id> --provider <id>` are convenient for adding these entries after initialization.
+
+#### `skill_router`: the routing pool
+
+This is the local Brick router. `capabilities` fixes the six dimensions used for both prompts and models. Each `models` entry must keep the same vector order. `skill_vector` is the measured capability vector; `cost_weight` is relative cost and controls the cost penalty; `use_reasoning` and `reasoning_effort` describe how to request reasoning from that backend. `skill_source` and `skill_confidence` record provenance, so a hand-edited or measured vector remains auditable.
+
+`active_models` is the eligible subset. Removing a model from it does not delete its `model_config` or skill-card. `default_model` is the fallback model and should belong to this pool.
+
+`math.routing_preference` is the continuous cost/quality knob from `-1` to `1`: negative values favor economy, positive values favor quality, and `0` is balanced. The wizard exposes the same idea as `eco`, `lite`, `mid`, `pro`, and `max`.
+
+`dynamic_effort: true` lets Brick derive reasoning effort from the request's complexity. Set it to `false` when the client should control effort itself. The separate `brick.use_model_routing` flag can disable model selection and pin traffic to `brick.fixed_model`.
+
+#### Keyword rules
+
+Keyword rules are evaluated before the normal skill-distance decision:
 
 ```yaml
 skill_router:
-  enabled: true
-  capabilities:                 # the 6 dimensions every query and model live in
-    - coding
-    - creative_synthesis
-    - instruction_following
-    - math_reasoning
-    - planning_agentic
-    - world_knowledge
-
-  models:
-    - model: "qwen3.5-9b"
-      skill_vector: [0.71, 0.51, 0.81, 0.91, 0.58, 0.18]   # capability per dimension
-      use_reasoning: false
-      cost_weight: 0.10                                     # relative price, drives the cost bias
-    - model: "deepseek-v4-flash"
-      skill_vector: [0.82, 0.66, 0.86, 0.93, 0.62, 0.49]
-      use_reasoning: false
-      cost_weight: 0.40
-    - model: "kimi2.6"
-      skill_vector: [0.90, 0.75, 0.87, 0.94, 0.64, 0.34]
-      use_reasoning: true
-      reasoning_effort: "medium"
-      cost_weight: 0.60
-```
-
-Add or swap any OpenAI-compatible backend here; the backends themselves are declared under `provider_profiles` / `model_config` (the shipped config points them all at Regolo). Two more blocks let you nudge routing without touching the math:
-
-```yaml
   keyword_rules:
-    - name: "force_coder"       # hard override: send these prompts to a specific model
-      mode: "override"
-      model: "kimi2.6"
-      operator: "OR"
-      keywords: ["debug", "refactor", "compile", "write a function"]
-    - name: "coding_bias"       # soft nudge: push one capability dimension up
-      mode: "bias"
-      capability: "coding"
-      operator: "OR"
-      keywords: ["python", "rust", "sql", "async"]
+    - name: force_coder
+      mode: override
+      model: qwen3.5-122b
+      importance: 10
+      operator: OR
+      keywords: [debug, refactor, compile]
+      case_sensitive: false
+    - name: coding_bias
+      mode: bias
+      capability: coding
+      importance: 8
+      operator: OR
+      keywords: [python, rust, sql]
+      case_sensitive: false
 ```
 
-Other useful sections: `brick` (multimodal preprocessing: STT, OCR, vision), the `r` preference knob in `r ∈ [-1, 1]` (max-saving to max-quality), and the classifier endpoints. The CLI can edit most of this for you (`brick add model`, `brick config edit`), or edit the YAML directly. Full field reference: [apps/router/README.md](apps/router/README.md).
+`override` forces a model when the keywords match (subject to that model being available). `bias` nudges the capability score without pinning a model. `importance` resolves competing rules; higher values win.
+
+#### Classifier modes and Docker topology
+
+With `api`, `complexity_service` points to Regolo's hosted `brick-complexity-pro`, `.env` contains `REGOLO_API_KEY`, and Compose runs only the router. With `local`, the YAML points to the `classifier` service and Compose adds the Qwen3.5-0.8B sidecar plus `BRICK_CLASSIFIER_TOKEN`. Local mode avoids hosted classifier calls but needs more memory and is slower on CPU.
+
+The capability classifier (`capability_model`) is separate: it maps the prompt into the six capability dimensions. The complexity classifier (`complexity_service` / `complexity_model`) labels the request easy, medium, or hard. If either service is unavailable, Brick keeps the gateway alive and falls back conservatively rather than turning the endpoint into a second client API.
+
+#### Multimodal preprocessing
+
+The `brick` block is the fallback path for images and audio. If a selected model advertises native support, Brick forwards the raw modality. Otherwise it uses the configured STT, OCR, or vision endpoint to turn the input into text before routing. `ocr_min_text_length` controls when OCR output is considered sufficient.
+
+### 5. Edit an existing profile safely
+
+Use the menu when you want to change one part without rebuilding everything:
+
+```bash
+brick config edit                 # providers, models, pool, classifier, multimodal, port...
+brick config edit work
+brick skills extract <model> --base-url https://api.regolo.ai/v1 --api-key-env REGOLO_API_KEY
+```
+
+`brick config edit` preserves existing profiles and reports “no changes” when you exit without modifying anything. `brick skills extract` runs the frozen probe set, writes the measured vector to the profile and to the local skill-table cache, and can optionally offer publication to the public dataset.
+
+If you prefer hand editing, restart after saving:
+
+```bash
+brick down
+brick serve
+```
+
+That ensures the container reloads both YAML and environment changes.
 
 ---
 

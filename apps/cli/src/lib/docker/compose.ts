@@ -9,7 +9,7 @@ import { defaultImage } from './image.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = join(__dirname, '..', '..', '..', 'templates');
 
-export async function writeCompose(opts: { profile: string; port: number; image?: string }): Promise<void> {
+export async function writeCompose(opts: { profile: string; port: number; image?: string; useLocalClassifier?: boolean }): Promise<void> {
   const p = paths(opts.profile);
   const tplPath = join(TEMPLATE_DIR, 'docker-compose.yaml.hbs');
   const tpl = await readFile(tplPath, 'utf8');
@@ -20,6 +20,7 @@ export async function writeCompose(opts: { profile: string; port: number; image?
     configPath: p.config,
     envPath: p.env,
     modelsPath: p.models,
+    useLocalClassifier: opts.useLocalClassifier === true,
   });
   await saveText(compiled, p.compose);
 }

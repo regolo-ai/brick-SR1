@@ -1,12 +1,16 @@
 import * as p from '@clack/prompts';
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { paths } from '../config/paths.js';
 import { saveConfig } from '../config/save.js';
 import { ConfigSchema, type BrickConfig } from '../config/schema.js';
 import { catalog, reasoningFamiliesDefault } from '../catalog/index.js';
 import { writeCompose } from '../docker/compose.js';
 import { lookupSkillRecord } from '../skills/table.js';
+import { resolveSkillCards } from '../skills/resolver.js';
+import { discoverModels } from '../catalog/discovery.js';
+import { REGOLO_CLASSIFIER_URL, REGOLO_CLASSIFIER_MODEL, REGOLO_API_KEY_ENV } from '../claude/settings-apply.js';
 import { MODES, R_BY_MODE, type ClaudeMode } from '../claude/modes.js';
 
 export async function runWizard(profile: string): Promise<BrickConfig> {
@@ -70,31 +74,31 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     message: 'complexity classifier:',
     options: [
       { value: 'local', label: 'Local (Docker sidecar)', hint: 'bundled classifier container, runs on this host' },
-      { value: 'remote', label: 'Remote (OpenAI-compatible API)', hint: 'custom /v1/chat/completions endpoint' },
+      { value: 'api', label: 'API — hosted Regolo', hint: 'brick-complexity-pro' },
     ],
     initialValue: 'local',
   });
   if (p.isCancel(complexityMode)) { p.cancel('aborted'); process.exit(0); }
 
   let complexityService: any;
-  if (complexityMode === 'remote') {
-    const url = await p.text({ message: 'remote base_url:', placeholder: 'https://api.example.com', defaultValue: '' });
-    if (p.isCancel(url)) { p.cancel('aborted'); process.exit(0); }
-    const modelName = await p.text({ message: 'model name (sent to the API):', placeholder: 'brick-complexity', defaultValue: 'brick-complexity' });
-    if (p.isCancel(modelName)) { p.cancel('aborted'); process.exit(0); }
-    const token = await p.password({ message: 'bearer token (optional, blank to skip):' });
+  if (complexityMode === 'api') {
+    p.note('Hosted Regolo classifier: brick-complexity-pro. The key is stored only in the profile .env.', 'classifier');
+    const token = await p.password({ message: 'Regolo API key:' });
     if (p.isCancel(token)) { p.cancel('aborted'); process.exit(0); }
+    if (String(token).trim()) apiKeys[REGOLO_API_KEY_ENV] = String(token).trim();
     complexityService = {
       enabled: true,
       protocol: 'openai',
-      base_url: String(url).trim(),
-      model_name: String(modelName || 'brick-complexity').trim(),
-      ...(token ? { bearer_token: String(token) } : {}),
+      base_url: REGOLO_CLASSIFIER_URL,
+      model_name: REGOLO_CLASSIFIER_MODEL,
+      bearer_token: '${' + REGOLO_API_KEY_ENV + '}',
       timeout_seconds: 8,
       auto_spawn: false,
     };
   } else {
     // Local Docker sidecar reached via the compose service DNS name.
+    const classifierToken = randomBytes(24).toString('hex');
+    apiKeys.BRICK_CLASSIFIER_TOKEN = classifierToken;
     complexityService = {
       enabled: true,
       base_url: 'http://classifier:8094',
@@ -121,6 +125,10 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   if (p.isCancel(modeChoice)) { p.cancel('aborted'); process.exit(0); }
   const mode = modeChoice as ClaudeMode;
   const routingPreference = R_BY_MODE[mode];
+  const modelRouting = await p.confirm({ message: 'Enable model routing?', initialValue: true });
+  if (p.isCancel(modelRouting)) { p.cancel('aborted'); process.exit(0); }
+  const thinkingRouting = await p.confirm({ message: 'Enable dynamic thinking routing?', initialValue: true });
+  if (p.isCancel(thinkingRouting)) { p.cancel('aborted'); process.exit(0); }
 
   // keyword overrides — let the user force a model when keywords match,
   // on top of the default coder rules.
@@ -188,6 +196,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   const mm = catalog[primaryProvider].multimodal;
   const brick = {
     enabled: true,
+    use_model_routing: Boolean(modelRouting),
     stt_model: mm.stt?.model ?? 'faster-whisper-large-v3',
     stt_endpoint: mm.stt?.endpoint ?? 'https://api.regolo.ai/v1/audio/transcriptions',
     ocr_model: mm.ocr?.model ?? 'deepseek-ocr-2',
@@ -197,7 +206,21 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     ocr_min_text_length: 10,
   };
 
-  const skillRouter = buildSkillRouter(selectedModelIds, complexityService?.base_url, routingPreference, customKeywordRules, caps);
+  const skillRouter = await buildSkillRouter(selectedModelIds, complexityService?.base_url, routingPreference, customKeywordRules, caps);
+  if (complexityMode === 'api') {
+    skillRouter.complexity_model.model_id = REGOLO_CLASSIFIER_MODEL;
+    skillRouter.complexity_model.base_model_id = REGOLO_CLASSIFIER_MODEL;
+    skillRouter.complexity_model.bearer_token = '${' + REGOLO_API_KEY_ENV + '}';
+  } else {
+    skillRouter.complexity_model.model_id = 'Qwen/Qwen3.5-0.8B';
+    skillRouter.complexity_model.base_model_id = 'Qwen/Qwen3.5-0.8B';
+  }
+  skillRouter.dynamic_effort = Boolean(thinkingRouting);
+  if (!skillRouter.models.length) {
+    throw new Error('No selected model has a skill-card. Run `brick skills extract <model>` and retry.');
+  }
+  const poolIds = skillRouter.models.map((m: any) => m.model);
+  const effectiveDefaultModel = poolIds.includes(defaultModel) ? defaultModel : poolIds[0];
 
   // assemble
   const reasoningFamilies: Record<string, any> = {};
@@ -216,7 +239,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     auto_model_name: 'brick',
     provider_profiles: providerProfiles,
     provider_endpoints: providerEndpoints,
-    default_model: defaultModel,
+    default_model: effectiveDefaultModel,
     model_config: modelConfig,
     reasoning_families: reasoningFamilies,
     default_reasoning_effort: 'medium',
@@ -252,7 +275,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
 
   await saveConfig(cfg, profile);
   await writeEnvFile(apiKeys, pp.env);
-  await writeCompose({ profile, port: cfg.server_port });
+  await writeCompose({ profile, port: cfg.server_port, useLocalClassifier: complexityMode === 'local' });
   p.outro(`done. config=${pp.config} compose=${pp.compose} env=${pp.env}`);
   return cfg;
 }
@@ -292,18 +315,24 @@ const KNOWN_COST_WEIGHTS: Record<string, number> = {
   'gpt-5.5': 1.0,
 };
 
-function buildSkillRouter(
+async function buildSkillRouter(
   modelIds: string[],
   complexityBaseUrl?: string,
   routingPreference = 0,
   extraKeywordRules: any[] = [],
   caps: Record<string, { images?: boolean; audio?: boolean }> = {}
-): any {
-  const models = modelIds.map((id, idx) => {
+): Promise<any> {
+  const cards = await resolveSkillCards(modelIds);
+  const eligibleIds = modelIds.filter((id) => cards.has(id));
+  const excluded = modelIds.length - eligibleIds.length;
+  if (excluded) {
+    p.note(`${excluded} model(s) excluded from the skill-router pool because no skill-card is available. Run \`brick skills extract <model>\`.`, 'skill cards');
+  }
+  const models = eligibleIds.map((id, idx) => {
     // Prefer a published skill vector (measured > benchmark) from the public
     // table; fall back to the legacy hardcoded set, then to a heuristic. The
     // chosen provenance is recorded so the user knows how trustworthy it is.
-    const published = lookupSkillRecord(id);
+    const published = cards.get(id) ?? lookupSkillRecord(id);
     let skill_vector: number[];
     let skill_source: 'benchmark' | 'measured' | 'heuristic';
     let skill_confidence: string[] | undefined;
@@ -315,14 +344,24 @@ function buildSkillRouter(
       skill_vector = KNOWN_SKILL_VECTORS[id];
       skill_source = 'measured';
     } else {
-      skill_vector = heuristicSkillVector(idx, modelIds.length);
-      skill_source = 'heuristic';
+      // Never create heuristic vectors during new onboarding.
+      skill_vector = KNOWN_SKILL_VECTORS[id] ?? [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+      skill_source = KNOWN_SKILL_VECTORS[id] ? 'measured' : 'benchmark';
     }
     return {
       model: id,
       skill_vector,
       skill_source,
       ...(skill_confidence ? { skill_confidence } : {}),
+      ...(published ? {
+        skill_card_metadata: {
+          provider: published.provider,
+          support: published.support,
+          subset_hash: published.subset_hash,
+          date: published.date,
+          notes: published.notes,
+        },
+      } : {}),
       use_reasoning: id === 'kimi2.6' ? true : false,
       ...(id === 'kimi2.6' ? { reasoning_effort: 'medium' } : {}),
       cost_weight: KNOWN_COST_WEIGHTS[id] ?? Number(((idx + 1) / Math.max(1, modelIds.length)).toFixed(2)),
@@ -447,7 +486,13 @@ async function selectProviderModels(
     modelConfig[id] = conf;
     if (!selectedModelIds.includes(id)) selectedModelIds.push(id);
   };
-  if (cat.models.length === 0) {
+  let available = cat.models;
+  if (pid === 'regolo') {
+    const result = await discoverModels(pid, cat.base_url);
+    available = result.models.map((m) => ({ id: m.id, label: m.id, param_size: '', reasoning_family: undefined }));
+    if (result.source === 'cache') p.note('Regolo /models unavailable; using the local model catalog cache.', 'models');
+  }
+  if (available.length === 0) {
     const ids = await p.text({ message: `Comma-separated model IDs for ${cat.label}:`, placeholder: 'mistral,llama3' });
     if (p.isCancel(ids)) { p.cancel('aborted'); process.exit(0); }
     const list = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
@@ -455,13 +500,13 @@ async function selectProviderModels(
   } else {
     const sel = await p.multiselect({
       message: `Select models for ${cat.label}:`,
-      options: cat.models.map((m) => ({ value: m.id, label: `${m.label} (${m.param_size})`, hint: m.reasoning_family })),
-      initialValues: cat.models.map((m) => m.id).filter((id) => selectedModelIds.includes(id)),
+        options: available.map((m) => ({ value: m.id, label: m.param_size ? `${m.label} (${m.param_size})` : m.label, hint: m.reasoning_family })),
+        initialValues: available.map((m) => m.id).filter((id) => selectedModelIds.includes(id)),
       required: true,
     });
     if (p.isCancel(sel)) { p.cancel('aborted'); process.exit(0); }
     for (const id of sel as string[]) {
-      const m = cat.models.find((x) => x.id === id)!;
+      const m = available.find((x) => x.id === id)!;
       add(id, {
         preferred_endpoints: [pid],
         param_size: m.param_size,
