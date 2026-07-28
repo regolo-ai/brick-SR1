@@ -1,5 +1,5 @@
 import { load as parseYaml, dump as dumpYaml } from 'js-yaml';
-import { loadConfigRaw } from '../config/load.js';
+import { loadConfigText } from '../config/load.js';
 import { saveConfigText } from '../config/save.js';
 
 export interface EnsureAnthropicPassthroughResult {
@@ -13,7 +13,7 @@ export interface EnsureAnthropicPassthroughResult {
  * transport fields are added.
  */
 export async function ensureAnthropicPassthrough(profile: string): Promise<EnsureAnthropicPassthroughResult> {
-  const source = String(await loadConfigRaw(profile));
+  const source = await loadConfigText(profile);
   const config: any = parseYaml(source) ?? {};
   const before = JSON.stringify(config.anthropic_passthrough ?? null);
   const existing = config.anthropic_passthrough;
