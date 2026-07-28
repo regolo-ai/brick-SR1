@@ -1,0 +1,9 @@
+{
+  "model": "qwen3-coder-next",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.72, 0.34, 0.54, 0.62, 0.66, 0.44],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "medium", "medium", "low"],
+  "notes": "Asymmetric specialist profile for Qwen3-Coder-Next. Coding and tool-oriented planning are the only dimensions allowed above the general mid-tier; creative synthesis and world knowledge are intentionally low because this is not a general-purpose frontier model. Run brick skills extract qwen3-coder-next for a measured profile."
+}

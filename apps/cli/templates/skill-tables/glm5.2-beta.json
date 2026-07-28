@@ -1,0 +1,24 @@
+{
+  "model": "glm5.2-beta",
+  "provider": "regolo",
+  "capabilities": [
+    "coding",
+    "creative_synthesis",
+    "instruction_following",
+    "math_reasoning",
+    "planning_agentic",
+    "world_knowledge"
+  ],
+  "skill_vector": [0.67, 0.61, 0.63, 0.78, 0.62, 0.75],
+  "source": "benchmark",
+  "confidence": [
+    "medium", "low", "low", "medium", "medium", "medium"
+  ],
+  "imputed_capabilities": [
+    "creative_synthesis"
+  ],
+  "support": null,
+  "subset_hash": null,
+  "date": "2026-07-17",
+  "notes": "Weighted multi-source assessment for Z.ai (Zhipu) GLM-5.2 (MoE ~744-753B total/~40B active, MIT, released June 2026), served via Regolo as glm5.2-beta. Revised 2026-07-17 after a dedicated capability-economics review that cross-checked vendor headline numbers against independent leaderboards (vals.ai) rather than taking self-reported figures at face value. coding=0.78: vendor SWE-bench Pro 62.1 (Opus 4.8 69.2, GPT-5.5 58.6) and Terminal-Bench 2.1 81.0-82.7 (near Opus 85.0) look strong, but independent vals.ai shows a much weaker LiveCodeBench rank (77/127, below median) and Terminal-Bench rank (15/43, mediocre) -- the vendor picked the benchmarks where it wins (SWE-bench Pro, Terminal-Bench, FrontierSWE) while pure algorithmic coding is materially weaker; value reflects strong agentic bug-fixing but discounted for the algorithmic-coding gap. creative_synthesis=0.72 (imputed): no direct benchmark; EQ-Bench Creative suggests ~82% of Opus 4.7 quality at much lower cost, but independent reviewers note GLM-5.1->5.2 traded narrative flow for reasoning depth, so held below the mean of the other 5 coordinates rather than using the mechanical average. instruction_following=0.68: no official IFEval; a third-party 5-test comparison found GLM-5.2 less stable than GLM-5.1 on strict format/negation constraints, including a documented failure where reasoning (6839 tokens) saturated the budget and left a negation-constrained answer empty -- a concrete regression, not just absence of data; vals.ai MMLU-Pro rank 28/121 (good, not top-tier). math_reasoning=0.89: genuine strength, AIME 2026 99.2 and IMOAnswerBench 91.0 both lead Opus/GPT-5.5/Gemini per vendor tables, though HMMT is slightly behind Opus/GPT-5.5 and none of these contest-math numbers are independently reproduced -- near-ceiling/saturated benchmarks are also less discriminative. planning_agentic=0.73: bimodal profile -- near-parity with Opus on MCP-Atlas (76.8 vs 77.8) and ahead of GPT-5.5/Gemini on HLE-with-tools (54.7), but a real 20%-relative gap vs Opus/GPT-5.5 on Tool-Decathlon (48.2 vs 59.9/55.6), explicitly flagged by multiple reviewers as the model's weakest area (tool-heavy multi-step chains) -- do not route long tool-chain agentic workloads to this model expecting frontier-closed parity. world_knowledge=0.83: GPQA Diamond 91.2 is near-parity with frontier closed models (93.6-94.3, but the gap is real given the benchmark is near-saturated at the top), while CritPt 16.7 is notably weaker than GPT-5.5 (27.1), and the HLE no-tools comparison in the vendor's own table is misleading (GLM-5.2 is text-only vs full-modal Opus/GPT-5.5, biasing that specific row against it); vals.ai MMLU-Pro rank 28/121 (solid, not top-decile). Economics: Regolo pricing input 2.00 EUR / output 5.20 EUR per 1M tokens, but Artificial Analysis measured ~43k output tokens per complex task (vs 24-35k for comparable open-weight peers), so effective cost-per-task runs higher than the headline per-token price suggests. Sources: https://huggingface.co/blog/zai-org/glm-52-blog, https://www.vals.ai/models/zai_glm-5.2, https://artificialanalysis.ai/models/glm-5-2, https://artificialanalysis.ai/articles/glm-5-2-is-the-new-leading-open-weights-model-on-the-artificial-analysis-intelligence-index, https://emergent.sh/learn/glm-5-2-benchmark, https://aiforanything.io/blog/glm-5-2-review-2026, https://api.treerouter.ai/en/blog/glm-5-2-vs-glm-5-1-benchmark, https://evy.so/compare/best-llms-for-writing/, https://techjacksolutions.com/ai-brief/glm-52-tops-the-artificial-analysis-intelligence-index-for-o/. A `measured` extraction on the frozen probe set overrides this. See README.md."
+}

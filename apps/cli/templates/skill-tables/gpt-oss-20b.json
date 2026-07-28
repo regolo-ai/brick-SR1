@@ -1,0 +1,9 @@
+{
+  "model": "gpt-oss-20b",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.51, 0.40, 0.56, 0.59, 0.47, 0.63],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "medium", "low", "medium"],
+  "notes": "Conservative mid-tier prior for OpenAI gpt-oss-20b. It is suitable for cheap, short, and moderately structured requests, not as a substitute for a frontier reasoning or agentic model. Creative and planning dimensions are deliberately held down. Run brick skills extract gpt-oss-20b for a measured profile."
+}
