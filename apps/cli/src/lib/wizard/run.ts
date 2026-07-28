@@ -463,7 +463,20 @@ async function selectProviderModels(
   let available = cat.models;
   if (pid === 'regolo') {
     const result = await discoverModels(pid, cat.base_url);
-    available = result.models.map((m) => ({ id: m.id, label: m.id, param_size: '', reasoning_family: undefined }));
+    const discovered = result.models.map((m) => ({ id: m.id, label: m.id, param_size: '', reasoning_family: undefined }));
+    const cards = await resolveSkillCards(discovered.map((m) => m.id));
+    const excluded = discovered.filter((m) => !cards.has(m.id));
+    available = discovered.filter((m) => cards.has(m.id));
+    p.note(
+      [
+        'Skill-card precheck: only models with a direct card in the bundled tables, local cache, or the public Hugging Face dataset are shown.',
+        excluded.length
+          ? `${excluded.length} Regolo model(s) are hidden because Brick could not find a matching card.`
+          : 'Every discovered Regolo model has a matching skill-card.',
+        "If you don't see your model, it is not covered by the skill cards yet. Run `brick skills extract <model>` and restart `brick init`.",
+      ].join('\n'),
+      'Regolo model eligibility',
+    );
     if (result.source === 'cache') p.note('Regolo /models unavailable; using the local model catalog cache.', 'models');
   }
   if (available.length === 0) {
