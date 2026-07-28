@@ -85,7 +85,7 @@ export async function editConfigProfile(profile: string, title = `brick config e
 
 async function editSection(cfg: BrickConfig, section: string): Promise<boolean> {
   switch (section) {
-    case 'providers': return await editProviders(cfg);
+    case 'providers': return await editProvidersForConfig(cfg, currentEnvPath);
     case 'models': return await editModels(cfg);
     case 'default_model': return await editDefaultModel(cfg);
     case 'server_port': return await editServerPort(cfg);
@@ -100,7 +100,7 @@ async function editSection(cfg: BrickConfig, section: string): Promise<boolean> 
   }
 }
 
-async function editProviders(cfg: BrickConfig): Promise<boolean> {
+export async function editProvidersForConfig(cfg: BrickConfig, envPath = currentEnvPath): Promise<boolean> {
   const action = await p.select({
     message: 'Providers:',
     options: [
@@ -147,7 +147,7 @@ async function editProviders(cfg: BrickConfig): Promise<boolean> {
     cfg.provider_profiles ??= {} as any;
     (cfg.provider_profiles as any)[id] = { type: 'openai_compatible', base_url: baseUrl };
     if (!cfg.provider_endpoints.find((v) => v.name === id)) cfg.provider_endpoints.push({ name: id, provider_profile: id, weight: 1 });
-    p.note(`provider '${id}' added. remember to put the API key in ${currentEnvPath} (variable ${(catalog[id]?.env_key) ?? `${id.toUpperCase()}_API_KEY`}).`, 'providers');
+    p.note(`provider '${id}' added. remember to put the API key in ${envPath} (variable ${(catalog[id]?.env_key) ?? `${id.toUpperCase()}_API_KEY`}).`, 'providers');
     return true;
   }
 

@@ -33,10 +33,11 @@ export async function runContext(
   enabled: boolean,
   k: number,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);
@@ -60,10 +61,11 @@ export async function runContext(
 export async function runSubagents(
   enabled: boolean,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);
@@ -88,10 +90,11 @@ export async function runModelRouting(
   enabled: boolean,
   fixedModel: string | undefined,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);
@@ -115,10 +118,11 @@ export async function runModelRouting(
 export async function runThinkingRouting(
   enabled: boolean,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);
@@ -152,10 +156,11 @@ const ROUTING_MODE_MESSAGE: Record<RoutingMode, (profile: string) => string> = {
 export async function runRoutingMode(
   mode: RoutingMode,
   exit: (code: number) => never,
+  profileOverride?: string,
 ): Promise<void> {
   let profile: string;
   try {
-    profile = resolveProfile();
+    profile = profileOverride && profileOverride.trim() !== '' ? profileOverride : resolveProfile();
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);

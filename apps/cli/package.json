@@ -1,7 +1,7 @@
 {
   "name": "@regoloai/brick",
   "version": "2.2.6",
-  "description": "Brick — CLI to host the Brick multimodal LLM routing gateway locally (companion to regolo-ai/brick-SR1)",
+  "description": "Brick \u2014 CLI to host the Brick multimodal LLM routing gateway locally (companion to regolo-ai/brick-SR1)",
   "type": "module",
   "license": "Apache-2.0",
   "homepage": "https://github.com/regolo-ai/brick-SR1",
@@ -50,7 +50,7 @@
         "description": "Show or edit the current configuration"
       },
       "claude": {
-        "description": "Inspect Brick ↔ Claude Code wiring (status, routing stats)"
+        "description": "Inspect Brick \u2194 Claude Code wiring (status, routing stats)"
       },
       "claude settings": {
         "description": "Configure Brick Claude: context-awareness and classifier compute"
@@ -59,7 +59,7 @@
         "description": "Routing observability: per-mode event aggregates and promotion-gate signals"
       },
       "codex": {
-        "description": "Inspect Brick ↔ OpenAI Codex wiring (status, routing stats)"
+        "description": "Inspect Brick \u2194 OpenAI Codex wiring (status, routing stats)"
       },
       "codex settings": {
         "description": "Configure Brick Codex: context-awareness, classifier compute, model routing, and thinking routing"
