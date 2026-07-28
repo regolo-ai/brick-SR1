@@ -7,6 +7,7 @@ import { ensureDefaultProfile } from '../../lib/claude/bootstrap.js';
 import { getBaseUrl, setBaseUrl, settingsPath, hasBrickModelOption } from '../../lib/claude/settings.js';
 import { readWiring, writeWiring } from '../../lib/claude/wiring-state.js';
 import { ensureClassifierCompute } from '../../lib/config/regolo-key.js';
+import { ensureAnthropicPassthrough } from '../../lib/claude/anthropic-passthrough.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class ClaudeOn extends Command {
@@ -36,6 +37,7 @@ export default class ClaudeOn extends Command {
 
     let profile: string;
     let justCreated = false;
+    let passthroughChanged = false;
     try {
       profile = resolveProfile(args.profile);
     } catch (e: any) {
@@ -48,6 +50,19 @@ export default class ClaudeOn extends Command {
         err(e?.message ?? String(e));
         this.exit(1);
       }
+    }
+
+    // Claude Code talks to /v1/messages. Materialize/enable the Anthropic
+    // pass-through in the selected profile before loading or starting it.
+    try {
+      const passthrough = await ensureAnthropicPassthrough(profile);
+      passthroughChanged = passthrough.changed;
+      if (passthrough.changed) {
+        ok(`enabled Anthropic pass-through in profile '${profile}'`);
+      }
+    } catch (e: any) {
+      err(`could not update Anthropic pass-through in profile '${profile}': ${e?.message ?? String(e)}`);
+      this.exit(1);
     }
 
     // Fresh default profile ships with the hosted Regolo classifier: make sure
@@ -79,16 +94,30 @@ export default class ClaudeOn extends Command {
         err(e?.message ?? String(e));
         this.exit(1);
       }
+    } else if (passthroughChanged) {
+      // The profile spec changed while the router was already running. Re-run
+      // compose up so the container reloads the newly enabled pass-through.
+      info('profile spec changed — reloading the router');
+      try {
+        const r = await ensureServing(profile);
+        if (!r.healthy) {
+          err(`router did not become healthy on ${localBaseUrl(port)} after reloading the spec. check \`brick logs\`.`);
+          this.exit(1);
+        }
+      } catch (e: any) {
+        err(e?.message ?? String(e));
+        this.exit(1);
+      }
     } else {
       ok(`router healthy on ${localBaseUrl(port)}`);
     }
 
-    // 2. Soft check: Claude Code hits /v1/messages, which needs the Anthropic passthrough.
+    // 2. Verify the pass-through is present after the router has loaded the spec.
     try {
       const rawCfg = (await loadConfigRaw(profile)) as any;
       if (rawCfg?.anthropic_passthrough?.enabled !== true) {
-        warn('anthropic_passthrough is not enabled in this profile — Claude Code uses /v1/messages.');
-        warn('enable it in the profile config.yaml or Claude Code requests will not route.');
+        err('Anthropic pass-through is not enabled after updating the profile spec.');
+        this.exit(1);
       }
     } catch { /* non-blocking */ }
 
