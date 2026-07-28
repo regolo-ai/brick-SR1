@@ -135,6 +135,7 @@ export const SkillRouterModelSchema = z.object({
   // router (unknown yaml field) but surfaced in the config and `brick status`.
   skill_source: z.enum(['benchmark', 'measured', 'heuristic']).optional(),
   skill_confidence: z.array(z.string()).optional(),
+  skill_card_metadata: z.record(z.any()).optional(),
   use_reasoning: z.boolean().optional(),
   reasoning_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   cost_weight: z.number().optional(),
