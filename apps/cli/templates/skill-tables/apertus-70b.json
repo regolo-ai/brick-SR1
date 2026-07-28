@@ -1,0 +1,9 @@
+{
+  "model": "apertus-70b",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.46, 0.40, 0.53, 0.47, 0.42, 0.60],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "low", "low", "medium"],
+  "notes": "Conservative cross-model calibration for Swiss AI Apertus 70B Instruct as served by Regolo. Multilingual knowledge and instruction are the relative strengths; coding, math, and tool-heavy planning remain below the frontier reference models. Values are intentionally discounted where independent real-world evidence is sparse. Run brick skills extract apertus-70b to replace this prior with a measured card."
+}

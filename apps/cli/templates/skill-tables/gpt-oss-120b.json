@@ -1,0 +1,9 @@
+{
+  "model": "gpt-oss-120b",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.64, 0.50, 0.67, 0.73, 0.62, 0.72],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "medium", "medium", "medium"],
+  "notes": "Conservative calibration for OpenAI gpt-oss-120b in reasoning-enabled serving. It is a strong open-weight general model, but remains materially below GPT-5.6 Sol and Claude Fable 5 across the six-dimensional routing space. Creative quality is imputed and tool-agent behavior is separated from headline math scores. Run brick skills extract gpt-oss-120b for a measured profile."
+}

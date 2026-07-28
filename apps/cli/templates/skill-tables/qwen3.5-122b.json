@@ -9,22 +9,10 @@
     "planning_agentic",
     "world_knowledge"
   ],
-  "skill_vector": [
-    0.62,
-    0.48,
-    0.7,
-    0.58,
-    0.66,
-    0.78
-  ],
+  "skill_vector": [0.50, 0.38, 0.57, 0.48, 0.52, 0.68],
   "source": "benchmark",
   "confidence": [
-    "medium",
-    "low",
-    "medium",
-    "low",
-    "medium",
-    "high"
+    "medium", "low", "medium", "low", "low", "medium"
   ],
   "imputed_capabilities": [
     "creative_synthesis"

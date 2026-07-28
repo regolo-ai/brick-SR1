@@ -1,0 +1,9 @@
+{
+  "model": "Llama-3.3-70B-Instruct",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.57, 0.52, 0.63, 0.56, 0.53, 0.69],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "medium", "low", "medium"],
+  "notes": "Conservative calibration for Meta Llama 3.3 70B Instruct as served by Regolo. Knowledge and instruction following are useful strengths; math, coding, and multi-step planning are kept well below the Sol/Fable ceiling. Run brick skills extract Llama-3.3-70B-Instruct for a measured profile."
+}

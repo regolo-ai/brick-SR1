@@ -1,0 +1,9 @@
+{
+  "model": "qwen3.6-27b",
+  "provider": "regolo",
+  "capabilities": ["coding", "creative_synthesis", "instruction_following", "math_reasoning", "planning_agentic", "world_knowledge"],
+  "skill_vector": [0.59, 0.43, 0.62, 0.66, 0.57, 0.69],
+  "source": "benchmark",
+  "confidence": ["medium", "low", "medium", "medium", "low", "medium"],
+  "notes": "Conservative generalist prior for Qwen3.6-27B. It is materially below GPT-5.6 Sol and Claude Fable 5 despite being a capable open model; planning and creative dimensions are discounted relative to its strongest coding/knowledge behavior. Run brick skills extract qwen3.6-27b for a measured profile."
+}

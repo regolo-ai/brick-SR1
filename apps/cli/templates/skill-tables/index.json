@@ -134,6 +134,48 @@
       "provider": "regolo",
       "file": "gemma4-31b.json",
       "source": "benchmark"
+    },
+    {
+      "model": "apertus-70b",
+      "provider": "regolo",
+      "file": "apertus-70b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-oss-120b",
+      "provider": "regolo",
+      "file": "gpt-oss-120b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "gpt-oss-20b",
+      "provider": "regolo",
+      "file": "gpt-oss-20b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "Llama-3.3-70B-Instruct",
+      "provider": "regolo",
+      "file": "Llama-3.3-70B-Instruct.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "qwen3-coder-next",
+      "provider": "regolo",
+      "file": "qwen3-coder-next.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "qwen3.5-9b",
+      "provider": "regolo",
+      "file": "qwen3.5-9b.json",
+      "source": "benchmark"
+    },
+    {
+      "model": "qwen3.6-27b",
+      "provider": "regolo",
+      "file": "qwen3.6-27b.json",
+      "source": "benchmark"
     }
   ]
 }
