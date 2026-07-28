@@ -39,7 +39,12 @@ default_model: claude-sonnet-4-6
 model_config:
   claude-haiku-4-5: { preferred_endpoints: ["regolo"], param_size: "1b" }
   claude-sonnet-4-6: { preferred_endpoints: ["regolo"], param_size: "1b" }
+  # Keep every model in skill_router.models declared here as well. The Go
+  # validator rejects a profile at startup when a pool member is missing from
+  # model_config (this used to break `brick claude on` on fresh devices).
+  claude-sonnet-5: { preferred_endpoints: ["regolo"], param_size: "unknown" }
   claude-opus-4-8: { preferred_endpoints: ["regolo"], param_size: "1b" }
+  claude-fable-5: { preferred_endpoints: ["regolo"], param_size: "unknown" }
 
 # Complexity classifier: hosted on Regolo's OpenAI-compatible API by default
 # (model brick-complexity-pro). No local GPU/sidecar needed; the router expands
