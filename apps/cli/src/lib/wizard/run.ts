@@ -7,7 +7,6 @@ import { saveConfig } from '../config/save.js';
 import { ConfigSchema, type BrickConfig } from '../config/schema.js';
 import { catalog, reasoningFamiliesDefault } from '../catalog/index.js';
 import { writeCompose } from '../docker/compose.js';
-import { lookupSkillRecord } from '../skills/table.js';
 import { resolveSkillCards } from '../skills/resolver.js';
 import { discoverModels } from '../catalog/discovery.js';
 import { REGOLO_CLASSIFIER_URL, REGOLO_CLASSIFIER_MODEL, REGOLO_API_KEY_ENV } from '../claude/settings-apply.js';
@@ -289,25 +288,13 @@ const CAPABILITIES = [
   'world_knowledge',
 ];
 
-const KNOWN_SKILL_VECTORS: Record<string, number[]> = {
-  'qwen3.5-9b': [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876],
-  'deepseek-v4-flash': [0.820939, 0.657845, 0.863112, 0.934963, 0.62055, 0.488518],
-  'kimi2.6': [0.904272, 0.751595, 0.87018, 0.943892, 0.641863, 0.344074],
-};
-
-// Normalized model costs a_m from the paper (Table 7). cost_weight enters the
-// routing objective J_m = D_m + beta * a_m, so for the calibrated pool it must
-// match the values the math was locked against. Unknown models fall back to a
-// rank-based proxy.
+// Unknown models are ranked by their position in the selected pool. Their
+// skill vector still must come from a resolved skill-card; no onboarding path
+// invents a vector.
 const KNOWN_COST_WEIGHTS: Record<string, number> = {
-  'qwen3.5-9b': 0.1,
-  'deepseek-v4-flash': 0.4,
-  'kimi2.6': 0.6,
-  // Anthropic Claude pool (relative cost, opus highest).
   'claude-haiku-4-5': 0.1,
   'claude-sonnet-4-6': 0.4,
   'claude-opus-4-8': 1.0,
-  // OpenAI / Codex pool.
   'gpt-5.4-mini': 0.1,
   'o3-mini': 0.2,
   'gpt-5.4': 0.5,
@@ -329,25 +316,10 @@ async function buildSkillRouter(
     p.note(`${excluded} model(s) excluded from the skill-router pool because no skill-card is available. Run \`brick skills extract <model>\`.`, 'skill cards');
   }
   const models = eligibleIds.map((id, idx) => {
-    // Prefer a published skill vector (measured > benchmark) from the public
-    // table; fall back to the legacy hardcoded set, then to a heuristic. The
-    // chosen provenance is recorded so the user knows how trustworthy it is.
-    const published = cards.get(id) ?? lookupSkillRecord(id);
-    let skill_vector: number[];
-    let skill_source: 'benchmark' | 'measured' | 'heuristic';
-    let skill_confidence: string[] | undefined;
-    if (published) {
-      skill_vector = published.skill_vector;
-      skill_source = published.source;
-      skill_confidence = published.confidence;
-    } else if (KNOWN_SKILL_VECTORS[id]) {
-      skill_vector = KNOWN_SKILL_VECTORS[id];
-      skill_source = 'measured';
-    } else {
-      // Never create heuristic vectors during new onboarding.
-      skill_vector = KNOWN_SKILL_VECTORS[id] ?? [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
-      skill_source = KNOWN_SKILL_VECTORS[id] ? 'measured' : 'benchmark';
-    }
+    const published = cards.get(id)!;
+    const skill_vector = published.skill_vector;
+    const skill_source = published.source;
+    const skill_confidence = published.confidence;
     return {
       model: id,
       skill_vector,
@@ -362,8 +334,7 @@ async function buildSkillRouter(
           notes: published.notes,
         },
       } : {}),
-      use_reasoning: id === 'kimi2.6' ? true : false,
-      ...(id === 'kimi2.6' ? { reasoning_effort: 'medium' } : {}),
+      use_reasoning: false,
       cost_weight: KNOWN_COST_WEIGHTS[id] ?? Number(((idx + 1) / Math.max(1, modelIds.length)).toFixed(2)),
       // Native multimodal flags: when set, the brick gateway forwards the raw
       // image/audio to this model instead of OCR/STT-flattening it to text.
