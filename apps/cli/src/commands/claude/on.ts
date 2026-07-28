@@ -1,4 +1,4 @@
-import { Command, Flags } from '@oclif/core';
+import { Args, Command, Flags } from '@oclif/core';
 import { resolveProfile, listProfiles } from '../../lib/config/paths.js';
 import { loadConfig, loadConfigRaw } from '../../lib/config/load.js';
 import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
@@ -11,27 +11,35 @@ import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
 export default class ClaudeOn extends Command {
   static description =
-    'Wire Claude Code through the local Brick router (sets ANTHROPIC_BASE_URL in ~/.claude/settings.json). Auto-starts the router if it is down.';
+    'Wire Claude Code through a named Brick profile (sets ANTHROPIC_BASE_URL in ~/.claude/settings.json). Auto-starts the router if it is down.';
 
   static examples = [
     '<%= config.bin %> claude on',
-    '<%= config.bin %> claude on --no-start',
+    '<%= config.bin %> claude on my-profile',
+    '<%= config.bin %> claude on my-profile --no-start',
   ];
+
+  static args = {
+    profile: Args.string({
+      required: false,
+      description: 'profile name (defaults to BRICK_PROFILE, then the active profile)',
+    }),
+  };
 
   static flags = {
     'no-start': Flags.boolean({ description: 'do not auto-start the router; fail if it is not already healthy' }),
   };
 
   async run(): Promise<void> {
-    const { flags } = await this.parse(ClaudeOn);
+    const { args, flags } = await this.parse(ClaudeOn);
     banner();
 
     let profile: string;
     let justCreated = false;
     try {
-      profile = resolveProfile();
+      profile = resolveProfile(args.profile);
     } catch (e: any) {
-      if (listProfiles().length === 0) {
+      if (!args.profile && listProfiles().length === 0) {
         // Brand-new user: materialize a ready-to-serve default Claude profile.
         profile = await ensureDefaultProfile();
         justCreated = true;
