@@ -1,4 +1,4 @@
-import { Command } from '@oclif/core';
+import { Args, Command } from '@oclif/core';
 import * as p from '@clack/prompts';
 import yaml from 'js-yaml';
 import { resolveProfile, paths } from '../../../lib/config/paths.js';
@@ -11,6 +11,7 @@ import { runModelsPoolWizard } from '../../../lib/wizard/steps/models-pool.js';
 import { LOCAL_DISCLAIMER, REGOLO_API_KEY_HELP, DEFAULT_CONTEXT_K, REGOLO_API_KEY_ENV } from '../../../lib/claude/settings-apply.js';
 import { banner, err, ok } from '../../../lib/ui/banners.js';
 import { ConfigSchema, type BrickConfig } from '../../../lib/config/schema.js';
+import { editProvidersForConfig } from '../../config/edit.js';
 
 /** Models offered when model routing is off and a fixed model must be picked. */
 const FIXED_MODEL_OPTIONS = [
@@ -23,16 +24,21 @@ export default class ClaudeSettings extends Command {
   static description =
     'Brick Claude settings: context-awareness, classifier compute location, and subagent routing.';
 
-  static examples = ['<%= config.bin %> claude settings'];
+  static examples = ['<%= config.bin %> claude settings', '<%= config.bin %> claude settings PROFILE_NAME'];
+
+  static args = {
+    profile: Args.string({ required: false, description: 'profile name (defaults to active profile)' }),
+  };
 
   async run(): Promise<void> {
+    const { args } = await this.parse(ClaudeSettings);
     // Left arrow cancels the active prompt; since every submenu treats a
     // cancel as "go back" (continue), pressing left returns to the main menu.
     p.updateSettings({ aliases: { left: 'cancel' } });
     banner();
     let profile: string;
     try {
-      profile = resolveProfile();
+      profile = resolveProfile(args.profile);
     } catch (e: any) {
       err(e?.message ?? String(e));
       this.exit(1);
@@ -85,6 +91,7 @@ export default class ClaudeSettings extends Command {
       const section = await p.select({
         message: `Brick Claude settings  (profile: ${profile})`,
         options: [
+          { value: 'providers', label: 'Providers', hint: 'add/remove provider endpoints for this profile' },
           { value: 'models', label: `Models: ${poolLabel}`, hint: 'pool di modelli Claude e thinking modes per modello' },
           { value: 'context', label: `Context-awareness: ${ctxLabel}`, hint: 'classify on recent turns' },
           { value: 'compute', label: `Compute: ${computeLabel}`, hint: 'local vs API classifier' },
@@ -123,7 +130,7 @@ export default class ClaudeSettings extends Command {
           if (p.isCancel(kv)) continue;
           k = Number(kv);
         }
-        await runContext(onoff === 'on', k, (c) => process.exit(c));
+        await runContext(onoff === 'on', k, (c) => process.exit(c), profile);
       } else if (section === 'compute') {
         const cm = await p.select({
           message: 'Classifier compute',
@@ -136,7 +143,7 @@ export default class ClaudeSettings extends Command {
         if (p.isCancel(cm)) continue;
         if (cm === 'local') {
           p.note(LOCAL_DISCLAIMER, 'Local inference');
-          await runCompute('local', undefined, (c) => process.exit(c));
+          await runCompute('local', undefined, (c) => process.exit(c), profile);
         } else {
           // Regolo hosted classifier. Se la chiave e' gia' nel .env del profilo
           // non richiederla di nuovo: se il compute e' gia' su API non c'e' nulla
@@ -148,12 +155,12 @@ export default class ClaudeSettings extends Command {
               ok('Regolo API key already set; compute is on API.');
               continue;
             }
-            await runCompute('api', undefined, (c) => process.exit(c));
+            await runCompute('api', undefined, (c) => process.exit(c), profile);
           } else {
             p.note(REGOLO_API_KEY_HELP, 'Regolo API key');
             const token = await p.password({ message: 'Regolo API key' });
             if (p.isCancel(token)) continue;
-            await runCompute('api', { token: String(token ?? '') }, (c) => process.exit(c));
+            await runCompute('api', { token: String(token ?? '') }, (c) => process.exit(c), profile);
           }
         }
       } else if (section === 'subagents') {
@@ -166,7 +173,7 @@ export default class ClaudeSettings extends Command {
           initialValue: subagentsOn ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
-        await runSubagents(onoff === 'on', (c) => process.exit(c));
+        await runSubagents(onoff === 'on', (c) => process.exit(c), profile);
       } else if (section === 'modelrouting') {
         const onoff = await p.select({
           message: 'Model routing',
@@ -186,9 +193,9 @@ export default class ClaudeSettings extends Command {
             initialValue: fixedModel,
           });
           if (p.isCancel(picked)) continue;
-          await runModelRouting(false, String(picked), (c) => process.exit(c));
+          await runModelRouting(false, String(picked), (c) => process.exit(c), profile);
         } else {
-          await runModelRouting(true, undefined, (c) => process.exit(c));
+          await runModelRouting(true, undefined, (c) => process.exit(c), profile);
         }
       } else if (section === 'thinkingrouting') {
         const onoff = await p.select({
@@ -200,7 +207,7 @@ export default class ClaudeSettings extends Command {
           initialValue: thinkingRoutingOn ? 'on' : 'off',
         });
         if (p.isCancel(onoff)) continue;
-        await runThinkingRouting(onoff === 'on', (c) => process.exit(c));
+        await runThinkingRouting(onoff === 'on', (c) => process.exit(c), profile);
       } else if (section === 'routingmode') {
         const picked = await p.select({
           message: 'Cache-aware routing mode',
@@ -213,7 +220,28 @@ export default class ClaudeSettings extends Command {
           initialValue: routingMode,
         });
         if (p.isCancel(picked)) continue;
-        await runRoutingMode(picked as 'off' | 'sticky' | 'smartsqueeze' | 'orchestrator', (c) => process.exit(c));
+        await runRoutingMode(picked as 'off' | 'sticky' | 'smartsqueeze' | 'orchestrator', (c) => process.exit(c), profile);
+      } else if (section === 'providers') {
+        let cfgForProviders: BrickConfig;
+        try {
+          // Validate the profile, but keep the raw object for the write so
+          // Claude-only keys (anthropic_passthrough) are not stripped.
+          const rawForProviders = yaml.load(await loadConfigText(profile)) ?? {};
+          ConfigSchema.parse(rawForProviders);
+          cfgForProviders = rawForProviders as BrickConfig;
+        } catch (e: any) {
+          err(`cannot load config: ${e?.message ?? e}`);
+          continue;
+        }
+        const changed = await editProvidersForConfig(cfgForProviders, paths(profile).env);
+        if (changed) {
+          try {
+            await saveConfigText(yaml.dump(cfgForProviders, { lineWidth: 120, noRefs: true, sortKeys: false }), profile);
+            p.note('providers saved.', 'providers');
+          } catch (e: any) {
+            err(`save failed: ${e?.message ?? e}`);
+          }
+        }
       } else if (section === 'models') {
         // Wizard: seleziona pool modelli Claude + thinking modes per modello.
         // Carica il raw YAML come oggetto, modifica in-place, risalva.
@@ -240,7 +268,7 @@ export default class ClaudeSettings extends Command {
           initialValue: fixedModel,
         });
         if (p.isCancel(picked)) continue;
-        await runModelRouting(false, String(picked), (c) => process.exit(c));
+        await runModelRouting(false, String(picked), (c) => process.exit(c), profile);
       }
     }
   }
