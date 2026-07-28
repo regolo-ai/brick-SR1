@@ -13,10 +13,10 @@
     "apps/cli"
   ],
   "scripts": {
-    "build:cli": "npm run --workspace=@regolo-ai/brick build",
-    "test:cli": "npm run --workspace=@regolo-ai/brick test",
-    "lint:cli": "npm run --workspace=@regolo-ai/brick lint",
-    "version:cli": "npm view --workspace=@regolo-ai/brick"
+    "build:cli": "npm run --workspace=@regoloai/brick build",
+    "test:cli": "npm run --workspace=@regoloai/brick test",
+    "lint:cli": "npm run --workspace=@regoloai/brick lint",
+    "version:cli": "npm view --workspace=@regoloai/brick"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -1,4 +1,4 @@
-# `apps/cli/`: `brick` CLI (`@regolo-ai/brick`)
+# `apps/cli/`: `brick` CLI (`@regoloai/brick`)
 
 TypeScript / oclif / ink companion CLI that self-hosts the Brick router and wires it into
 **Claude Code** and **OpenAI Codex** with one command each.
@@ -99,7 +99,7 @@ After build, the CLI is invocable as `./bin/run.js`.
 
 ## Publishing
 
-The package is scoped (`@regolo-ai/brick`) and published with `--access public`. CI handles publishing on tag `v*` (see `.github/workflows/npm-publish.yml`), installing from the repo-root `package-lock.json` (npm workspaces) rather than a per-package lockfile.
+The package is scoped (`@regoloai/brick`) and published with `--access public`. CI handles publishing on tag `v*` (see `.github/workflows/npm-publish.yml`), installing from the repo-root `package-lock.json` (npm workspaces) rather than a per-package lockfile.
 
 Local dry-run:
 

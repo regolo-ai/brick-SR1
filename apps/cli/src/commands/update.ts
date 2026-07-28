@@ -14,7 +14,7 @@ import { localBaseUrl } from '../lib/net/local.js';
 import { loadConfig } from '../lib/config/load.js';
 import { banner, ok, warn, err, info, print, header } from '../lib/ui/banners.js';
 
-const NPM_PKG = '@regolo-ai/brick';
+const NPM_PKG = '@regoloai/brick';
 
 /**
  * `brick update` refreshes Brick along its two independent axes:

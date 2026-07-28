@@ -1,4 +1,4 @@
-name: npm publish (@regolo-ai/brick)
+name: npm publish (@regoloai/brick)
 
 on:
   push:

@@ -519,7 +519,7 @@ brick-SR1/
 │   │   ├── ml-binding/         #   Rust (Linfa classical ML)
 │   │   ├── nlp-binding/        #   Rust (BM25 + n-gram)
 │   │   └── Dockerfile
-│   └── cli/                    # @regolo-ai/brick CLI (TypeScript + oclif + ink)
+│   └── cli/                    # @regoloai/brick CLI (TypeScript + oclif + ink)
 ├── packages/
 │   ├── training/               # Dataset B pipeline + ModernBERT/complexity training
 │   ├── evals/                  # Dataset A graders + 00..140 pipeline + baselines/
@@ -555,7 +555,7 @@ Per-component docs: [router](apps/router/README.md) · [CLI](apps/cli/README.md)
 |---|---|
 | Source clone + `npm link` | available |
 | Docker Hub (`docker.io/regolo/brick`) | available (tag `v2.2.0`) |
-| npm (`@regolo-ai/brick`) | pending `NPM_TOKEN` secret |
+| npm (`@regoloai/brick`) | Trusted Publishing via GitHub Actions |
 
 </details>
 
