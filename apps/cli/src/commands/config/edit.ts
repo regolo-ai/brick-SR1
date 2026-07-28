@@ -24,6 +24,14 @@ export default class ConfigEdit extends Command {
   async run(): Promise<void> {
     const { args } = await this.parse(ConfigEdit);
     const profile = resolveProfile(args.profile);
+    await editConfigProfile(profile, `brick config edit (profile: ${profile})`);
+  }
+}
+
+/** Run the generic YAML editor for a resolved profile. Kept separate so the
+ * top-level `brick settings <profile>` command can expose the same editor
+ * without pretending to be a Claude or Codex settings surface. */
+export async function editConfigProfile(profile: string, title = `brick config edit (profile: ${profile})`): Promise<void> {
     const pp = paths(profile);
     let cfg: BrickConfig;
     let raw: any;
@@ -32,12 +40,11 @@ export default class ConfigEdit extends Command {
       raw = yaml.load(text);
       cfg = ConfigSchema.parse(raw);
     } catch (e: any) {
-      err(`cannot load ${pp.config}: ${e?.message ?? e}`);
-      this.exit(1);
+      throw new Error(`cannot load ${pp.config}: ${e?.message ?? e}`);
     }
 
     currentEnvPath = pp.env;
-    p.intro(`brick config edit (profile: ${profile})`);
+    p.intro(title);
     let dirty = false;
 
     while (true) {
@@ -74,7 +81,6 @@ export default class ConfigEdit extends Command {
       const changed = await editSection(cfg, sec as string);
       if (changed) dirty = true;
     }
-  }
 }
 
 async function editSection(cfg: BrickConfig, section: string): Promise<boolean> {
