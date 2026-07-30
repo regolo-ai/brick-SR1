@@ -192,10 +192,30 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
 	if isSSE {
-		s.streamSSEResponse(w, upstreamResp, modelMask, result.Model)
+		usage := s.streamSSEResponse(w, upstreamResp, modelMask, result.Model)
+		s.recordOpenAIStickyResult(result, usage, upstreamResp.StatusCode)
 	} else {
-		s.forwardNonStreamingResponse(w, upstreamResp, modelMask, result.Model)
+		usage := s.forwardNonStreamingResponse(w, upstreamResp, modelMask, result.Model)
+		s.recordOpenAIStickyResult(result, usage, upstreamResp.StatusCode)
 	}
+}
+
+// recordOpenAIStickyResult updates the cache-aware conversation state after a
+// successful OpenAI-compatible response. OpenAI usage does not expose separate
+// cache-read/write counters, so prompt_tokens is the best available estimate of
+// the prefix that would need to be reprocessed after a model switch.
+func (s *Server) recordOpenAIStickyResult(result *RoutingResult, usage openAIUsage, statusCode int) {
+	if s.stickyStore == nil || result == nil || result.StickyKey == "" ||
+		statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		return
+	}
+	s.stickyStore.Record(
+		result.StickyKey,
+		result.Model,
+		usage.PromptTokens,
+		result.Compacted,
+		time.Now(),
+	)
 }
 
 // streamSSEResponse streams an SSE response from the backend to the client.
@@ -204,7 +224,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 // rewritten to hide the real backend model name. The model argument (the real
 // selected model) is used only to attribute token usage to the economics
 // store; it never alters what is streamed to the client.
-func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
+func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) openAIUsage {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -224,7 +244,7 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		logging.Errorf("ResponseWriter does not support Flusher interface")
-		return
+		return openAIUsage{}
 	}
 
 	// Track the last usage seen across chunks; some backends emit usage in a
@@ -257,13 +277,14 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 	}
 
 	s.recordEconomicsUsage(model, lastUsage.PromptTokens, 0, 0, lastUsage.CompletionTokens)
+	return lastUsage
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
 // When maskModel is non-empty, the "model" field in the JSON response is rewritten.
 // The model argument (the real selected model) is used only to attribute token
 // usage to the economics store; it never alters the forwarded body.
-func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
+func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) openAIUsage {
 	// Copy response headers (except Content-Length, which may change after rewrite)
 	for key, values := range upstreamResp.Header {
 		if maskModel != "" && strings.EqualFold(key, "Content-Length") {
@@ -279,7 +300,7 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	if err != nil {
 		logging.Errorf("Error reading upstream response body: %v", err)
 		w.WriteHeader(upstreamResp.StatusCode)
-		return
+		return openAIUsage{}
 	}
 
 	// Observe usage as a side-channel before any rewriting; never blocks or
@@ -297,6 +318,7 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	if _, err := w.Write(bodyBytes); err != nil {
 		logging.Errorf("Error writing response body to client: %v", err)
 	}
+	return env.Usage
 }
 
 // rewriteModelInResponseBody replaces the "model" field in a JSON body with newModel.

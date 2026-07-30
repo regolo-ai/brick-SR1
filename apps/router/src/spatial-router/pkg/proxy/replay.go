@@ -51,7 +51,7 @@ type ReplayModeSummary struct {
 	// Turns is every routed event in this mode; PricedTurns is the subset that
 	// carried the enriched per-turn token breakdown and both models' prices, i.e.
 	// the turns the net-total comparison could actually run on.
-	Turns      int `json:"turns"`
+	Turns       int `json:"turns"`
 	PricedTurns int `json:"priced_turns"`
 	// HeldTurns is turns where sticky served a different (warmer) model than the
 	// candidate — the only turns where the two branches diverge. On a held turn

@@ -27,6 +27,8 @@ type RoutingResult struct {
 	RemoveHeaders   []string          // headers to strip before forwarding
 	IsStreaming     bool              // whether the original request has stream=true
 	Model           string            // selected model name, used for economics tracking
+	StickyKey       string            // conversation identity for cache-aware routing bookkeeping
+	Compacted       bool              // whether this turn served a compacted prompt
 }
 
 // ProviderInfo holds provider details resolved during routing.

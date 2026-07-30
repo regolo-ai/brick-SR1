@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
@@ -35,12 +37,51 @@ func (s *Server) applyStickyRouting(
 	candidateModel string,
 	candidateUnder float64,
 ) (stickyKey, model string, under, switchDelta float64) {
+	return s.applyStickyRoutingWithIdentity(
+		body,
+		route,
+		candidateModel,
+		candidateUnder,
+		apCfg.EffectiveStickyScoreMargin(),
+		extractAnthropicIdentityParts,
+	)
+}
+
+// applyBrickStickyRouting is the OpenAI/Codex counterpart of
+// applyStickyRouting. Codex requests reach the Brick handler as Chat
+// Completions bodies, so conversation identity comes from the first system and
+// user messages rather than Anthropic's top-level system field.
+func (s *Server) applyBrickStickyRouting(
+	brickCfg *config.BrickConfig,
+	body []byte,
+	route *brickrouting.Result,
+	candidateModel string,
+	candidateUnder float64,
+) (stickyKey, model string, under, switchDelta float64) {
+	return s.applyStickyRoutingWithIdentity(
+		body,
+		route,
+		candidateModel,
+		candidateUnder,
+		brickCfg.EffectiveStickyScoreMargin(),
+		extractOpenAIIdentityParts,
+	)
+}
+
+func (s *Server) applyStickyRoutingWithIdentity(
+	body []byte,
+	route *brickrouting.Result,
+	candidateModel string,
+	candidateUnder float64,
+	scoreMargin float64,
+	identityParts func([]byte) (system, firstUser string),
+) (stickyKey, model string, under, switchDelta float64) {
 	model, under = candidateModel, candidateUnder
 	if s.stickyStore == nil || route == nil {
 		return "", model, under, 0
 	}
 
-	system, firstUser := extractAnthropicIdentityParts(body)
+	system, firstUser := identityParts(body)
 	if system == "" && firstUser == "" {
 		// No stable prefix to key on: cannot participate in sticky routing.
 		logging.Debugf("sticky: identity_miss reason=empty_prompt candidate=%s", candidateModel)
@@ -79,7 +120,7 @@ func (s *Server) applyStickyRouting(
 		CandInputPrice:    candPrice.InputPrice,
 		CacheWriteMult:    cacheWriteInputPriceMultiplier,
 		CacheReadMult:     cacheReadInputPriceMultiplier,
-		ScoreMargin:       apCfg.EffectiveStickyScoreMargin(),
+		ScoreMargin:       scoreMargin,
 	}
 	final, switched, reason := sticky.DecideModel(in)
 	// SwitchDeltaUSD is the prefix-reprocessing cost a hold avoids (per-1M-token
@@ -95,6 +136,30 @@ func (s *Server) applyStickyRouting(
 		reason, prev.LastModel, candidateModel, final, switched, prev.LastContextTokens, switchDelta, in.ScoreMargin)
 
 	return key, model, under, switchDelta
+}
+
+func extractOpenAIIdentityParts(body []byte) (system, firstUser string) {
+	var raw struct {
+		Messages []openAIMessageForRouting `json:"messages"`
+	}
+	if json.Unmarshal(body, &raw) != nil {
+		return "", ""
+	}
+	for _, msg := range raw.Messages {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		text := strings.TrimSpace(openAIContentText(msg.Content))
+		switch role {
+		case "system":
+			if system == "" {
+				system = text
+			}
+		case "user":
+			if firstUser == "" && text != "" {
+				firstUser = text
+			}
+		}
+	}
+	return system, firstUser
 }
 
 // anthropicSessionKey derives the stable conversation identity (system prompt +

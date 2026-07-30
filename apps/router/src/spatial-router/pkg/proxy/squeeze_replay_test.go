@@ -98,10 +98,10 @@ func TestSqueezeReplayOne_ShortConversationUnchanged(t *testing.T) {
 // transcriptMessage is the minimal shape we read from a Claude Code transcript
 // line: the nested message with its role and polymorphic content.
 type transcriptLine struct {
-	Type       string `json:"type"`
-	IsMeta     bool   `json:"isMeta"`
-	IsSidechain bool  `json:"isSidechain"`
-	Message    *struct {
+	Type        string `json:"type"`
+	IsMeta      bool   `json:"isMeta"`
+	IsSidechain bool   `json:"isSidechain"`
+	Message     *struct {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`

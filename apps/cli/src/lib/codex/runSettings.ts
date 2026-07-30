@@ -108,7 +108,7 @@ export async function runCodexRoutingMode(
     const labels: Record<CodexRoutingMode, string> = {
       off: 'OFF (per-request)',
       sticky: 'STICKY (cache-aware)',
-      smartsqueeze: 'SMARTSQUEEZE (cache-aware + compaction)',
+      smartsqueeze: 'SMARTSQUEEZE (cache-aware)',
       orchestrator: 'ORCHESTRATOR (shadow)',
     };
     ok(`Codex cache-aware routing ${labels[mode]} for profile '${profile}'.`);

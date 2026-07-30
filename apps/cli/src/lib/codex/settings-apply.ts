@@ -89,20 +89,26 @@ export async function applyCodexRoutingMode(
   mode: CodexRoutingMode,
 ): Promise<SettingsApplyResult> {
   const obj = loadObj(await loadConfigText(profile), profile);
+  const changed = applyCodexRoutingModeToConfig(obj, mode);
+  return saveAndRestart(obj, profile, changed);
+}
+
+export function applyCodexRoutingModeToConfig(obj: any, mode: CodexRoutingMode): boolean {
   const brick = ensureBrick(obj);
   const current: CodexRoutingMode =
+    brick.routing_mode === 'off' ||
     brick.routing_mode === 'sticky' ||
     brick.routing_mode === 'smartsqueeze' ||
     brick.routing_mode === 'orchestrator'
       ? brick.routing_mode
-      : 'off';
+      : 'smartsqueeze';
   const changed = current !== mode;
   if (changed) {
     // Keep an explicit "off": an absent key means the Codex default
     // (smartsqueeze), so deleting it would make it impossible to opt out.
     brick.routing_mode = mode;
   }
-  return saveAndRestart(obj, profile, changed);
+  return changed;
 }
 
 export async function applyCodexModelRouting(

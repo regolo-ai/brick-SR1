@@ -128,6 +128,32 @@ func TestBrickConfigGetOCRMinTextLen(t *testing.T) {
 	})
 }
 
+func TestBrickConfigCacheAwareDefaults(t *testing.T) {
+	cfg := &BrickConfig{}
+	if got := cfg.EffectiveRoutingMode(); got != RoutingModeSmartSqueeze {
+		t.Errorf("EffectiveRoutingMode() = %q, want %q", got, RoutingModeSmartSqueeze)
+	}
+	if got := cfg.EffectiveStickyTTLSeconds(); got != 1800 {
+		t.Errorf("EffectiveStickyTTLSeconds() = %d, want 1800", got)
+	}
+	if got := cfg.EffectiveStickyScoreMargin(); got != 0.15 {
+		t.Errorf("EffectiveStickyScoreMargin() = %v, want 0.15", got)
+	}
+
+	cfg.RoutingMode = RoutingModeOff
+	cfg.StickyTTLSeconds = 900
+	cfg.StickyScoreMargin = 0.25
+	if got := cfg.EffectiveRoutingMode(); got != RoutingModeOff {
+		t.Errorf("configured EffectiveRoutingMode() = %q, want %q", got, RoutingModeOff)
+	}
+	if got := cfg.EffectiveStickyTTLSeconds(); got != 900 {
+		t.Errorf("configured EffectiveStickyTTLSeconds() = %d, want 900", got)
+	}
+	if got := cfg.EffectiveStickyScoreMargin(); got != 0.25 {
+		t.Errorf("configured EffectiveStickyScoreMargin() = %v, want 0.25", got)
+	}
+}
+
 func TestGetAutoModelNames(t *testing.T) {
 	t.Run("without brick", func(t *testing.T) {
 		cfg := &RouterConfig{

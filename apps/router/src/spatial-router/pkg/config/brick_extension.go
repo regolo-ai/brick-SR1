@@ -117,12 +117,13 @@ func (b *BrickConfig) EffectiveRoutingMode() string {
 	}
 }
 
-// EffectiveStickyTTLSeconds returns the configured sticky-entry TTL or 360s.
+// EffectiveStickyTTLSeconds returns the configured sticky-entry TTL or 1800s,
+// matching GPT-5.6's 30-minute minimum prompt-cache lifetime.
 func (b *BrickConfig) EffectiveStickyTTLSeconds() int {
 	if b.StickyTTLSeconds > 0 {
 		return b.StickyTTLSeconds
 	}
-	return 360
+	return 1800
 }
 
 // EffectiveStickyScoreMargin returns the configured switch margin or 0.15.

@@ -37,7 +37,7 @@ export default class CodexSettingsShow extends Command {
       rm === 'sticky' ? 'sticky (cache-aware)' :
       rm === 'orchestrator' ? 'orchestrator (shadow)' :
       rm === 'off' ? 'off (per-request)' :
-      'smartsqueeze (cache-aware + compaction)';
+      'smartsqueeze (cache-aware)';
     const cs = obj?.complexity_service ?? {};
     const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost|classifier/.test(cs.base_url);
     const compute = wiring?.computeMode ?? (isRemote ? 'api' : 'local');

@@ -87,7 +87,7 @@ export default class CodexSettings extends Command {
       const routingModeLabel =
         routingMode === 'sticky' ? 'sticky (cache-aware)' :
         routingMode === 'orchestrator' ? 'orchestrator (shadow)' :
-        routingMode === 'smartsqueeze' ? 'smartsqueeze (cache-aware + compaction)' : 'off (per-request)';
+        routingMode === 'smartsqueeze' ? 'smartsqueeze (cache-aware)' : 'off (per-request)';
       const poolModels = fixedModelOptions(obj).map((m) => m.value);
       const poolLabel = poolModels.length > 0 ? poolModels.join(', ') : '(empty)';
 
@@ -196,7 +196,7 @@ export default class CodexSettings extends Command {
         const picked = await p.select({
           message: 'Cache-aware routing mode',
           options: [
-            { value: 'smartsqueeze', label: 'Smartsqueeze', hint: 'sticky + compact context on a model switch' },
+            { value: 'smartsqueeze', label: 'Smartsqueeze', hint: 'cache-aware model continuity for Codex' },
             { value: 'sticky', label: 'Sticky', hint: 'cache-aware hysteresis without compaction' },
             { value: 'off', label: 'Off', hint: 'per-request routing' },
             { value: 'orchestrator', label: 'Orchestrator (shadow)', hint: 'computed for evaluation, not served' },
