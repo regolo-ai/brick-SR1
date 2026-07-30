@@ -118,3 +118,11 @@
   source_url: https://regolo.ai/pricing/
   source: static_curated
   fetched_at: '2026-07-03T10:35:10Z'
+- provider: regolo
+  model: glm5.2-beta
+  input_price: 2.0
+  output_price: 5.2
+  currency: EUR
+  source_url: https://regolo.ai/pricing/
+  source: static_curated
+  fetched_at: '2026-07-17T00:00:00Z'
