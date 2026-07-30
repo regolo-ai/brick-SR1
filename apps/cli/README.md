@@ -5,7 +5,14 @@ TypeScript / oclif / ink companion CLI that self-hosts the Brick router and wire
 
 ## Install
 
-The npm package is not yet published (see the root [Distribution channels](../../README.md#distribution-channels-work-in-progress)). Install from source:
+Install the published CLI:
+
+```bash
+npm install -g @regoloai/brick
+brick --version
+```
+
+For development from source:
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1.git
@@ -42,7 +49,13 @@ Full walkthrough: [Brick + Claude Code](../../README.md#-brick--claude-code) in 
 | `brick codex on` / `brick codex off` | Same wiring pattern as `claude on/off`, for Codex |
 | `brick codex mode` / `brick codex eco\|lite\|mid\|pro\|max` | Routing mode picker / direct set |
 | `brick codex status [--once]` | Live dashboard for Codex routing |
+| `brick codex settings` | Interactive Codex settings menu |
 | `brick codex settings show\|context\|compute\|model-routing\|models\|thinking` | Codex-specific context-awareness, classifier compute, model pool, and thinking-budget routing |
+| `brick codex settings mode off\|sticky\|smartsqueeze\|orchestrator` | Configure cache-aware multi-turn routing |
+
+Codex profiles default to the last 8 conversation turns for classification and
+Smartsqueeze for cache-aware model continuity. Tool-result compaction is currently
+served only on the Claude/Anthropic path.
 
 ### Router / general
 

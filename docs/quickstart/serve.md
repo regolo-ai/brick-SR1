@@ -4,25 +4,25 @@ Goal: install `@regolo-ai/brick` from npm, run a guided init, start the gateway,
 
 ## Prerequisites
 
-- Node.js ≥ 18 (`node --version`).
+- Node.js 20 or ≥ 22 (`node --version`).
 - Docker running (the CLI orchestrates Docker compose under the hood).
 - A `REGOLO_API_KEY` (or set up your own providers during `brick init`).
 
 ## Install
 
-Build from source (the npm package is not yet published):
+Install from npm:
+
+```bash
+npm install -g @regoloai/brick
+brick --version
+```
+
+For development from source:
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
 cd apps/cli && npm install && npm run build
-npm link                # exposes `brick` globally
-brick --version
-```
-
-Once published (at the next `v2.1.0` tag), the one-line install will be:
-
-```bash
-npm install -g @regolo-ai/brick
+npm link
 ```
 
 ## Init a profile
@@ -113,7 +113,7 @@ brick down                    # docker compose down (container removed)
 Set `BRICK_IMAGE` env var to override the default:
 
 ```bash
-export BRICK_IMAGE=docker.io/regolo/brick:2.1.1
+export BRICK_IMAGE=docker.io/regolo/brick:2.3.0
 brick serve
 ```
 

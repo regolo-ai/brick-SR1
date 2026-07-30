@@ -47,20 +47,19 @@ Brick is for anyone running against more than one model, or paying flat rate for
 
 ## ⚡ Quickstart
 
-The fastest working path today is the CLI, which self-hosts the router and wires it into
-**Claude Code** for you. Requires Node 20 or >= 22 and Docker.
+The fastest path is the published CLI, which self-hosts the router and wires it into
+**OpenAI Codex** or **Claude Code**. Requires Node 20 or >= 22 and Docker.
 
 ```bash
-git clone https://github.com/regolo-ai/brick-SR1.git
-cd brick-SR1/apps/cli && npm install && npm run build && npm link
-
-brick claude on     # starts the router + wires ANTHROPIC_BASE_URL in ~/.claude/settings.json
+npm install -g @regoloai/brick
+brick codex on      # starts the router + wires ~/.codex/config.toml
+# or: brick claude on
 ```
 
-Then open a **new** Claude Code session and pick **brick-claude** in the `/model` picker.
-Every request now routes to haiku / sonnet / opus by capability and complexity. See
-[Brick + Claude Code](#-brick--claude-code) for modes, the effort picker, and the live
-`brick claude status` dashboard.
+Then open a **new** agent session. Codex uses the managed Brick provider automatically;
+in Claude Code, pick **brick-claude** in the `/model` picker. See
+[Brick + Codex](#-brick--codex) or [Brick + Claude Code](#-brick--claude-code)
+for routing modes, settings, and live status.
 
 <details>
 <summary><b>Prefer a raw OpenAI-compatible gateway (no CLI)?</b></summary>
@@ -70,7 +69,7 @@ The image is published on Docker Hub (public, no login required). Run the gatewa
 ```bash
 docker run --rm -p 18000:18000 \
   -e REGOLO_API_KEY=$REGOLO_API_KEY \
-  docker.io/regolo/brick:latest      # or pin a version: docker.io/regolo/brick:2.2.0
+  docker.io/regolo/brick:latest      # or pin a version: docker.io/regolo/brick:2.3.0
 ```
 
 Then call it like any OpenAI endpoint, just set `"model": "brick"`:
@@ -224,14 +223,17 @@ Brick routing is per request. In Claude Code workflows and subagents, each agent
 
 ---
 
-## 🤖 Use it on Codex (Still in Beta)
+## 🤖 Brick + Codex
 
-The same idea behind OpenAI Codex: Brick sits in front of Codex and routes each request across your model pool, so you cut cost on easy turns and can drive Codex with non-OpenAI models through one OpenAI-compatible endpoint.
+Brick for Codex is available in `@regoloai/brick` 2.3.0. It installs a managed
+OpenAI-compatible provider in Codex and routes every request across an OpenAI model
+pool by capability, complexity, and requested effort.
 
 ### Setup
 
 ```bash
-brick codex on      # sets model/model_provider to brick in ~/.codex/config.toml, auto-starts the router
+npm install -g @regoloai/brick
+brick codex on      # wires ~/.codex/config.toml and auto-starts the router
 ```
 
 This materializes a dedicated Codex profile (the OpenAI-pool skill router) and adds a managed provider pointing at the local router. Start a new Codex session and it now routes through Brick.
@@ -242,12 +244,32 @@ To revert:
 brick codex off     # restores your previous Codex model/provider
 ```
 
-Codex exposes the same 5 modes and status view as Claude Code:
+The default Codex profile classifies the last 8 conversation turns and enables
+cache-aware **Smartsqueeze** routing. On the Codex/OpenAI path, Smartsqueeze applies
+model-continuity hysteresis so a marginal router score change does not needlessly move
+a warm conversation to another model. Deterministic tool-result compaction remains
+available on the Claude/Anthropic path.
+
+Codex exposes the same five cost/quality modes and status view as Claude Code:
 
 ```bash
 brick codex mode           # or: brick codex eco | lite | mid | pro | max
 brick codex status         # live routing dashboard
 ```
+
+Configure context, classifier compute, model/thinking routing, and cache-aware behavior
+from one menu:
+
+```bash
+brick codex settings
+brick codex settings show
+brick codex settings mode smartsqueeze   # off | sticky | smartsqueeze | orchestrator
+```
+
+The cost/quality mode (`eco` through `max`) controls how much capability Brick buys.
+The cache-aware setting controls whether a multi-turn conversation stays on its warm
+model when the quality gain from switching is too small to justify reprocessing the
+prompt.
 
 Use `brick codex on --no-start` to require an already-healthy router instead of auto-starting one. The Claude and Codex router stacks share host port 8000, so only one can serve at a time; stop the other before wiring.
 
@@ -548,16 +570,13 @@ make lint      # pre-commit run --all-files
 
 Per-component docs: [router](apps/router/README.md) · [CLI](apps/cli/README.md) · [training](packages/training/README.md) · [evals](packages/evals/README.md) · [datasets](packages/datasets/README.md) · [baselines](packages/evals/baselines/README.md).
 
-<details>
-<summary>Distribution channels (work in progress)</summary>
+### Distribution channels
 
 | Channel | Status |
 |---|---|
-| Source clone + `npm link` | available |
-| Docker Hub (`docker.io/regolo/brick`) | available (tag `v2.2.0`) |
-| npm (`@regoloai/brick`) | Trusted Publishing via GitHub Actions |
-
-</details>
+| npm (`@regoloai/brick`) | available (`2.3.0`) |
+| Docker Hub (`docker.io/regolo/brick`) | available (`2.3.0`, `2.3`, `latest`) |
+| Source clone + `npm link` | available for development |
 
 ---
 
