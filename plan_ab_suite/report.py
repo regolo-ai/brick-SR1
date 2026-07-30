@@ -93,9 +93,12 @@ def plan_units(ev, pricing, warns):
     ) / 1e6
 
 
-def join_events(runs, events, warns):
-    """Associa gli eventi ai task-run: join primario sul request_tag,
-    fallback sulla finestra temporale (con mode coerente col ramo)."""
+def join_events(runs, events, warns, time_fallback):
+    """Associa gli eventi ai task-run. Join primario e autorevole sul
+    request_tag. Il fallback sulla finestra temporale e opt-in perche in
+    presenza di traffico Claude concorrente sullo stesso proxy (es. la sessione
+    che lancia la suite) attribuirebbe eventi estranei ai run: va usato solo se
+    il tag manca del tutto (versione Claude che non propaga l'header)."""
     by_tag = defaultdict(list)
     untagged = []
     for ev in events:
@@ -104,6 +107,17 @@ def join_events(runs, events, warns):
 
     for run in runs:
         run["events"] = list(by_tag.get(run["tag"], []))
+
+    run_tags = {r["tag"] for r in runs}
+    if not time_fallback:
+        if untagged:
+            warns.append(f"{len(untagged)} eventi senza tag ESCLUSI dalla misura "
+                         "(traffico concorrente sul proxy o richieste non taggate). "
+                         "Usa --time-fallback per attribuirli per finestra temporale.")
+        return sum(
+            1 for ev in events
+            if (ev.get("request_tag") or "") not in run_tags
+        )
 
     fallback = 0
     matched_fallback = set()
@@ -120,8 +134,8 @@ def join_events(runs, events, warns):
                 fallback += 1
                 break
     if fallback:
-        warns.append(f"{fallback} eventi senza tag attribuiti per finestra temporale")
-    run_tags = {r["tag"] for r in runs}
+        warns.append(f"{fallback} eventi senza tag attribuiti per finestra temporale "
+                     "(--time-fallback attivo: rischio contaminazione da traffico concorrente)")
     orphans = [
         e for e in events
         if id(e) not in matched_fallback
@@ -175,6 +189,9 @@ def main():
                     help="EUR per 1M token input del classificatore Regolo")
     ap.add_argument("--classifier-price-out", type=float, default=None)
     ap.add_argument("--eur-usd", type=float, default=1.0)
+    ap.add_argument("--time-fallback", action="store_true",
+                    help="attribuisci per finestra temporale anche gli eventi "
+                         "senza tag (rischioso con traffico Claude concorrente)")
     args = ap.parse_args()
 
     run_dir = args.run_dir
@@ -186,7 +203,7 @@ def main():
     pricing = load_pricing(args.pricing)
 
     warns = []
-    orphans = join_events(runs, events, warns)
+    orphans = join_events(runs, events, warns, args.time_fallback)
     util = utilization_deltas(events, runs, warns)
 
     # prezzo classificatore: pricing.yaml se presente, altrimenti flag, altrimenti 0
