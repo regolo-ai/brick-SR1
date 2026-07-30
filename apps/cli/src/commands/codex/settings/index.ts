@@ -19,6 +19,7 @@ import {
   runCodexCompute,
   runCodexModelRouting,
   runCodexThinkingRouting,
+  runCodexRoutingMode,
 } from '../../../lib/codex/runSettings.js';
 import { runCodexModelsPoolWizard } from '../../../lib/wizard/steps/codex-models-pool.js';
 import { banner, err, info, warn, ok } from '../../../lib/ui/banners.js';
@@ -70,7 +71,7 @@ export default class CodexSettings extends Command {
       const wiring = readCodexWiring();
       const brick = obj?.brick ?? {};
       const cw = brick?.context_window;
-      const ctxLabel = cw?.enabled ? `on (last ${cw.k ?? DEFAULT_CONTEXT_K})` : 'off';
+      const ctxLabel = cw?.enabled !== false ? `on (last ${cw?.k ?? DEFAULT_CONTEXT_K})` : 'off';
       const cs = obj?.complexity_service ?? {};
       const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost|classifier/.test(cs.base_url);
       const computeLabel = wiring?.computeMode ?? (isRemote ? 'api' : 'local');
@@ -79,6 +80,14 @@ export default class CodexSettings extends Command {
       const fixedModel = typeof brick.fixed_model === 'string' && brick.fixed_model ? brick.fixed_model : obj.default_model ?? 'gpt-5.4';
       const modelRoutingLabel = modelRoutingOn ? 'on (by complexity)' : `off (fixed: ${fixedModel})`;
       const thinkingRoutingLabel = thinkingRoutingOn ? 'on (autonomous)' : 'off (client effort)';
+      const routingMode =
+        brick.routing_mode === 'sticky' || brick.routing_mode === 'smartsqueeze' || brick.routing_mode === 'orchestrator'
+          ? brick.routing_mode
+          : 'smartsqueeze';
+      const routingModeLabel =
+        routingMode === 'sticky' ? 'sticky (cache-aware)' :
+        routingMode === 'orchestrator' ? 'orchestrator (shadow)' :
+        routingMode === 'smartsqueeze' ? 'smartsqueeze (cache-aware + compaction)' : 'off (per-request)';
       const poolModels = fixedModelOptions(obj).map((m) => m.value);
       const poolLabel = poolModels.length > 0 ? poolModels.join(', ') : '(empty)';
 
@@ -89,6 +98,7 @@ export default class CodexSettings extends Command {
           { value: 'compute', label: `Compute: ${computeLabel}`, hint: 'local vs API classifier' },
           { value: 'modelrouting', label: `Model routing: ${modelRoutingLabel}`, hint: 'pick model by complexity vs fixed model' },
           { value: 'thinkingrouting', label: `Thinking routing: ${thinkingRoutingLabel}`, hint: 'autonomous reasoning_effort vs client effort' },
+          { value: 'routingmode', label: `Cache-aware routing: ${routingModeLabel}`, hint: 'sticky, smartsqueeze, or orchestrator' },
           { value: 'models', label: `Models: ${poolLabel}`, hint: 'OpenAI pool and thinking modes per model' },
           ...(!modelRoutingOn
             ? [{ value: 'fixedmodel', label: `Fixed model: ${fixedModel}`, hint: 'model used when routing is off' }]
@@ -182,6 +192,19 @@ export default class CodexSettings extends Command {
         });
         if (p.isCancel(onoff)) continue;
         await runCodexThinkingRouting(onoff === 'on', (c) => process.exit(c));
+      } else if (section === 'routingmode') {
+        const picked = await p.select({
+          message: 'Cache-aware routing mode',
+          options: [
+            { value: 'smartsqueeze', label: 'Smartsqueeze', hint: 'sticky + compact context on a model switch' },
+            { value: 'sticky', label: 'Sticky', hint: 'cache-aware hysteresis without compaction' },
+            { value: 'off', label: 'Off', hint: 'per-request routing' },
+            { value: 'orchestrator', label: 'Orchestrator (shadow)', hint: 'computed for evaluation, not served' },
+          ],
+          initialValue: routingMode,
+        });
+        if (p.isCancel(picked)) continue;
+        await runCodexRoutingMode(picked as any, (c) => process.exit(c));
       } else if (section === 'models') {
         const changed = await runCodexModelsPoolWizard(obj);
         if (changed) {

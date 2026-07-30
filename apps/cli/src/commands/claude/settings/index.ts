@@ -53,7 +53,7 @@ export default class ClaudeSettings extends Command {
       }
       const wiring = readWiring();
       const cw = obj?.anthropic_passthrough?.context_window;
-      const ctxLabel = cw?.enabled ? `on (last ${cw.k ?? DEFAULT_CONTEXT_K})` : 'off';
+      const ctxLabel = cw?.enabled !== false ? `on (last ${cw?.k ?? DEFAULT_CONTEXT_K})` : 'off';
       const cs = obj?.complexity_service ?? {};
       const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost/.test(cs.base_url);
       const computeLabel = wiring?.computeMode ?? (isRemote ? 'api' : 'local');

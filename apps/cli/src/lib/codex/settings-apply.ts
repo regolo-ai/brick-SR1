@@ -4,6 +4,7 @@ import { loadConfigText } from '../config/load.js';
 import { saveConfigText } from '../config/save.js';
 import { dockerCmd } from '../docker/run.js';
 import { isHealthy, waitHealth } from '../docker/serve.js';
+import { DEFAULT_CONTEXT_K } from '../claude/settings-apply.js';
 export {
   DEFAULT_CONTEXT_K,
   LOCAL_CLASSIFIER_URL,
@@ -13,6 +14,7 @@ export {
   type ComputeMode,
   type SettingsApplyResult,
 } from '../claude/settings-apply.js';
+export type CodexRoutingMode = 'off' | 'sticky' | 'smartsqueeze' | 'orchestrator';
 import type { SettingsApplyResult } from '../claude/settings-apply.js';
 
 class CodexSettingsError extends Error {
@@ -69,7 +71,7 @@ export async function saveCodexConfigAndRestart(
 export async function applyCodexContextAwareness(
   profile: string,
   enabled: boolean,
-  k: number,
+  k: number = DEFAULT_CONTEXT_K,
 ): Promise<SettingsApplyResult> {
   const obj = loadObj(await loadConfigText(profile), profile);
   const brick = ensureBrick(obj);
@@ -78,6 +80,27 @@ export async function applyCodexContextAwareness(
   const changed = !cur || cur.enabled !== next.enabled || cur.k !== next.k;
   if (changed) {
     brick.context_window = next;
+  }
+  return saveAndRestart(obj, profile, changed);
+}
+
+export async function applyCodexRoutingMode(
+  profile: string,
+  mode: CodexRoutingMode,
+): Promise<SettingsApplyResult> {
+  const obj = loadObj(await loadConfigText(profile), profile);
+  const brick = ensureBrick(obj);
+  const current: CodexRoutingMode =
+    brick.routing_mode === 'sticky' ||
+    brick.routing_mode === 'smartsqueeze' ||
+    brick.routing_mode === 'orchestrator'
+      ? brick.routing_mode
+      : 'off';
+  const changed = current !== mode;
+  if (changed) {
+    // Keep an explicit "off": an absent key means the Codex default
+    // (smartsqueeze), so deleting it would make it impossible to opt out.
+    brick.routing_mode = mode;
   }
   return saveAndRestart(obj, profile, changed);
 }

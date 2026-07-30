@@ -22,8 +22,10 @@ brick:
   use_model_routing: true
   fixed_model: gpt-5.4
   context_window:
-    enabled: false
+    enabled: true
     k: 8
+  # Cache-aware routing; smartsqueeze is the safe default for Codex profiles.
+  routing_mode: smartsqueeze
   ocr_min_text_length: 10
 
 providers:
