@@ -15,7 +15,7 @@ npm run build
 npm link        # makes `brick` available on $PATH
 ```
 
-Requires Node >= 18 and Docker.
+Requires Node 20 or >= 22 and Docker.
 
 ## Commands
 

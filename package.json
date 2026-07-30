@@ -19,9 +19,10 @@
     "version:cli": "npm view --workspace=@regoloai/brick"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20 || >=22"
   },
   "overrides": {
-    "ejs": "^6.0.1"
+    "ejs": "^6.0.1",
+    "vite": "6.4.3"
   }
 }

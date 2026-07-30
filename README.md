@@ -48,7 +48,7 @@ Brick is for anyone running against more than one model, or paying flat rate for
 ## ⚡ Quickstart
 
 The fastest working path today is the CLI, which self-hosts the router and wires it into
-**Claude Code** for you. Requires Node >= 18 and Docker.
+**Claude Code** for you. Requires Node 20 or >= 22 and Docker.
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1.git
