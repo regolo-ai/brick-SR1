@@ -37,11 +37,11 @@ type routingModeStats struct {
 	// (zero-valued) otherwise so a missing net is never confused with a real
 	// zero. HeldTurnsSticky/HeldTurnsWorse count of held turns where sticky was
 	// cheaper vs costlier than the no-sticky counterfactual, respectively.
-	PricedRequests    int      `json:"priced_requests,omitempty"`
-	HeldTurnsSticky   int      `json:"held_turns_where_sticky_cheaper,omitempty"`
-	HeldTurnsWorse    int      `json:"held_turns_where_sticky_costlier,omitempty"`
-	NetUnits          *float64 `json:"net_units_sticky_minus_no_sticky,omitempty"`
-	SavingsPct        *float64 `json:"savings_pct,omitempty"`
+	PricedRequests  int      `json:"priced_requests,omitempty"`
+	HeldTurnsSticky int      `json:"held_turns_where_sticky_cheaper,omitempty"`
+	HeldTurnsWorse  int      `json:"held_turns_where_sticky_costlier,omitempty"`
+	NetUnits        *float64 `json:"net_units_sticky_minus_no_sticky,omitempty"`
+	SavingsPct      *float64 `json:"savings_pct,omitempty"`
 
 	// Smartsqueeze compaction fields, populated from routingEvent.EstSavedTokens.
 	// SqueezeTurns is turns where the compactor cleared something (est_saved > 0);
@@ -165,8 +165,8 @@ type routingModeAcc struct {
 	latencies   []int64
 	deltas      []float64
 	deltasHeld  []float64
-	savedTokens []int64          // per-turn EstSavedTokens where > 0 (smartsqueeze)
-	servedSeen  map[string]int   // served model -> count, to pick a pricing reference
+	savedTokens []int64        // per-turn EstSavedTokens where > 0 (smartsqueeze)
+	servedSeen  map[string]int // served model -> count, to pick a pricing reference
 	requests    int
 	held        int
 }

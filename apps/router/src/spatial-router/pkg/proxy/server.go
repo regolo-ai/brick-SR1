@@ -42,9 +42,9 @@ type Server struct {
 	// the router config by the same convention as pricingPath.
 	economicsSnapshotPath string
 
-	// stickyStore holds per-conversation cache-aware routing state for
-	// RoutingModeSticky. Always constructed; only consulted when the Anthropic
-	// passthrough routing mode is "sticky". See pkg/proxy/sticky_routing.go.
+	// stickyStore holds per-conversation cache-aware routing state for both the
+	// Anthropic passthrough and OpenAI/Codex Brick paths. Always constructed;
+	// only consulted by sticky/smartsqueeze routing modes.
 	stickyStore *sticky.Store
 	// pricingTable is loaded once at startup so the sticky hysteresis can price
 	// the prompt-cache invalidation cost of a switch without an on-demand load
@@ -94,9 +94,14 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
 	routingEventPath := filepath.Join(filepath.Dir(configPath), "routing_events.jsonl")
 	routingEventLog := newRoutingEventLogger(routingEventPath)
 
-	// Sticky routing state. The TTL comes from config so it can track the
-	// upstream prompt-cache TTL (default 6 min, just over the 5-min cache TTL).
-	stickyTTL := time.Duration(cfg.AnthropicPassthrough.EffectiveStickyTTLSeconds()) * time.Second
+	// Sticky routing state. The TTL comes from the active protocol config so it
+	// can track the upstream prompt-cache lifetime (Anthropic defaults to 6 min;
+	// OpenAI/Codex defaults to GPT-5.6's 30-minute minimum).
+	stickyTTLSeconds := cfg.Brick.EffectiveStickyTTLSeconds()
+	if cfg.AnthropicPassthrough.Enabled {
+		stickyTTLSeconds = cfg.AnthropicPassthrough.EffectiveStickyTTLSeconds()
+	}
+	stickyTTL := time.Duration(stickyTTLSeconds) * time.Second
 
 	// Preload the pricing table so sticky hysteresis can price a switch without
 	// a per-request file read. Best-effort: a missing/invalid pricing.yaml just

@@ -47,6 +47,14 @@ var hopByHopHeaders = map[string]struct{}{
 	"Accept-Encoding":     {},
 }
 
+// abTagHeader (canonical form) carries the A/B harness attribution tag. It is
+// recorded on the routing event and stripped before forwarding upstream.
+const abTagHeader = "X-Brick-Ab-Tag"
+
+// anthropicRateLimitHeaderPrefix selects the response headers captured into
+// routingEvent.RateLimitHeaders, compared against the lowercased header name.
+const anthropicRateLimitHeaderPrefix = "anthropic-ratelimit-"
+
 // anthropicUsage is the token-usage shape of the Anthropic Messages API. Both
 // non-streaming responses (top-level "usage") and streaming events carry these
 // fields. input_tokens covers ONLY the non-cached portion of the prompt; with
@@ -269,21 +277,22 @@ func (s *Server) handleBrickRouted(
 	// Routing event (shadow observability): assembled here, where the mode,
 	// candidate model, and conversation identity are known; the served model,
 	// context size, and end-to-end latency are filled in after the response
-	// streams. Written for every routed request regardless of mode so the
-	// promotion-gate aggregator has an off/sticky/orchestrator baseline. It
-	// never affects what is served.
-	var ev *routingEvent
-	if routedViaSkill && routeResult != nil {
-		mode := apCfg.EffectiveRoutingMode()
-		ev = &routingEvent{
-			Mode:           mode,
-			SessionKey:     anthropicSessionKey(body),
-			CandidateModel: candidateModel,
-			EstSwitchDelta: switchDelta,
-		}
-		if mode == config.RoutingModeOrchestrator {
-			ev.ShadowNote = "shadow_only_not_served_extractor_pending"
-		}
+	// streams. Written for every brick-routed request, including model_map
+	// fallbacks, so the log has no gaps when the skill router is unavailable.
+	// It never affects what is served.
+	mode := apCfg.EffectiveRoutingMode()
+	ev := &routingEvent{
+		Mode:                  mode,
+		SessionKey:            anthropicSessionKey(body),
+		CandidateModel:        candidateModel,
+		RequestedModel:        extractRequestedModel(body),
+		EstSwitchDelta:        switchDelta,
+		ClassifierPromptChars: int64(len(prompt)),
+	}
+	if !routedViaSkill {
+		ev.ShadowNote = "skill_router_unavailable"
+	} else if mode == config.RoutingModeOrchestrator {
+		ev.ShadowNote = "shadow_only_not_served_extractor_pending"
 	}
 
 	// Smartsqueeze compaction: on a switch the new provider's prompt cache is cold,
@@ -370,7 +379,18 @@ func (s *Server) handleNativeModel(
 	logging.Infof("AnthropicPassthrough[native]: model=%s use_1m=%t upstream=%s bytes=%d",
 		requestedModel, use1M, apCfg.EffectiveUpstreamURL(), len(rewritten))
 
-	s.forwardAnthropicRequest(w, r, apCfg, rewritten, requestedModel, "native", "", false, stripBeta, "", false, nil)
+	// Native passthrough emits a routing event too: the plan-savings A/B suite
+	// needs plan traffic (explicit claude-* models, Brick OFF branch, native
+	// subagents) measured with the same token and ratelimit capture as routed
+	// traffic. ServedModel and the token fields are filled in after the stream.
+	ev := &routingEvent{
+		Mode:           modePassthroughNative,
+		SessionKey:     anthropicSessionKey(body),
+		CandidateModel: requestedModel,
+		RequestedModel: requestedModel,
+	}
+
+	s.forwardAnthropicRequest(w, r, apCfg, rewritten, requestedModel, "native", "", false, stripBeta, "", false, ev)
 }
 
 // forwardAnthropicRequest sends the (possibly rewritten) body to the Anthropic
@@ -398,8 +418,16 @@ func (s *Server) forwardAnthropicRequest(
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("building upstream request: %v", err))
 		return
 	}
+	// Harness attribution tag: recorded on the routing event, stripped from the
+	// upstream request (Anthropic must never see it).
+	if ev != nil {
+		ev.RequestTag = r.Header.Get(abTagHeader)
+	}
 	for name, values := range r.Header {
 		if _, hop := hopByHopHeaders[http.CanonicalHeaderKey(name)]; hop {
+			continue
+		}
+		if http.CanonicalHeaderKey(name) == abTagHeader {
 			continue
 		}
 		if http.CanonicalHeaderKey(name) == "Anthropic-Beta" && stripBeta {
@@ -424,6 +452,23 @@ func (s *Server) forwardAnthropicRequest(
 		return
 	}
 	defer resp.Body.Close()
+
+	// Plan-consumption ground truth: capture the Anthropic rate-limit headers
+	// (unified-* on subscription OAuth accounts, per-API-key variants otherwise)
+	// and the upstream status into the routing event. Prefix-generic so header
+	// renames degrade to extra keys instead of silent loss.
+	if ev != nil {
+		ev.UpstreamStatus = resp.StatusCode
+		for name, vals := range resp.Header {
+			lower := strings.ToLower(name)
+			if strings.HasPrefix(lower, anthropicRateLimitHeaderPrefix) && len(vals) > 0 {
+				if ev.RateLimitHeaders == nil {
+					ev.RateLimitHeaders = make(map[string]string)
+				}
+				ev.RateLimitHeaders[strings.TrimPrefix(lower, anthropicRateLimitHeaderPrefix)] = vals[0]
+			}
+		}
+	}
 
 	for name, values := range resp.Header {
 		if _, hop := hopByHopHeaders[http.CanonicalHeaderKey(name)]; hop {

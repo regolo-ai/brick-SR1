@@ -1,0 +1,7 @@
+id: qa_04_page_size
+category: qa
+prompt: |
+  Quanti task mostra per pagina il comando list? Rispondi solo col numero.
+check: checks/qa_04_page_size.sh
+timeout_seconds: 300
+max_turns: 15

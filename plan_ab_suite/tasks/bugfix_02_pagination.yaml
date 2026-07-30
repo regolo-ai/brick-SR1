@@ -1,0 +1,9 @@
+id: bugfix_02_pagination
+category: bugfix
+prompt: |
+  go test ./... fallisce: il comando list --page salta il primo task di ogni pagina.
+  Trova la causa, correggi il bug ed esegui i test per verificare la correzione.
+setup: setup/bugfix_02_pagination.sh
+check: checks/bugfix_02_pagination.sh
+timeout_seconds: 720
+max_turns: 40

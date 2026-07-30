@@ -50,6 +50,7 @@ func routeWith(model string, scores map[string]float64) *brickrouting.Result {
 }
 
 const stickyBody = `{"system":"you are a helpful assistant","messages":[{"role":"user","content":"the first user turn"}]}`
+const stickyOpenAIBody = `{"messages":[{"role":"system","content":"you are a helpful assistant"},{"role":"user","content":"the first user turn"},{"role":"assistant","content":"working"},{"role":"user","content":"continue"}]}`
 
 func TestApplySticky_NoPrevReturnsKeyAndCandidate(t *testing.T) {
 	s := stickyTestServer(t)
@@ -132,5 +133,35 @@ func TestApplySticky_EmptyPromptNoKey(t *testing.T) {
 	}
 	if model != "claude-opus-4-8" {
 		t.Fatalf("candidate should stand, got %q", model)
+	}
+}
+
+func TestApplyBrickSticky_HoldsBelowMargin(t *testing.T) {
+	s := stickyTestServer(t)
+	brickCfg := &config.BrickConfig{}
+
+	system, first := extractOpenAIIdentityParts([]byte(stickyOpenAIBody))
+	if system != "you are a helpful assistant" || first != "the first user turn" {
+		t.Fatalf("unexpected OpenAI identity: system=%q first=%q", system, first)
+	}
+	key := sticky.HashIdentity(system, first)
+	s.stickyStore.Record(key, "claude-haiku-4-5", 40000, false, time.Now())
+
+	route := routeWith("claude-opus-4-8", map[string]float64{
+		"claude-opus-4-8":  0.45,
+		"claude-haiku-4-5": 0.50,
+	})
+	gotKey, model, _, _ := s.applyBrickStickyRouting(
+		brickCfg,
+		[]byte(stickyOpenAIBody),
+		route,
+		"claude-opus-4-8",
+		0,
+	)
+	if gotKey != key {
+		t.Fatalf("sticky key = %q, want %q", gotKey, key)
+	}
+	if model != "claude-haiku-4-5" {
+		t.Fatalf("expected Codex/OpenAI hold on warm model, got %q", model)
 	}
 }

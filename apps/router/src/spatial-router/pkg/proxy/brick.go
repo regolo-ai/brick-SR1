@@ -198,22 +198,41 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, route.Model)
+	selectedModel := route.Model
+	under := underCapacityForModel(route, selectedModel)
+	stickyKey := ""
+	switch cfg.Brick.EffectiveRoutingMode() {
+	case config.RoutingModeSticky, config.RoutingModeSmartSqueeze:
+		if cfg.Brick.ModelRoutingEnabled() {
+			stickyKey, selectedModel, under, _ = s.applyBrickStickyRouting(
+				&cfg.Brick,
+				preprocessResult.RewrittenBody,
+				route,
+				selectedModel,
+				under,
+			)
+		}
+	case config.RoutingModeOrchestrator:
+		logShadowOrchestrator(len(preprocessResult.RewrittenBody), route, selectedModel)
+	}
+
+	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, selectedModel)
 	effortStr := ""
 	if cfg.SkillRouter.DynamicEffort {
-		level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
-		forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
+		level := autonomousEffortLevel(route.TauQuery, under, routingPreferenceOf(cfg))
+		forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, selectedModel, level)
 	}
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
-	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
-	recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
+	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, selectedModel, req.Stream, apiKey)
+	regoloResult.StickyKey = stickyKey
+	recordBrickOpenAIRoute(cfg, route, selectedModel, effortStr)
 
 	keyPrefix := apiKey
 	if len(keyPrefix) > 8 {
 		keyPrefix = keyPrefix[:8] + "..."
 	}
-	w.Header().Set(headers.VSRSelectedModel, route.Model)
+	w.Header().Set(headers.VSRSelectedModel, selectedModel)
 	w.Header().Set("x-brick-route-reason", route.Reason)
 	if effortStr != "" {
 		w.Header().Set("x-brick-effort", effortStr)
@@ -222,7 +241,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("x-brick-keyword-rule", route.MatchedKeyword)
 	}
 	logging.Infof("Brick2: routed to model=%s reason=%s complexity=%s confidence=%.3f tau=%.3f effort=%s auth=%s",
-		route.Model, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, effortStr, keyPrefix)
+		selectedModel, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, effortStr, keyPrefix)
 
 	s.forwardToBackend(w, r, regoloResult, "brick")
 }

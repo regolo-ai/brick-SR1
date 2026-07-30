@@ -1,0 +1,7 @@
+id: qa_05_render_file
+category: qa
+prompt: |
+  In quale file sorgente e implementato il rendering tabellare dei task? Rispondi solo col nome del file.
+check: checks/qa_05_render_file.sh
+timeout_seconds: 300
+max_turns: 15

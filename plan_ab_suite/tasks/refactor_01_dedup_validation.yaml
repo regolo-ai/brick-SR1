@@ -1,0 +1,11 @@
+id: refactor_01_dedup_validation
+category: refactor
+prompt: |
+  In store.go la validazione dell'ID (len(id) == 0 || strings.ContainsAny(id, " \t"))
+  e duplicata inline in Add, Complete e Get, oltre a esistere gia come funzione
+  ValidateID. Rifattorizza in modo che la logica di validazione esista in un solo
+  punto e tutti i metodi la riusino. I test devono restare verdi e il codice
+  gofmt-pulito.
+check: checks/refactor_01_dedup_validation.sh
+timeout_seconds: 720
+max_turns: 40

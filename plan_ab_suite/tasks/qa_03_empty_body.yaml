@@ -1,0 +1,7 @@
+id: qa_03_empty_body
+category: qa
+prompt: |
+  Quale status code HTTP ritorna POST /tasks quando il body della richiesta e vuoto? Rispondi solo col numero.
+check: checks/qa_03_empty_body.sh
+timeout_seconds: 300
+max_turns: 15

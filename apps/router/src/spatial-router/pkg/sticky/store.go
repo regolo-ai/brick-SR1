@@ -1,8 +1,7 @@
 // Package sticky holds per-conversation cache-aware routing state for the
-// Anthropic passthrough. It backs "sticky" routing mode: once a conversation is
-// warm on a model, Brick prefers to stay there unless switching is worth the
-// prompt-cache invalidation cost. See pkg/proxy/anthropic.go and
-// pkg/config.AnthropicPassthroughConfig.RoutingMode.
+// Anthropic passthrough and OpenAI/Codex Brick paths. It backs "sticky" and
+// "smartsqueeze" routing: once a conversation is warm on a model, Brick prefers
+// to stay there unless switching is worth the prompt-cache invalidation cost.
 package sticky
 
 import (

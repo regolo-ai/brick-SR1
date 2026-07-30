@@ -62,7 +62,7 @@ type BrickConfig struct {
 	OCRMinTextLen   int                 `yaml:"ocr_min_text_length,omitempty"`
 
 	// RoutingMode mirrors AnthropicPassthroughConfig.RoutingMode for the Codex
-	// (OpenAI-compatible) path. "" / "off" (default) keeps historic per-request
+	// (OpenAI-compatible) path. "" defaults to smartsqueeze.
 	// routing. See EffectiveRoutingMode. Note: the Codex forwarders do not report
 	// Anthropic prompt-cache tokens, so sticky economics are weaker here than on
 	// the Claude path; the toggle exists for parity and shadow-mode B.
@@ -105,22 +105,25 @@ func (b *BrickConfig) EffectiveContextWindowK() int {
 }
 
 // EffectiveRoutingMode returns a validated routing mode, defaulting to
-// RoutingModeOff for an absent or unrecognized value.
+// smartsqueeze for Codex profiles.
 func (b *BrickConfig) EffectiveRoutingMode() string {
 	switch b.RoutingMode {
-	case RoutingModeSticky, RoutingModeOrchestrator:
+	case RoutingModeSticky, RoutingModeSmartSqueeze, RoutingModeOrchestrator:
 		return b.RoutingMode
-	default:
+	case RoutingModeOff:
 		return RoutingModeOff
+	default:
+		return RoutingModeSmartSqueeze
 	}
 }
 
-// EffectiveStickyTTLSeconds returns the configured sticky-entry TTL or 360s.
+// EffectiveStickyTTLSeconds returns the configured sticky-entry TTL or 1800s,
+// matching GPT-5.6's 30-minute minimum prompt-cache lifetime.
 func (b *BrickConfig) EffectiveStickyTTLSeconds() int {
 	if b.StickyTTLSeconds > 0 {
 		return b.StickyTTLSeconds
 	}
-	return 360
+	return 1800
 }
 
 // EffectiveStickyScoreMargin returns the configured switch margin or 0.15.
