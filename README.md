@@ -52,7 +52,8 @@ The fastest path is the published CLI, which self-hosts the router and wires it 
 
 ```bash
 npm install -g @regoloai/brick
-brick codex on      # starts the router + wires ~/.codex/config.toml
+brick init
+# or: brick codex on    
 # or: brick claude on
 ```
 
