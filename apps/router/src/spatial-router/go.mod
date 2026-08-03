@@ -17,10 +17,10 @@ require (
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
 	github.com/lib/pq v1.12.3
 	github.com/mark3labs/mcp-go v0.57.0
-	github.com/milvus-io/milvus-proto/go-api/v2 v2.6.21
+	github.com/milvus-io/milvus-proto/go-api/v2 v2.6.22
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/onsi/ginkgo/v2 v2.32.0
-	github.com/onsi/gomega v1.40.0
+	github.com/onsi/gomega v1.42.1
 	github.com/openai/openai-go v1.12.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.21.0
@@ -33,14 +33,14 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/sys v0.47.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.83.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
-	cel.dev/expr v0.25.1 // indirect
+	cel.dev/expr v0.25.2 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -96,6 +96,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
