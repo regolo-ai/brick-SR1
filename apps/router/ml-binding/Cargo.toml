@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 linfa-nn = "0.8"           # Ball Tree for KNN/KMeans inference
 
 # Linear algebra (must match Linfa's ndarray version)
-ndarray = "0.16"
+ndarray = "0.17"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
