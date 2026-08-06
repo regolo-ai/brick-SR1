@@ -26,6 +26,7 @@ type RoutingResult struct {
 	ForwardHeaders  map[string]string // headers to set on the upstream request
 	RemoveHeaders   []string          // headers to strip before forwarding
 	IsStreaming     bool              // whether the original request has stream=true
+	IsResponses     bool              // native Responses protocol; disables Chat-only body mutation
 	Model           string            // selected model name, used for economics tracking
 	StickyKey       string            // conversation identity for cache-aware routing bookkeeping
 	Compacted       bool              // whether this turn served a compacted prompt

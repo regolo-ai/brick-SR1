@@ -1,6 +1,6 @@
 package proxy
 
-// OpenAI Responses API (POST /v1/responses) adapter.
+// OpenAI Responses API (POST /v1/responses) routing gateway.
 //
 // Codex CLI 0.134+ dropped support for wire_api = "chat" and now speaks only the
 // Responses protocol: it POSTs {input, instructions, model, stream, reasoning}
@@ -10,23 +10,14 @@ package proxy
 // output_item.done -> response.completed). Codex is strict about that sequence;
 // a missing content_part.added is enough to break it.
 //
-// The Brick router core (handleBrickRequest) only understands Chat Completions
-// {messages:[...]} payloads. Rather than teach the whole routing/forwarding
-// pipeline a second protocol, this handler adapts at the edges, mirroring how
-// handleAnthropicMessages adapts the Anthropic Messages protocol:
+// ChatGPT-authenticated requests are routed natively: Brick keeps the complete
+// Responses payload, rewrites only the selected model and reasoning effort,
+// and streams the official ChatGPT Codex response through unchanged. This is
+// required because ChatGPT OAuth tokens are not OpenAI Platform API keys.
 //
-//  1. Convert the Responses request into a Chat Completions body (input ->
-//     messages, instructions -> system message), forcing stream=false so the
-//     core returns a single JSON object we can read in full.
-//  2. Delegate to handleBrickRequest via an in-process request against a
-//     ResponseRecorder, reusing the exact routing, effort, and forwarding logic.
-//  3. Convert the captured Chat Completions JSON into the Responses shape: a
-//     single JSON object for non-streaming clients, or the full semantic SSE
-//     event sequence for streaming clients.
-//
-// Keeping the upstream call non-streaming means we never have to parse Chat
-// Completions SSE deltas; we synthesize the (stricter) Responses event sequence
-// from the finished message instead.
+// API-key-authenticated requests retain the compatibility adapter for providers
+// that expose Chat Completions only: Responses input is converted to messages,
+// handled by the existing router core, then converted back to Responses events.
 
 import (
 	"bytes"
@@ -39,6 +30,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/headers"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 )
@@ -69,7 +61,9 @@ type chatMessage struct {
 	Content string `json:"content"`
 }
 
-// handleResponses adapts POST /v1/responses to the Chat Completions router core.
+// handleResponses either passes the native Responses request through to the
+// ChatGPT Codex backend (ChatGPT OAuth), or adapts it to Chat Completions for
+// API-key-backed OpenAI-compatible providers.
 func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -109,6 +103,16 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(messages) == 0 {
 		writeError(w, http.StatusBadRequest, "Responses request has no input content")
+		return
+	}
+
+	// ChatGPT-authenticated Codex requests carry an account id in addition to
+	// the bearer token. Those credentials are valid for the ChatGPT Codex
+	// Responses backend, not api.openai.com. Preserve the entire original
+	// Responses payload so tools, function-call outputs, metadata, and the exact
+	// SSE protocol survive the local routing hop.
+	if r.Header.Get("ChatGPT-Account-ID") != "" {
+		s.handleChatGPTResponses(w, r, body, &req, messages)
 		return
 	}
 
@@ -169,6 +173,154 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeResponsesJSON(w, text, selectedModel, usage)
+}
+
+// handleChatGPTResponses performs native Responses-to-Responses routing for a
+// ChatGPT-authenticated Codex client. Only model and (when enabled) reasoning
+// effort are rewritten; the upstream event stream is forwarded unchanged.
+func (s *Server) handleChatGPTResponses(
+	w http.ResponseWriter,
+	r *http.Request,
+	body []byte,
+	req *responsesRequest,
+	messages []chatMessage,
+) {
+	cfg := s.cfg
+	if cfg == nil {
+		writeError(w, http.StatusInternalServerError, "router config not loaded")
+		return
+	}
+
+	brickRouter, err := s.getBrickRouter(cfg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", err))
+		return
+	}
+
+	// Reuse the existing Chat-shaped text/context extraction only for the local
+	// routing decision. The body sent upstream remains the original Responses
+	// request below.
+	routingEnvelope, err := json.Marshal(map[string]interface{}{
+		"model": "brick", "messages": messages,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("building routing input: %v", err))
+		return
+	}
+	routingText := extractOpenAIRoutingText(routingEnvelope, cfg)
+	route, err := brickRouter.RouteWithCandidates(r.Context(), routingText, brickFixedModelAllow(cfg))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
+		return
+	}
+
+	selectedModel := route.Model
+	under := underCapacityForModel(route, selectedModel)
+	stickyKey := ""
+	switch cfg.Brick.EffectiveRoutingMode() {
+	case config.RoutingModeSticky, config.RoutingModeSmartSqueeze:
+		if cfg.Brick.ModelRoutingEnabled() {
+			stickyKey, selectedModel, under, _ = s.applyBrickStickyRouting(
+				&cfg.Brick, routingEnvelope, route, selectedModel, under,
+			)
+		}
+	case config.RoutingModeOrchestrator:
+		logShadowOrchestrator(len(routingEnvelope), route, selectedModel)
+	}
+
+	forwardBody := rewriteModelInBody(body, selectedModel)
+	effort := ""
+	if cfg.SkillRouter.DynamicEffort {
+		level := autonomousEffortLevel(route.TauQuery, under, routingPreferenceOf(cfg))
+		forwardBody, effort = applyResponsesReasoningLevel(forwardBody, cfg, selectedModel, level)
+	}
+
+	baseURL := cfg.Brick.EffectiveCodexResponsesBaseURL()
+	result := &RoutingResult{
+		ForwardBody:     forwardBody,
+		ForwardEndpoint: extractHost(baseURL),
+		ForwardPath:     extractPath(baseURL) + "/responses",
+		ForwardHeaders:  chatGPTCodexForwardHeaders(r.Header),
+		IsStreaming:     req.Stream,
+		IsResponses:     true,
+		Model:           selectedModel,
+		StickyKey:       stickyKey,
+	}
+
+	recordBrickOpenAIRoute(cfg, route, selectedModel, effort)
+	w.Header().Set(headers.VSRSelectedModel, selectedModel)
+	w.Header().Set("x-brick-route-reason", route.Reason)
+	if effort != "" {
+		w.Header().Set("x-brick-effort", effort)
+	}
+	if route.MatchedKeyword != "" {
+		w.Header().Set("x-brick-keyword-rule", route.MatchedKeyword)
+	}
+	logging.Infof("Brick Responses: routed ChatGPT request to model=%s endpoint=%s effort=%s",
+		selectedModel, baseURL, effort)
+	s.forwardToBackend(w, r, result)
+}
+
+// chatGPTCodexForwardHeaders copies end-to-end Codex metadata to the fixed
+// ChatGPT upstream. Hop-by-hop headers and Brick's local routing controls are
+// intentionally excluded.
+func chatGPTCodexForwardHeaders(src http.Header) map[string]string {
+	dst := make(map[string]string)
+	for key, values := range src {
+		lower := strings.ToLower(key)
+		switch lower {
+		case "connection", "content-length", "host", "keep-alive",
+			"proxy-authenticate", "proxy-authorization", "te", "trailer",
+			"transfer-encoding", "upgrade", "x-selected-model":
+			continue
+		}
+		if strings.HasPrefix(lower, "x-vsr-") || len(values) == 0 {
+			continue
+		}
+		dst[key] = values[0]
+	}
+	return dst
+}
+
+// applyResponsesReasoningLevel writes the Responses-native reasoning object.
+// The ChatGPT Codex endpoint does not accept the Chat Completions-only
+// reasoning_effort or thinking top-level fields.
+func applyResponsesReasoningLevel(
+	body []byte,
+	cfg *config.RouterConfig,
+	modelName string,
+	level int,
+) ([]byte, string) {
+	selected := findSkillRouterModel(cfg, modelName)
+	if selected == nil || selected.UseReasoning == nil {
+		return body, ""
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return body, ""
+	}
+	delete(raw, "reasoning_effort")
+	delete(raw, "thinking")
+	if !*selected.UseReasoning {
+		delete(raw, "reasoning")
+		return marshalBrickReasoning(body, raw), "off"
+	}
+	level = clampEffortLevelToAllowlist(level, modelName, cfg)
+	if level < 0 {
+		delete(raw, "reasoning")
+		return marshalBrickReasoning(body, raw), "off"
+	}
+	effort := vocabAt(brickEffortVocab, level)
+	if effort == "" {
+		effort = "medium"
+	}
+	reasoning, _ := raw["reasoning"].(map[string]interface{})
+	if reasoning == nil {
+		reasoning = make(map[string]interface{})
+	}
+	reasoning["effort"] = effort
+	raw["reasoning"] = reasoning
+	return marshalBrickReasoning(body, raw), effort
 }
 
 // responsesToChatMessages converts a Responses request (instructions + input)

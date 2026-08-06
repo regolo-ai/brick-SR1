@@ -1,8 +1,9 @@
 # Default Brick profile for OpenAI Codex — materialized automatically by `brick codex on`.
 # Two-container stack: complexity classifier + Brick router. Codex talks to the
 # router over /v1/responses (wire_api = "responses") with model = "brick"; the
-# full skill router selects among the OpenAI pool and forwards each pick to
-# api.openai.com using the client's own OpenAI bearer (forwarded verbatim).
+# full skill router selects among the OpenAI pool. ChatGPT-authenticated calls
+# stay on the native ChatGPT Codex Responses backend; API-key-authenticated
+# calls use the configured OpenAI-compatible endpoints below.
 
 model:
   name: brick-codex

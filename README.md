@@ -239,6 +239,10 @@ brick codex on      # wires ~/.codex/config.toml and auto-starts the router
 
 This materializes a dedicated Codex profile (the OpenAI-pool skill router) and adds a managed provider pointing at the local router. Start a new Codex session and it now routes through Brick.
 
+Both Codex authentication modes are supported: ChatGPT sign-in is forwarded in
+native Responses format to the ChatGPT Codex backend, while API-key sign-in uses
+the profile's configured OpenAI-compatible endpoints.
+
 To revert:
 
 ```bash

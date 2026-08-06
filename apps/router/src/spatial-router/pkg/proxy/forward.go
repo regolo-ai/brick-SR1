@@ -28,7 +28,47 @@ type openAIUsage struct {
 }
 
 type openAIUsageEnvelope struct {
-	Usage openAIUsage `json:"usage"`
+	Usage struct {
+		PromptTokens     int64 `json:"prompt_tokens"`
+		CompletionTokens int64 `json:"completion_tokens"`
+		InputTokens      int64 `json:"input_tokens"`
+		OutputTokens     int64 `json:"output_tokens"`
+	} `json:"usage"`
+	Response *struct {
+		Usage struct {
+			InputTokens  int64 `json:"input_tokens"`
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
+	} `json:"response"`
+}
+
+// extractOpenAIUsage accepts both Chat Completions usage and Responses usage.
+// Streaming Responses place usage inside the response.completed event's
+// nested response object.
+func extractOpenAIUsage(payload []byte) openAIUsage {
+	var env openAIUsageEnvelope
+	if err := json.Unmarshal(payload, &env); err != nil {
+		return openAIUsage{}
+	}
+	usage := openAIUsage{
+		PromptTokens:     env.Usage.PromptTokens,
+		CompletionTokens: env.Usage.CompletionTokens,
+	}
+	if usage.PromptTokens == 0 {
+		usage.PromptTokens = env.Usage.InputTokens
+	}
+	if usage.CompletionTokens == 0 {
+		usage.CompletionTokens = env.Usage.OutputTokens
+	}
+	if env.Response != nil {
+		if usage.PromptTokens == 0 {
+			usage.PromptTokens = env.Response.Usage.InputTokens
+		}
+		if usage.CompletionTokens == 0 {
+			usage.CompletionTokens = env.Response.Usage.OutputTokens
+		}
+	}
+	return usage
 }
 
 // injectStreamUsageOption ensures a streaming request body asks the
@@ -77,7 +117,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	}
 	// For streaming requests, ask the upstream to emit a final usage-bearing
 	// SSE chunk so token counts can be tracked for economics purposes.
-	if result.IsStreaming {
+	if result.IsStreaming && !result.IsResponses {
 		result.ForwardBody = injectStreamUsageOption(result.ForwardBody)
 	}
 	// Build the upstream URL
@@ -120,13 +160,9 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 		upstreamReq.Header.Set(key, value)
 	}
 
-	// Log auth header status for debugging credential propagation
-	if auth := upstreamReq.Header.Get("Authorization"); auth != "" {
-		prefix := auth
-		if len(prefix) > 20 {
-			prefix = prefix[:20] + "..."
-		}
-		logging.Infof("Forwarding with auth header: %s", prefix)
+	// Never log any portion of credentials; this only records presence.
+	if upstreamReq.Header.Get("Authorization") != "" {
+		logging.Infof("Forwarding with Authorization header present")
 	} else {
 		logging.Warnf("Forwarding WITHOUT auth header — upstream will likely reject")
 	}
@@ -232,7 +268,7 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 	w.Header().Set("Transfer-Encoding", "chunked")
 
 	// Copy other safe response headers
-	for _, h := range []string{"X-Request-Id", "Openai-Processing-Ms"} {
+	for _, h := range []string{"X-Request-Id", "Openai-Processing-Ms", "X-Codex-Turn-State"} {
 		if v := upstreamResp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
@@ -259,11 +295,9 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		if strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
 			payload := strings.TrimPrefix(line, "data: ")
 			// Observe usage as a side-channel without altering the streamed line.
-			var env openAIUsageEnvelope
-			if err := json.Unmarshal([]byte(payload), &env); err == nil {
-				if env.Usage.PromptTokens != 0 || env.Usage.CompletionTokens != 0 {
-					lastUsage = env.Usage
-				}
+			usage := extractOpenAIUsage([]byte(payload))
+			if usage.PromptTokens != 0 || usage.CompletionTokens != 0 {
+				lastUsage = usage
 			}
 			if maskModel != "" {
 				line = "data: " + string(rewriteModelInResponseBody([]byte(payload), maskModel))
@@ -305,10 +339,8 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 
 	// Observe usage as a side-channel before any rewriting; never blocks or
 	// alters forwarding if the body has no usage field or isn't JSON.
-	var env openAIUsageEnvelope
-	if jsonErr := json.Unmarshal(bodyBytes, &env); jsonErr == nil {
-		s.recordEconomicsUsage(model, env.Usage.PromptTokens, 0, 0, env.Usage.CompletionTokens)
-	}
+	usage := extractOpenAIUsage(bodyBytes)
+	s.recordEconomicsUsage(model, usage.PromptTokens, 0, 0, usage.CompletionTokens)
 
 	if maskModel != "" {
 		bodyBytes = rewriteModelInResponseBody(bodyBytes, maskModel)
@@ -318,7 +350,7 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	if _, err := w.Write(bodyBytes); err != nil {
 		logging.Errorf("Error writing response body to client: %v", err)
 	}
-	return env.Usage
+	return usage
 }
 
 // rewriteModelInResponseBody replaces the "model" field in a JSON body with newModel.

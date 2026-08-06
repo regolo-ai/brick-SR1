@@ -132,7 +132,8 @@ export default class CodexOn extends Command {
 
   private printHint(): void {
     print('Codex now defaults to the "brick" model provider → the local Brick router routes among the OpenAI pool.');
-    print('Your OpenAI API key is forwarded verbatim to api.openai.com. Undo with `brick codex off`.');
+    print('ChatGPT sign-in uses the ChatGPT Codex backend; API-key sign-in uses the configured OpenAI-compatible endpoints.');
+    print('Undo with `brick codex off`.');
     print('Check wiring with `brick codex status`.');
   }
 }

@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 )
 
 // Brick-specific configuration extensions for Brick proxy mode.
@@ -49,17 +50,22 @@ type TextRoute struct {
 // (text/audio/image), preprocesses non-text content, and routes through the
 // semantic pipeline.
 type BrickConfig struct {
-	Enabled         bool                `yaml:"enabled,omitempty"`
-	UseModelRouting *bool               `yaml:"use_model_routing,omitempty"`
-	FixedModel      string              `yaml:"fixed_model,omitempty"`
-	ContextWindow   ContextWindowConfig `yaml:"context_window,omitempty"`
-	STTModel        string              `yaml:"stt_model,omitempty"`       // e.g., "faster-whisper-large-v3"
-	STTEndpoint     string              `yaml:"stt_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/audio/transcriptions"
-	OCRModel        string              `yaml:"ocr_model,omitempty"`       // e.g., "deepseek-ocr"
-	OCREndpoint     string              `yaml:"ocr_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/chat/completions"
-	VisionModel     string              `yaml:"vision_model,omitempty"`    // e.g., "qwen3-vl-32b"
-	VisionEndpoint  string              `yaml:"vision_endpoint,omitempty"` // e.g., "https://api.regolo.ai/v1/chat/completions"
-	OCRMinTextLen   int                 `yaml:"ocr_min_text_length,omitempty"`
+	Enabled         bool   `yaml:"enabled,omitempty"`
+	UseModelRouting *bool  `yaml:"use_model_routing,omitempty"`
+	FixedModel      string `yaml:"fixed_model,omitempty"`
+	// CodexResponsesBaseURL is the native Responses endpoint used when Codex
+	// authenticates with ChatGPT (identified by ChatGPT-Account-ID). Keeping it
+	// configurable makes the protocol path testable and supports OpenAI-managed
+	// environments while the production default remains the ChatGPT Codex API.
+	CodexResponsesBaseURL string              `yaml:"codex_responses_base_url,omitempty"`
+	ContextWindow         ContextWindowConfig `yaml:"context_window,omitempty"`
+	STTModel              string              `yaml:"stt_model,omitempty"`       // e.g., "faster-whisper-large-v3"
+	STTEndpoint           string              `yaml:"stt_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/audio/transcriptions"
+	OCRModel              string              `yaml:"ocr_model,omitempty"`       // e.g., "deepseek-ocr"
+	OCREndpoint           string              `yaml:"ocr_endpoint,omitempty"`    // e.g., "https://api.regolo.ai/v1/chat/completions"
+	VisionModel           string              `yaml:"vision_model,omitempty"`    // e.g., "qwen3-vl-32b"
+	VisionEndpoint        string              `yaml:"vision_endpoint,omitempty"` // e.g., "https://api.regolo.ai/v1/chat/completions"
+	OCRMinTextLen         int                 `yaml:"ocr_min_text_length,omitempty"`
 
 	// RoutingMode mirrors AnthropicPassthroughConfig.RoutingMode for the Codex
 	// (OpenAI-compatible) path. "" defaults to smartsqueeze.
@@ -69,6 +75,14 @@ type BrickConfig struct {
 	RoutingMode       string  `yaml:"routing_mode,omitempty"`
 	StickyTTLSeconds  int     `yaml:"sticky_ttl_seconds,omitempty"`
 	StickyScoreMargin float64 `yaml:"sticky_score_margin,omitempty"`
+}
+
+// EffectiveCodexResponsesBaseURL returns the ChatGPT Codex Responses base URL.
+func (b *BrickConfig) EffectiveCodexResponsesBaseURL() string {
+	if b != nil && b.CodexResponsesBaseURL != "" {
+		return strings.TrimRight(b.CodexResponsesBaseURL, "/")
+	}
+	return "https://chatgpt.com/backend-api/codex"
 }
 
 // GetOCRMinTextLen returns the minimum OCR text length to consider valid, defaulting to 10.
