@@ -10,6 +10,7 @@ model:
 
 server_port: 8000
 auto_model_name: brick
+include_config_models_in_list: true
 
 # Model download registry: maps the local model path used by the skill router's
 # capability classifier to its Hugging Face repo, so the router downloads ModernBERT

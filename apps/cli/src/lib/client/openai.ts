@@ -50,7 +50,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-export type ThinkingMode = 'off' | 'low' | 'medium' | 'high' | 'auto';
+export type ThinkingMode = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto';
 
 export async function* chatCompletionStream(opts: {
   baseUrl?: string;

@@ -269,9 +269,10 @@ func (s *Server) handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleModels returns the list of available models.
-// The order matches what is most useful in Claude Code's model picker:
-// brick-claude first (the smart router), then the three Claude models in
-// descending capability order so users can still pick a model explicitly.
+// The virtual Brick model is always listed first. Native Claude models are
+// listed when the Anthropic passthrough is enabled, and configured skill-router
+// models are listed when include_config_models_in_list is enabled (the Codex
+// profile enables this so Codex's model picker can discover the Brick pool).
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -284,13 +285,38 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		OwnedBy string `json:"owned_by"`
 	}
 
-	models := []modelEntry{
-		// Virtual Brick router — effort level controls routing mode (eco→max).
-		{ID: "brick-claude", Object: "model", OwnedBy: "brick"},
-		// Native Claude models: forwarded verbatim, no skill routing.
-		{ID: "claude-opus-4-8", Object: "model", OwnedBy: "anthropic"},
-		{ID: "claude-sonnet-4-6", Object: "model", OwnedBy: "anthropic"},
-		{ID: "claude-haiku-4-5", Object: "model", OwnedBy: "anthropic"},
+	poolLen := 0
+	if s.cfg != nil {
+		poolLen = len(s.cfg.SkillRouter.Models)
+	}
+	models := make([]modelEntry, 0, 1+poolLen+3)
+	seen := make(map[string]bool)
+	add := func(id, owner string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		models = append(models, modelEntry{ID: id, Object: "model", OwnedBy: owner})
+	}
+
+	// Codex uses the configured auto_model_name (normally "brick"); keep the
+	// Claude-specific alias for the Anthropic model picker as well.
+	autoModel := "brick"
+	if s.cfg != nil && s.cfg.AutoModelName != "" {
+		autoModel = s.cfg.AutoModelName
+	}
+	add(autoModel, "brick")
+	if s.cfg != nil && s.cfg.AnthropicPassthrough.Enabled {
+		add("brick-claude", "brick")
+		add("claude-opus-4-8", "anthropic")
+		add("claude-sonnet-4-6", "anthropic")
+		add("claude-haiku-4-5", "anthropic")
+	}
+
+	if s.cfg != nil && s.cfg.IncludeConfigModelsInList {
+		for _, model := range s.cfg.SkillRouter.Models {
+			add(model.Model, "brick")
+		}
 	}
 
 	resp := map[string]interface{}{

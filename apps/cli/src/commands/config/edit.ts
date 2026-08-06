@@ -411,12 +411,14 @@ async function editReasoningEffort(cfg: BrickConfig): Promise<boolean> {
       { value: 'low', label: 'low' },
       { value: 'medium', label: 'medium' },
       { value: 'high', label: 'high' },
+      { value: 'xhigh', label: 'xhigh' },
+      { value: 'max', label: 'max' },
     ],
     initialValue: cfg.default_reasoning_effort,
   });
   if (isCancel(sel)) abort();
   if (sel === cfg.default_reasoning_effort) return false;
-  cfg.default_reasoning_effort = sel as 'low' | 'medium' | 'high';
+  cfg.default_reasoning_effort = sel as 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   return true;
 }
 

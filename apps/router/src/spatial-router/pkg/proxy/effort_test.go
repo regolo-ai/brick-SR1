@@ -45,6 +45,15 @@ func TestResolveEffortLevel(t *testing.T) {
 	}
 }
 
+func TestBrickEffortVocabExposesFiveLevels(t *testing.T) {
+	want := []string{"low", "low", "medium", "high", "xhigh", "max"}
+	for level, expected := range want {
+		if got := vocabAt(brickEffortVocab, level); got != expected {
+			t.Fatalf("brick effort level %d = %q, want %q", level, got, expected)
+		}
+	}
+}
+
 func TestApplyEffortAnthropic(t *testing.T) {
 	cfgMax := &config.RouterConfig{}
 	cfgMax.SkillRouter.Math.RoutingPreference = ptrF(1) // max -> window [3,5]

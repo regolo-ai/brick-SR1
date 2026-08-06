@@ -15,7 +15,7 @@ export default class Chat extends Command {
     system: Flags.string({ description: 'system prompt' }),
     'show-thinking': Flags.boolean({ default: false, description: 'show reasoning content from the start' }),
     'max-tokens': Flags.integer({ default: 4096, description: 'max tokens for response' }),
-    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|auto)' }),
+    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|xhigh|max|auto)' }),
   };
   async run(): Promise<void> {
     const { flags } = await this.parse(Chat);

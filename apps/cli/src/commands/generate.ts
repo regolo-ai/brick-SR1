@@ -11,7 +11,7 @@ export default class Generate extends Command {
     model: Flags.string({ default: 'brick' }),
     system: Flags.string(),
     'max-tokens': Flags.integer({ default: 512 }),
-    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|auto)' }),
+    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|xhigh|max|auto)' }),
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Generate);

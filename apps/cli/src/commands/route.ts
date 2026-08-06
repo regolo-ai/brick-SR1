@@ -20,7 +20,7 @@ export default class Route extends Command {
     json: Flags.boolean({ default: false }),
     'no-generate': Flags.boolean({ default: false, description: 'use minimal max_tokens=1 to measure routing-only latency' }),
     repeat: Flags.integer({ default: 1, description: 'run N times and report min/median/max latency' }),
-    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|auto)' }),
+    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|xhigh|max|auto)' }),
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Route);
