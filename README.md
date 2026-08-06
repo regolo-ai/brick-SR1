@@ -111,6 +111,8 @@ confidence check passes, paying for every miss in tokens and latency. Brick make
 
 ## 🧠 Brick + Claude Code
 
+📘 **[Leggi la guida pratica Brick + Claude Code CLI su Regolo](https://regolo.ai/brick-claude-code-cli-guide/)** — installazione, routing intelligente e ottimizzazione dei costi.
+
 
 
 https://github.com/user-attachments/assets/13c02f5b-191a-43cb-ad26-12ab6cb44f6a

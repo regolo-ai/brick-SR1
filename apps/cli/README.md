@@ -42,6 +42,8 @@ Requires Node 20 or >= 22 and Docker.
 
 Full walkthrough: [Brick + Claude Code](../../README.md#-brick--claude-code) in the root README.
 
+Practical external guide: [Brick + Claude Code CLI — AI routing and cost control](https://regolo.ai/brick-claude-code-cli-guide/).
+
 ### OpenAI Codex
 
 | Command | Purpose |
