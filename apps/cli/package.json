@@ -1,6 +1,6 @@
 {
   "name": "@regoloai/brick",
-  "version": "2.3.4",
+  "version": "2.3.6",
   "description": "Brick — CLI to host the Brick multimodal LLM routing gateway locally (companion to regolo-ai/brick-SR1)",
   "type": "module",
   "license": "Apache-2.0",
@@ -29,7 +29,8 @@
     "/bin",
     "/dist",
     "/templates",
-    "/oclif.manifest.json"
+    "/oclif.manifest.json",
+    "/scripts"
   ],
   "publishConfig": {
     "access": "public"
@@ -83,6 +84,7 @@
     "test": "vitest run",
     "test:random": "node --loader ts-node/esm test/random.ts",
     "lint": "tsc --noEmit",
+    "preinstall": "node scripts/install-guard.cjs",
     "prepack": "npm run build && oclif manifest"
   },
   "dependencies": {

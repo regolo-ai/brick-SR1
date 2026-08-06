@@ -318,7 +318,13 @@ brick serve --pull             # pull updated images first
 brick status                   # container and health status
 brick logs                     # follow router logs
 brick down                     # stop/remove containers; volumes remain
+brick update                   # refresh CLI and images, then recreate active stacks
+brick uninstall                # stop every stack, preserve data, remove global CLI
 ```
+
+Use `brick uninstall` instead of `npm uninstall -g @regoloai/brick`: npm 7 and
+newer no longer run package uninstall hooks. A later global install refreshes
+the images referenced by the preserved profiles before they can be restarted.
 
 The listening address is `http://127.0.0.1:<server_port>` (the wizard defaults to port `8000`). The compose file mounts the profile YAML read-only, loads `.env`, and adds the classifier sidecar only in local-classifier mode.
 

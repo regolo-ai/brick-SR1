@@ -63,7 +63,9 @@ export default class CodexOn extends Command {
       }
       info('router not responding — starting the Codex stack');
       try {
-        const r = await ensureServing(profile);
+        // Codex profiles use a moving `latest` tag. Pull before every cold
+        // start so a reinstall cannot revive a container from a stale image.
+        const r = await ensureServing(profile, { pull: true });
         if (!r.healthy) {
           err(`router did not become healthy on ${localBaseUrl(port)}. check \`brick logs\`.`);
           this.exit(1);

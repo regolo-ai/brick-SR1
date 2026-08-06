@@ -69,6 +69,8 @@ served only on the Claude/Anthropic path.
 | `brick status` | Active profile + container state |
 | `brick logs` | Tail container logs |
 | `brick stop` / `brick down` | Stop / down docker compose |
+| `brick update` | Pull current router images and update the global CLI package |
+| `brick uninstall` | Stop all Brick stacks, preserve configuration/volumes, then remove the global CLI |
 | `brick config new\|use\|edit\|list\|remove\|rename [profile]` | Manage YAML profiles |
 | `brick add\|remove provider\|model\|decision\|plugin` | Edit current profile interactively |
 | `brick skills extract` | Extract a skill-vector table from benchmark results for the router's model catalog |

@@ -128,7 +128,7 @@ export default class Update extends Command {
         continue;
       }
       info(`[${pr}] docker compose up -d ...`);
-      const up = await dockerCompose(pr, ['up', '-d']);
+      const up = await dockerCompose(pr, ['up', '-d', '--force-recreate', '--remove-orphans']);
       if (up.exitCode !== 0) {
         err(`[${pr}] up failed: ${up.stderr.slice(0, 300)}`);
         continue;

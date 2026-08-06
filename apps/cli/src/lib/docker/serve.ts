@@ -1,6 +1,6 @@
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dockerCompose } from './run.js';
-import { defaultImage, imageExists, pullImage } from './image.js';
+import { imageExists, imageId, pullImage } from './image.js';
 import { paths, updateState } from '../config/paths.js';
 import { loadConfig } from '../config/load.js';
 import { err, info, ok, warn } from '../ui/banners.js';
@@ -39,7 +39,7 @@ export interface EnsureServingResult {
  */
 export async function ensureServing(
   profile: string,
-  opts: { pull?: boolean } = {}
+  opts: { pull?: boolean; forceRecreate?: boolean } = {}
 ): Promise<EnsureServingResult> {
   const pp = paths(profile);
   try { await stat(pp.config); } catch { throw new Error(`no config at ${pp.config}. run \`brick config new ${profile}\` first.`); }
@@ -48,7 +48,8 @@ export async function ensureServing(
   const cfg = await loadConfig(profile);
   const port = cfg.server_port;
 
-  const img = defaultImage();
+  const img = await imageFromCompose(pp.compose);
+  const beforeId = await imageId(img);
   if (opts.pull || !(await imageExists(img))) {
     info(`pulling ${img} ...`);
     const r = await pullImage(img);
@@ -60,8 +61,14 @@ export async function ensureServing(
     ok(`image ${img} already present`);
   }
 
+  const afterId = await imageId(img);
+  const imageChanged = Boolean(beforeId && afterId && beforeId !== afterId);
   info(`docker compose up -d (profile: ${profile})`);
-  const r = await dockerCompose(profile, ['up', '-d']);
+  const forceRecreate = opts.forceRecreate !== false || imageChanged;
+  const composeArgs = forceRecreate
+    ? ['up', '-d', '--force-recreate', '--remove-orphans']
+    : ['up', '-d'];
+  const r = await dockerCompose(profile, composeArgs);
   if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 800));
 
   info(`waiting for health on ${localBaseUrl(port)}/health ...`);
@@ -71,4 +78,18 @@ export async function ensureServing(
 
   updateState({ runningProfile: profile });
   return { port, healthy };
+}
+
+/** Resolve the router image from the profile compose file, including simple
+ * Compose ${VAR:-default} interpolation. This keeps pull behavior aligned with
+ * the image actually referenced by the stack. */
+export async function imageFromCompose(composePath: string): Promise<string> {
+  const text = await readFile(composePath, 'utf8');
+  const routerBlock = text.match(/(?:^|\n)\s*router:\s*\n([\s\S]*?)(?=\n\s*[A-Za-z0-9_-]+:\s*\n|$)/);
+  const match = (routerBlock?.[1] ?? text).match(/^\s*image:\s*([^\s#]+).*/m);
+  if (!match) throw new Error(`compose file ${composePath} has no router image`);
+  return match[1].replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}/g, (_all, key, fallback) => {
+    const value = process.env[key];
+    return value ?? fallback ?? '';
+  });
 }

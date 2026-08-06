@@ -9,6 +9,10 @@ on:
         description: "Release tag (e.g. 2.0.0, 2.0.1-rc.1)"
         required: true
 
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: publish to npm
@@ -18,6 +22,22 @@ jobs:
       id-token: write   # for npm provenance (Sigstore)
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce main-only publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" != "main" ]]; then
+            echo "npm publishing is allowed only from main (current branch: $GITHUB_REF_NAME)." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "npm publishing is allowed only for commits contained in main." >&2
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -43,6 +63,15 @@ jobs:
         working-directory: apps/cli
         run: npm pack --dry-run
 
-      - name: Publish
+      - name: Publish (idempotent)
         working-directory: apps/cli
-        run: npm publish --access public
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          published=$(npm view "@regoloai/brick@${version}" version 2>/dev/null || true)
+          if [[ "$published" == "$version" ]]; then
+            echo "@regoloai/brick@${version} is already published; skipping duplicate transparency-log submission."
+          else
+            npm publish --access public
+          fi
