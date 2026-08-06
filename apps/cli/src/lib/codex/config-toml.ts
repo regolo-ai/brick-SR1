@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
+import { paths } from '../config/paths.js';
 
 // Minimal, dependency-free editor for ~/.codex/config.toml.
 //
@@ -19,6 +20,10 @@ export function codexHome(): string {
 
 export function codexConfigPath(): string {
   return join(codexHome(), 'config.toml');
+}
+
+export function codexModelCatalogPath(): string {
+  return paths('codex').codexCatalog;
 }
 
 export function readCodexConfig(): string {
@@ -186,7 +191,7 @@ export interface CodexUnwireState {
  * `model_provider = "brick"`, then append the managed provider block.
  * Idempotent: re-running replaces the managed block in place.
  */
-export function wireCodex(baseUrl: string): CodexWireResult {
+export function wireCodex(baseUrl: string, catalogPath = codexModelCatalogPath()): CodexWireResult {
   const createdFile = !existsSync(codexConfigPath());
   const original = readCodexConfig();
   const previousModel = getTopLevelModel(original);
@@ -205,6 +210,7 @@ export function wireCodex(baseUrl: string): CodexWireResult {
   text = setTopLevelString(text, 'model_provider', 'brick');
   text = setTopLevelString(text, 'model', 'brick');
   text = text.replace(/\n+$/, '\n');
+  text = setTopLevelString(text, 'model_catalog_json', catalogPath);
   text = (text.endsWith('\n') ? text : text + '\n') + managedBlock(baseUrl) + '\n';
   writeCodexConfig(text);
 
@@ -219,6 +225,7 @@ export function unwireCodex(state: CodexUnwireState): void {
   text = restoreTopLevelString(text, 'model', state.previousModel, 'brick');
   text = restoreTopLevelString(text, 'model_provider', state.previousModelProvider, 'brick');
   text = restoreLegacyProfile(text, state.previousProfile);
+  text = removeTopLevelStringIfValue(text, 'model_catalog_json', codexModelCatalogPath());
   writeCodexConfig(text);
 }
 

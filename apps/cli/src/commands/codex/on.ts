@@ -11,6 +11,8 @@ import {
   isWired,
   getTopLevelModel,
   getTopLevelModelProvider,
+  getTopLevelString,
+  codexModelCatalogPath,
 } from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
 import { ensureClassifierCompute } from '../../lib/config/regolo-key.js';
@@ -86,7 +88,8 @@ export default class CodexOn extends Command {
     const configAlreadyWired =
       isWired(codexConfig) &&
       getTopLevelModel(codexConfig) === 'brick' &&
-      getTopLevelModelProvider(codexConfig) === 'brick';
+      getTopLevelModelProvider(codexConfig) === 'brick' &&
+      getTopLevelString(codexConfig, 'model_catalog_json') === codexModelCatalogPath();
     if (existing?.wired && existing.baseUrl === baseUrl && configAlreadyWired) {
       ok(`already wired to ${baseUrl}`);
       print();

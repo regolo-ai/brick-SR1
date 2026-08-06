@@ -11,62 +11,9 @@ type CodexCatalogModel = {
 };
 
 const OPENAI_MODELS: readonly CodexCatalogModel[] = [
-  {
-    value: 'gpt-5.6-luna',
-    label: 'GPT-5.6 Luna',
-    hint: 'fast and affordable frontier model',
-    skill_vector: [0.80, 0.80, 0.75, 0.82, 0.83, 0.82],
-    cost_weight: 0.1,
-  },
-  {
-    value: 'gpt-5.6-terra',
-    label: 'GPT-5.6 Terra',
-    hint: 'balanced agentic coding model',
-    skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88],
-    cost_weight: 0.4,
-  },
-  {
-    value: 'gpt-5.6-sol',
-    label: 'GPT-5.6 Sol',
-    hint: 'most capable frontier model',
-    skill_vector: [0.90, 0.90, 0.85, 0.94, 0.92, 0.94],
-    cost_weight: 1.0,
-  },
-  {
-    value: 'gpt-5.4-mini',
-    label: 'GPT-5.4 mini',
-    hint: 'fast and inexpensive',
-    skill_vector: [0.55, 0.45, 0.66, 0.78, 0.58, 0.74],
-    cost_weight: 0.1,
-  },
-  {
-    value: 'o3-mini',
-    label: 'o3 mini',
-    hint: 'low-cost reasoning',
-    skill_vector: [0.55, 0.45, 0.60, 0.90, 0.66, 0.80],
-    cost_weight: 0.2,
-  },
-  {
-    value: 'gpt-5.4',
-    label: 'GPT-5.4',
-    hint: 'balanced default',
-    skill_vector: [0.80, 0.62, 0.70, 0.89, 0.78, 0.90],
-    cost_weight: 0.5,
-  },
-  {
-    value: 'o3',
-    label: 'o3',
-    hint: 'strong reasoning',
-    skill_vector: [0.74, 0.52, 0.64, 0.96, 0.74, 0.89],
-    cost_weight: 0.7,
-  },
-  {
-    value: 'gpt-5.5',
-    label: 'GPT-5.5',
-    hint: 'most capable',
-    skill_vector: [0.88, 0.70, 0.74, 0.93, 0.85, 0.93],
-    cost_weight: 1.0,
-  },
+  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', hint: 'fast and affordable frontier model', skill_vector: [0.80, 0.80, 0.75, 0.82, 0.83, 0.82], cost_weight: 0.1 },
+  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', hint: 'balanced agentic coding model', skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88], cost_weight: 0.4 },
+  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', hint: 'most capable frontier model', skill_vector: [0.90, 0.91, 0.86, 0.94, 0.92, 0.94], cost_weight: 1.0 },
 ] as const;
 
 const THINKING_MODE_OPTIONS = [

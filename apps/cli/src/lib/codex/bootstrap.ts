@@ -5,6 +5,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import Handlebars from 'handlebars';
 import { paths, profileExists, readState, updateState } from '../config/paths.js';
 import { defaultImage } from '../docker/image.js';
+import { migrateCodexProfile } from './migrate.js';
+import { writeCodexModelCatalog } from './catalog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = join(__dirname, '..', '..', '..', 'templates');
@@ -27,7 +29,10 @@ export const DEFAULT_CODEX_PORT = 8000;
  */
 export async function ensureDefaultCodexProfile(): Promise<string> {
   const profile = DEFAULT_CODEX_PROFILE;
-  if (profileExists(profile)) return profile;
+  if (profileExists(profile)) {
+    await migrateCodexProfile(profile);
+    return profile;
+  }
 
   const pp = paths(profile);
   mkdirSync(pp.profileDir, { recursive: true, mode: 0o700 });
@@ -61,6 +66,8 @@ export async function ensureDefaultCodexProfile(): Promise<string> {
     image: defaultImage(),
   });
   writeFileSync(pp.compose, composeRendered, { mode: 0o644 });
+
+  await writeCodexModelCatalog(profile);
 
   if (!readState().activeProfile) updateState({ activeProfile: profile });
 

@@ -12,6 +12,7 @@ export interface ProfilePaths {
   compose: string;
   env: string;
   models: string;
+  codexCatalog: string;
   state: string;
 }
 
@@ -36,6 +37,7 @@ export function paths(profile: string): ProfilePaths {
     compose: join(dir, 'docker-compose.yml'),
     env: join(dir, '.env'),
     models: join(dir, 'models'),
+    codexCatalog: join(dir, 'codex-model-catalog.json'),
     state: statePath(),
   };
 }

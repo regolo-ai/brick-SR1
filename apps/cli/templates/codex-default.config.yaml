@@ -21,7 +21,6 @@ mom_registry:
 brick:
   enabled: true
   use_model_routing: true
-  fixed_model: gpt-5.4
   context_window:
     enabled: true
     k: 8
@@ -43,14 +42,9 @@ provider_endpoints:
     weight: 1
 default_model: gpt-5.6-terra
 model_config:
-  gpt-5.6-sol: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  gpt-5.6-terra: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
   gpt-5.6-luna: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  gpt-5.5: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  gpt-5.4: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  gpt-5.4-mini: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  o3: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
-  o3-mini: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  gpt-5.6-terra: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
+  gpt-5.6-sol: { preferred_endpoints: ["openai"], param_size: "unknown", reasoning_family: openai_reasoning }
 
 reasoning_families:
   openai_reasoning: { type: reasoning_effort, parameter: reasoning_effort }
@@ -98,34 +92,9 @@ skill_router:
       cost_weight: 0.1
       use_reasoning: true
       base_url: https://api.openai.com/v1
-    - model: gpt-5.4-mini
-      skill_vector: [0.55, 0.45, 0.66, 0.78, 0.58, 0.74]
-      cost_weight: 0.1
-      use_reasoning: true
-      base_url: https://api.openai.com/v1
-    - model: o3-mini
-      skill_vector: [0.55, 0.45, 0.60, 0.90, 0.66, 0.80]
-      cost_weight: 0.2
-      use_reasoning: true
-      base_url: https://api.openai.com/v1
     - model: gpt-5.6-terra
       skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88]
       cost_weight: 0.4
-      use_reasoning: true
-      base_url: https://api.openai.com/v1
-    - model: gpt-5.4
-      skill_vector: [0.80, 0.62, 0.70, 0.89, 0.78, 0.90]
-      cost_weight: 0.5
-      use_reasoning: true
-      base_url: https://api.openai.com/v1
-    - model: o3
-      skill_vector: [0.74, 0.52, 0.64, 0.96, 0.74, 0.89]
-      cost_weight: 0.7
-      use_reasoning: true
-      base_url: https://api.openai.com/v1
-    - model: gpt-5.5
-      skill_vector: [0.88, 0.70, 0.74, 0.93, 0.85, 0.93]
-      cost_weight: 1.0
       use_reasoning: true
       base_url: https://api.openai.com/v1
     - model: gpt-5.6-sol
