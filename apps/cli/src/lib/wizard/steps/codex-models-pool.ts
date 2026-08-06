@@ -12,6 +12,27 @@ type CodexCatalogModel = {
 
 const OPENAI_MODELS: readonly CodexCatalogModel[] = [
   {
+    value: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
+    hint: 'fast and affordable frontier model',
+    skill_vector: [0.80, 0.80, 0.75, 0.82, 0.83, 0.82],
+    cost_weight: 0.1,
+  },
+  {
+    value: 'gpt-5.6-terra',
+    label: 'GPT-5.6 Terra',
+    hint: 'balanced agentic coding model',
+    skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88],
+    cost_weight: 0.4,
+  },
+  {
+    value: 'gpt-5.6-sol',
+    label: 'GPT-5.6 Sol',
+    hint: 'most capable frontier model',
+    skill_vector: [0.90, 0.90, 0.85, 0.94, 0.92, 0.94],
+    cost_weight: 1.0,
+  },
+  {
     value: 'gpt-5.4-mini',
     label: 'GPT-5.4 mini',
     hint: 'fast and inexpensive',
