@@ -11,6 +11,8 @@ import {
   isWired,
   getTopLevelModel,
   getTopLevelModelProvider,
+  getTopLevelString,
+  codexModelCatalogPath,
 } from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
 import { ensureClassifierCompute } from '../../lib/config/regolo-key.js';
@@ -63,7 +65,9 @@ export default class CodexOn extends Command {
       }
       info('router not responding — starting the Codex stack');
       try {
-        const r = await ensureServing(profile);
+        // Codex profiles use a moving `latest` tag. Pull before every cold
+        // start so a reinstall cannot revive a container from a stale image.
+        const r = await ensureServing(profile, { pull: true });
         if (!r.healthy) {
           err(`router did not become healthy on ${localBaseUrl(port)}. check \`brick logs\`.`);
           this.exit(1);
@@ -84,7 +88,8 @@ export default class CodexOn extends Command {
     const configAlreadyWired =
       isWired(codexConfig) &&
       getTopLevelModel(codexConfig) === 'brick' &&
-      getTopLevelModelProvider(codexConfig) === 'brick';
+      getTopLevelModelProvider(codexConfig) === 'brick' &&
+      getTopLevelString(codexConfig, 'model_catalog_json') === codexModelCatalogPath();
     if (existing?.wired && existing.baseUrl === baseUrl && configAlreadyWired) {
       ok(`already wired to ${baseUrl}`);
       print();

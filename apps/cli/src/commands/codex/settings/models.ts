@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { ensureDefaultCodexProfile } from '../../../lib/codex/bootstrap.js';
 import { loadConfigText } from '../../../lib/config/load.js';
 import { saveCodexConfigAndRestart } from '../../../lib/codex/settings-apply.js';
+import { writeCodexModelCatalog } from '../../../lib/codex/catalog.js';
 import { runCodexModelsPoolWizard } from '../../../lib/wizard/steps/codex-models-pool.js';
 import { banner, err, info, warn } from '../../../lib/ui/banners.js';
 
@@ -37,6 +38,10 @@ export default class CodexSettingsModels extends Command {
     }
 
     try {
+      const modelIds = Array.isArray(obj?.skill_router?.models)
+        ? obj.skill_router.models.map((m: any) => m?.model).filter((m: any): m is string => typeof m === 'string')
+        : undefined;
+      await writeCodexModelCatalog(profile, modelIds);
       const res = await saveCodexConfigAndRestart(profile, obj, true);
       p.outro('Model pool and thinking modes saved.');
       if (res.routerWasRunning) {
