@@ -1,7 +1,7 @@
 import { Command, Flags } from '@oclif/core';
 import { loadConfig } from '../../lib/config/load.js';
 import { readState } from '../../lib/config/paths.js';
-import { ensureServing, isHealthy } from '../../lib/docker/serve.js';
+import { ensureServing, isBrickRouter, isHealthy } from '../../lib/docker/serve.js';
 import { localBaseUrl } from '../../lib/net/local.js';
 import { ensureDefaultCodexProfile } from '../../lib/codex/bootstrap.js';
 import {
@@ -58,7 +58,14 @@ export default class CodexOn extends Command {
     );
 
     // 1. Ensure the router is up and healthy before pointing Codex at it.
-    if (!(await isHealthy(port))) {
+    const portHealthy = await isHealthy(port);
+    const brickHealthy = portHealthy && await isBrickRouter(port);
+    if (portHealthy && !brickHealthy) {
+      err(`port ${port} is occupied by a non-Brick service; refusing to wire Codex to it.`);
+      info(`change server_port for the Codex profile or stop the service using ${localBaseUrl(port)}.`);
+      this.exit(1);
+    }
+    if (!brickHealthy) {
       if (flags['no-start']) {
         err(`router not healthy on ${localBaseUrl(port)} and --no-start given. run \`brick serve\` first.`);
         this.exit(1);
@@ -68,7 +75,7 @@ export default class CodexOn extends Command {
         // Codex profiles use a moving `latest` tag. Pull before every cold
         // start so a reinstall cannot revive a container from a stale image.
         const r = await ensureServing(profile, { pull: true });
-        if (!r.healthy) {
+        if (!r.healthy || !(await isBrickRouter(port))) {
           err(`router did not become healthy on ${localBaseUrl(port)}. check \`brick logs\`.`);
           this.exit(1);
         }

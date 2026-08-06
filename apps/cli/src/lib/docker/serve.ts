@@ -27,6 +27,27 @@ export async function isHealthy(port: number): Promise<boolean> {
   }
 }
 
+/**
+ * Return true only when the listener is a Brick router, rather than merely a
+ * different HTTP service that happens to expose a successful /health route.
+ *
+ * Codex profiles use the virtual `brick` model.  Checking the model owner as
+ * well as the id prevents an unrelated OpenAI-compatible server on the same
+ * port from being mistaken for Brick and written into ~/.codex/config.toml.
+ */
+export async function isBrickRouter(port: number): Promise<boolean> {
+  try {
+    const r = await fetch(`${localBaseUrl(port)}/v1/models`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return false;
+    const payload = await r.json() as { data?: Array<{ id?: unknown; owned_by?: unknown }> };
+    return Array.isArray(payload.data) && payload.data.some(
+      (model) => model?.id === 'brick' && model?.owned_by === 'brick'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface EnsureServingResult {
   port: number;
   healthy: boolean;
