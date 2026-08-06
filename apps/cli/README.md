@@ -44,11 +44,6 @@ Full walkthrough: [Brick + Claude Code](../../README.md#-brick--claude-code) in 
 
 ### OpenAI Codex
 
-The Codex integration requires Codex API-key authentication. ChatGPT plan login
-cannot be forwarded through Brick to `api.openai.com`, and OpenAI Platform API
-usage is billed separately. `brick codex on` refuses ChatGPT-authenticated
-sessions before changing Codex configuration.
-
 | Command | Purpose |
 |---------|---------|
 | `brick codex on` / `brick codex off` | Same wiring pattern as `claude on/off`, for Codex |
