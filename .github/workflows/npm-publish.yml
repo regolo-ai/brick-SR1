@@ -45,4 +45,4 @@ jobs:
 
       - name: Publish
         working-directory: apps/cli
-        run: npm publish --access public --provenance
+        run: npm publish --access public
