@@ -33,11 +33,11 @@ func claudeVocabForModel(model string) []string {
 	return claudeEffortVocab
 }
 
-// brickEffortVocab maps the internal ordinal to the low/medium/high vocabulary
-// understood by every OpenAI-compatible backend in the brick pool (OpenAI,
-// Regolo, etc.). minimal/xhigh/max are intentionally avoided here so the value
-// stays universally valid across providers.
-var brickEffortVocab = []string{"low", "low", "medium", "high", "high", "high"}
+// brickEffortVocab maps the internal ordinal to Brick's five public effort
+// levels. The first two internal rungs intentionally share "low" so the
+// six-point internal ladder preserves fine-grained routing while exposing the
+// five-level client vocabulary: low, medium, high, xhigh, max.
+var brickEffortVocab = []string{"low", "low", "medium", "high", "xhigh", "max"}
 
 // baseEffortForComplexity maps the complexity label to the base effort ordinal
 // before the mode clamp: easy->L1, medium->L2, hard->L3.

@@ -6,9 +6,11 @@ import {
   applyCodexContextAwareness,
   applyCodexModelRouting,
   applyCodexThinkingRouting,
+  applyCodexRoutingMode,
   applyCompute,
   type SettingsApplyResult,
   type ComputeMode,
+  type CodexRoutingMode,
 } from './settings-apply.js';
 import { REGOLO_API_KEY_ENV, REGOLO_CLASSIFIER_MODEL } from '../claude/settings-apply.js';
 import { err, info, ok, warn } from '../ui/banners.js';
@@ -90,6 +92,27 @@ export async function runCodexThinkingRouting(
     reportRestart(res);
     const w = readCodexWiring();
     if (w) writeCodexWiring({ ...w, thinkingRouting: enabled });
+  } catch (e: any) {
+    err(e?.message ?? String(e));
+    exit(1);
+  }
+}
+
+export async function runCodexRoutingMode(
+  mode: CodexRoutingMode,
+  exit: (code: number) => never,
+): Promise<void> {
+  const profile = await codexProfile(exit);
+  try {
+    const res = await applyCodexRoutingMode(profile, mode);
+    const labels: Record<CodexRoutingMode, string> = {
+      off: 'OFF (per-request)',
+      sticky: 'STICKY (cache-aware)',
+      smartsqueeze: 'SMARTSQUEEZE (cache-aware)',
+      orchestrator: 'ORCHESTRATOR (shadow)',
+    };
+    ok(`Codex cache-aware routing ${labels[mode]} for profile '${profile}'.`);
+    reportRestart(res);
   } catch (e: any) {
     err(e?.message ?? String(e));
     exit(1);

@@ -30,7 +30,7 @@ export default class ClaudeSettingsShow extends Command {
     }
 
     const cw = obj?.anthropic_passthrough?.context_window;
-    const ctx = cw?.enabled ? `on (last ${cw.k ?? DEFAULT_CONTEXT_K} turns)` : 'off';
+    const ctx = cw?.enabled !== false ? `on (last ${cw?.k ?? DEFAULT_CONTEXT_K} turns)` : 'off';
     const cs = obj?.complexity_service ?? {};
     const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost/.test(cs.base_url);
     const compute = wiring?.computeMode ?? (isRemote ? 'api' : 'local');

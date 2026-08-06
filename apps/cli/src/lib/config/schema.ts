@@ -108,6 +108,7 @@ export const BrickSchema = z.object({
   enabled: z.boolean(),
   use_model_routing: z.boolean().optional(),
   fixed_model: z.string().optional(),
+  routing_mode: z.enum(['off', 'sticky', 'smartsqueeze', 'orchestrator']).optional(),
   context_window: z.object({
     enabled: z.boolean().optional(),
     k: z.number().optional(),

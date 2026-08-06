@@ -18,7 +18,7 @@ Top-level keys (all required unless noted):
 - \`default_model\`: string (must exist in model_config)
 - \`model_config\`: map of model id → { preferred_endpoints[], param_size, reasoning_family? }
 - \`reasoning_families\` (optional)
-- \`default_reasoning_effort\`: "low" | "medium" | "high"
+- \`default_reasoning_effort\`: "low" | "medium" | "high" | "xhigh" | "max"
 - \`complexity_service\` (optional): { enabled, base_url?, address?, port?, bearer_token?, bearer_token_file?, timeout_seconds, auto_spawn? }
 - \`skill_router\`: Brick2 router config:
   - \`enabled\`: true

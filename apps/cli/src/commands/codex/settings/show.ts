@@ -31,7 +31,13 @@ export default class CodexSettingsShow extends Command {
 
     const brick = obj?.brick ?? {};
     const cw = brick?.context_window;
-    const ctx = cw?.enabled ? `on (last ${cw.k ?? DEFAULT_CONTEXT_K} turns)` : 'off';
+    const ctx = cw?.enabled !== false ? `on (last ${cw?.k ?? DEFAULT_CONTEXT_K} turns)` : 'off';
+    const rm = brick.routing_mode;
+    const routingMode =
+      rm === 'sticky' ? 'sticky (cache-aware)' :
+      rm === 'orchestrator' ? 'orchestrator (shadow)' :
+      rm === 'off' ? 'off (per-request)' :
+      'smartsqueeze (cache-aware)';
     const cs = obj?.complexity_service ?? {};
     const isRemote = typeof cs.base_url === 'string' && !/127\.0\.0\.1|localhost|classifier/.test(cs.base_url);
     const compute = wiring?.computeMode ?? (isRemote ? 'api' : 'local');
@@ -48,6 +54,7 @@ export default class CodexSettingsShow extends Command {
     print(`compute:            ${compute}${cs.base_url ? `  (${cs.base_url})` : ''}`);
     print(`model routing:      ${modelRouting}`);
     print(`thinking routing:   ${thinkingRouting}`);
+    print(`cache-aware routing:${routingMode}`);
     print(`models:             ${models}`);
   }
 }
