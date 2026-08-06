@@ -15,6 +15,7 @@ import {
   codexModelCatalogPath,
 } from '../../lib/codex/config-toml.js';
 import { readCodexWiring, writeCodexWiring } from '../../lib/codex/wiring-state.js';
+import { usesChatGPTSubscriptionAuth } from '../../lib/codex/auth.js';
 import { ensureClassifierCompute } from '../../lib/config/regolo-key.js';
 import { banner, err, info, ok, print, warn } from '../../lib/ui/banners.js';
 
@@ -34,6 +35,18 @@ export default class CodexOn extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(CodexOn);
     banner();
+
+    // Codex's ChatGPT OAuth token grants subscription access through the
+    // ChatGPT backend; it is not an OpenAI Platform API credential. The local
+    // router forwards Codex's bearer credential to api.openai.com, so wiring a
+    // ChatGPT-authenticated session would only fail upstream after the profile
+    // and config had already been changed.
+    if (usesChatGPTSubscriptionAuth()) {
+      err('Codex is logged in using ChatGPT, but Brick Codex requires OpenAI Platform API-key authentication.');
+      info('ChatGPT plan usage cannot be forwarded through the local router to api.openai.com.');
+      info('Keep Brick off to use your ChatGPT subscription, or run `codex login --with-api-key` to use Brick with separately billed API usage.');
+      this.exit(1);
+    }
 
     // Materialize the dedicated Codex profile (OpenAI pool skill router) if absent.
     const profile = await ensureDefaultCodexProfile();
@@ -125,7 +138,7 @@ export default class CodexOn extends Command {
 
   private printHint(): void {
     print('Codex now defaults to the "brick" model provider → the local Brick router routes among the OpenAI pool.');
-    print('Your OpenAI API key is forwarded verbatim to api.openai.com. Undo with `brick codex off`.');
+    print('Your OpenAI API key is forwarded verbatim to api.openai.com and billed through OpenAI Platform. Undo with `brick codex off`.');
     print('Check wiring with `brick codex status`.');
   }
 }

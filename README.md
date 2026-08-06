@@ -232,8 +232,15 @@ pool by capability, complexity, and requested effort.
 
 ### Setup
 
+Brick's Codex router requires Codex to be signed in with an **OpenAI Platform API
+key**. ChatGPT subscription authentication (including ChatGPT Pro) cannot be
+forwarded to `api.openai.com`; API-key usage is billed separately through the
+OpenAI Platform account. `brick codex on` checks the cached Codex login mode and
+stops before changing the profile or `config.toml` when it detects ChatGPT login.
+
 ```bash
 npm install -g @regoloai/brick
+codex login --with-api-key
 brick codex on      # wires ~/.codex/config.toml and auto-starts the router
 ```
 
