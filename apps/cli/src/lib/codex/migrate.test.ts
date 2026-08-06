@@ -27,11 +27,17 @@ describe('Codex profile migration', () => {
     const result = await migrateCodexProfile('codex');
     const cfg = yaml.load(await readFile(join(dir, 'config.yaml'), 'utf8')) as any;
     const compose = await readFile(join(dir, 'docker-compose.yml'), 'utf8');
+    const catalog = JSON.parse(await readFile(join(dir, 'codex-model-catalog.json'), 'utf8')) as any;
 
     expect(result.poolAdded).toBe(true);
     expect(cfg.default_model).toBe('gpt-5.6-terra');
     expect(cfg.skill_router.models.map((m: any) => m.model)).toEqual(['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol']);
     expect(compose).toContain('image: docker.io/regolo/brick:latest');
+    expect(catalog.models.find((m: any) => m.slug === 'brick')).toMatchObject({
+      display_name: 'Brick Router',
+      visibility: 'list',
+      supported_in_api: true,
+    });
   });
 
   it('converts the previous generated eight-model pool to GPT-5.6 only', async () => {
