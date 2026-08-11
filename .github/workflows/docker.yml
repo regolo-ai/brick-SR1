@@ -110,11 +110,14 @@ jobs:
         env:
           SOURCE_IMAGE: docker.io/regolo/brick:deploy
           REGOLO_IMAGE: registry.regolo.ai/regolo/brick
+          REGOLO_RELEASE_TAG: "3.0.0"
           IMAGE_SHA: ${{ github.sha }}
         run: |
           docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:latest"
+          docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:$REGOLO_RELEASE_TAG"
           docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:$IMAGE_SHA"
           docker push "$REGOLO_IMAGE:latest"
+          docker push "$REGOLO_IMAGE:$REGOLO_RELEASE_TAG"
           docker push "$REGOLO_IMAGE:$IMAGE_SHA"
 
       # Docker Hub is the public mirror. Publish it only after the production
