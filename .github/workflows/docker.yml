@@ -1,4 +1,4 @@
-name: Docker Build & Push (Docker Hub)
+name: Docker Build & Push (Docker Hub + Regolo)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write   # upload Trivy SARIF to the Security tab
+      security-events: write # upload Trivy SARIF to the Security tab
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +79,7 @@ jobs:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: table
           severity: CRITICAL
-          exit-code: '1'
+          exit-code: "1"
           ignore-unfixed: true
           timeout: 15m
 
@@ -111,3 +111,26 @@ jobs:
             echo "Pushing $tag"
             docker push "$tag"
           done
+
+      # The production Deployment in regolo-ai/infra consumes this private
+      # registry reference with imagePullPolicy: Always. Keep this push scoped
+      # to the deploy branch, which is the release branch for the Regolo stack.
+      - name: Log in to Regolo registry
+        if: github.ref == 'refs/heads/deploy'
+        uses: docker/login-action@v3
+        with:
+          registry: registry.regolo.ai
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push image to Regolo registry
+        if: github.ref == 'refs/heads/deploy'
+        env:
+          SOURCE_IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          REGOLO_IMAGE: registry.regolo.ai/regolo/brick
+          IMAGE_SHA: ${{ github.sha }}
+        run: |
+          docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:latest"
+          docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:$IMAGE_SHA"
+          docker push "$REGOLO_IMAGE:latest"
+          docker push "$REGOLO_IMAGE:$IMAGE_SHA"
