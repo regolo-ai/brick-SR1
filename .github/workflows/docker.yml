@@ -31,14 +31,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- Registry auth ---
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       # --- Compute tags ---
 
       - name: Extract metadata (tags, labels)
@@ -102,16 +94,6 @@ jobs:
           sarif_file: trivy-router.sarif
           category: brick-router
 
-      - name: Push image
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          echo "$TAGS" | while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            echo "Pushing $tag"
-            docker push "$tag"
-          done
-
       # The production Deployment in regolo-ai/infra consumes this private
       # registry reference with imagePullPolicy: Always. Keep this push scoped
       # to the deploy branch, which is the release branch for the Regolo stack.
@@ -126,7 +108,7 @@ jobs:
       - name: Push image to Regolo registry
         if: github.ref == 'refs/heads/deploy'
         env:
-          SOURCE_IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          SOURCE_IMAGE: docker.io/regolo/brick:deploy
           REGOLO_IMAGE: registry.regolo.ai/regolo/brick
           IMAGE_SHA: ${{ github.sha }}
         run: |
@@ -134,3 +116,21 @@ jobs:
           docker tag "$SOURCE_IMAGE" "$REGOLO_IMAGE:$IMAGE_SHA"
           docker push "$REGOLO_IMAGE:latest"
           docker push "$REGOLO_IMAGE:$IMAGE_SHA"
+
+      # Docker Hub is the public mirror. Publish it only after the production
+      # registry push so a Hub credential outage cannot block the Regolo release.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image to Docker Hub
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          echo "$TAGS" | while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Pushing $tag"
+            docker push "$tag"
+          done
