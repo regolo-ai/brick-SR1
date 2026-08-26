@@ -1,6 +1,16 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
+  # Repository hygiene: block internal plans / dev notes (see AGENTS.md)
+  - repo: local
+    hooks:
+      - id: no-internal-files
+        name: no internal plans or dev notes
+        entry: scripts/check_no_internal_files.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
   # Basic hooks for Go, Rust, Python And JavaScript files only
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.2.0

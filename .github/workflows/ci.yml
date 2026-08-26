@@ -23,6 +23,26 @@ jobs:
         env:
           SKIP: "golang-lint,cargo-check,cargo-fmt,js-ts-lint"
 
+  repo-hygiene:
+    name: repo hygiene (no internal plans)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: no internal plans tracked
+        run: |
+          if git ls-files | grep -E '(^|/)plan_ab_suite/|(^|/)plans/|(^|/)[^/]*_plan[^/]*\.md$|(^|/)\.brick-internal/' ; then
+            echo "::error::internal plans are tracked in git (see AGENTS.md section 1)"
+            exit 1
+          fi
+          if git ls-files | grep -E '^brick_push_rules\.md$'; then
+            echo "::error::brick_push_rules.md was removed (superseded by AGENTS.md)"
+            exit 1
+          fi
+      - name: run guard script on full tree
+        run: scripts/check_no_internal_files.sh $(git ls-files)
+
   go-test:
     name: go test (router)
     runs-on: ubuntu-latest
