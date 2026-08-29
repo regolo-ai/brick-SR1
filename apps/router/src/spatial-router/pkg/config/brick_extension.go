@@ -50,9 +50,10 @@ type TextRoute struct {
 // (text/audio/image), preprocesses non-text content, and routes through the
 // semantic pipeline.
 type BrickConfig struct {
-	Enabled         bool   `yaml:"enabled,omitempty"`
-	UseModelRouting *bool  `yaml:"use_model_routing,omitempty"`
-	FixedModel      string `yaml:"fixed_model,omitempty"`
+	Enabled              bool   `yaml:"enabled,omitempty"`
+	UseModelRouting      *bool  `yaml:"use_model_routing,omitempty"`
+	FixedModel           string `yaml:"fixed_model,omitempty"`
+	RequiredBearerPrefix string `yaml:"required_bearer_prefix,omitempty"`
 	// CodexResponsesBaseURL is the native Responses endpoint used when Codex
 	// authenticates with ChatGPT (identified by ChatGPT-Account-ID). Keeping it
 	// configurable makes the protocol path testable and supports OpenAI-managed

@@ -1,0 +1,91 @@
+# Pollinations endpoint-agent profile.
+#
+# Pollinations calls this router with a short-lived `ag_` token. No model below
+# has a static API key, so Brick forwards that same delegated token to the
+# selected Pollinations model. Never add an owner API key to this profile.
+
+model:
+  name: brick-pollinations
+  description: Brick router backed by Pollinations models
+
+server_port: 8000
+auto_model_name: brick
+include_config_models_in_list: true
+
+mom_registry:
+  models/modernbert-capability-classifier: regolo/modernbert-capability-classifier
+
+brick:
+  enabled: true
+  required_bearer_prefix: "ag_"
+
+providers:
+  pollinations:
+    type: openai_compatible
+    base_url: https://gen.pollinations.ai/v1
+provider_profiles:
+  pollinations:
+    type: openai_compatible
+    base_url: https://gen.pollinations.ai/v1
+provider_endpoints:
+  - name: pollinations
+    provider_profile: pollinations
+    weight: 1
+
+default_model: gpt-5.6-terra
+model_config:
+  gpt-5.6-luna: { preferred_endpoints: [pollinations], param_size: unknown, reasoning_family: openai_reasoning }
+  gpt-5.6-terra: { preferred_endpoints: [pollinations], param_size: unknown, reasoning_family: openai_reasoning }
+  gpt-5.6-sol: { preferred_endpoints: [pollinations], param_size: unknown, reasoning_family: openai_reasoning }
+
+reasoning_families:
+  openai_reasoning: { type: reasoning_effort, parameter: reasoning_effort }
+default_reasoning_effort: medium
+
+# The classifier is local so classification does not spend the caller's token
+# or require a Pollinations credential owned by the endpoint operator.
+complexity_service:
+  enabled: true
+  base_url: http://classifier:8094
+  bearer_token: "${BRICK_CLASSIFIER_TOKEN}"
+  timeout_seconds: 8
+  auto_spawn: false
+
+skill_router:
+  enabled: true
+  dynamic_effort: true
+  capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    repo_id: regolo/modernbert-capability-classifier
+    labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+    use_cpu: true
+  complexity_model:
+    model_id: brick-complexity-pro
+    base_model_id: Qwen/Qwen3.5-0.8B
+    base_url: http://classifier:8094
+    bearer_token: "${BRICK_CLASSIFIER_TOKEN}"
+    timeout_seconds: 8
+    auto_spawn: false
+  math:
+    routing_preference: 0
+    tau: { easy: 0.55, medium: 0.72, hard: 0.88 }
+  models:
+    - model: gpt-5.6-luna
+      skill_vector: [0.80, 0.80, 0.75, 0.82, 0.83, 0.82]
+      cost_weight: 0.1
+      use_reasoning: true
+      base_url: https://gen.pollinations.ai/v1
+    - model: gpt-5.6-terra
+      skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88]
+      cost_weight: 0.4
+      use_reasoning: true
+      base_url: https://gen.pollinations.ai/v1
+    - model: gpt-5.6-sol
+      skill_vector: [0.90, 0.91, 0.86, 0.94, 0.92, 0.94]
+      cost_weight: 1.0
+      use_reasoning: true
+      base_url: https://gen.pollinations.ai/v1
+  keyword_rules: []
+
+decisions: []

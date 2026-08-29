@@ -68,9 +68,9 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		logging.Infof("Brick: x-selected-model=%s, bypassing routing", selectedModel)
 		rewrittenBody := rewriteModelInBody(body, selectedModel)
-		clientKey := extractClientAPIKey(r)
-		if clientKey == "" {
-			writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+		clientKey, keyErr := extractBrickAPIKey(r, cfg.Brick.RequiredBearerPrefix)
+		if keyErr != nil {
+			writeError(w, http.StatusUnauthorized, keyErr.Error())
 			return
 		}
 		result := s.buildForwardResultForModel(rewrittenBody, cfg, selectedModel, req.Stream, clientKey)
@@ -88,9 +88,9 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// API key must come from the client's Authorization header
-	apiKey := extractClientAPIKey(r)
-	if apiKey == "" {
-		writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+	apiKey, keyErr := extractBrickAPIKey(r, cfg.Brick.RequiredBearerPrefix)
+	if keyErr != nil {
+		writeError(w, http.StatusUnauthorized, keyErr.Error())
 		return
 	}
 
@@ -605,6 +605,17 @@ func extractClientAPIKey(r *http.Request) string {
 		return strings.TrimSpace(auth[len(prefix):])
 	}
 	return ""
+}
+
+func extractBrickAPIKey(r *http.Request, requiredPrefix string) (string, error) {
+	key := extractClientAPIKey(r)
+	if key == "" {
+		return "", fmt.Errorf("missing API key: provide Authorization Bearer token")
+	}
+	if requiredPrefix != "" && !strings.HasPrefix(key, requiredPrefix) {
+		return "", fmt.Errorf("API key does not match the required bearer prefix")
+	}
+	return key, nil
 }
 
 // mergeMaps merges src into dst, returning dst. src values don't overwrite existing dst values.

@@ -48,3 +48,29 @@ func TestParseRegoloDeploymentConfig(t *testing.T) {
 		t.Fatal("Regolo deployment config must not enable Anthropic pass-through")
 	}
 }
+
+func TestParsePollinationsDeploymentConfig(t *testing.T) {
+	const path = "../../../../../../deploy/docker-compose/config.pollinations.yaml"
+	cfg, err := Parse(path)
+	if err != nil {
+		t.Fatalf("parse Pollinations deployment config: %v", err)
+	}
+	if cfg.Brick.RequiredBearerPrefix != "ag_" {
+		t.Fatalf("required bearer prefix = %q, want ag_", cfg.Brick.RequiredBearerPrefix)
+	}
+	wantModels := []string{"gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+	gotModels := make([]string, 0, len(cfg.SkillRouter.Models))
+	for _, model := range cfg.SkillRouter.Models {
+		gotModels = append(gotModels, model.Model)
+		if model.BaseURL != "https://gen.pollinations.ai/v1" {
+			t.Fatalf("model %q base URL = %q", model.Model, model.BaseURL)
+		}
+		if model.APIKey != "" || model.APIKeyEnv != "" || model.APIKeyFile != "" {
+			t.Fatalf("model %q must use the delegated caller token", model.Model)
+		}
+	}
+	sort.Strings(gotModels)
+	if !reflect.DeepEqual(gotModels, wantModels) {
+		t.Fatalf("unexpected Pollinations model pool: got %v, want %v", gotModels, wantModels)
+	}
+}

@@ -1,0 +1,56 @@
+# Pollinations endpoint-agent stack (Brick router + local complexity classifier).
+# Publish the router behind HTTPS, then register that public `/v1` URL with
+# upstream model `brick` as a Pollinations endpoint agent.
+
+services:
+  classifier:
+    image: docker.io/regolo/brick-cc-classifier:${BRICK_CC_TAG:-latest}
+    environment:
+      BRICK_CLASSIFIER_TOKEN: ${BRICK_CLASSIFIER_TOKEN:?set BRICK_CLASSIFIER_TOKEN}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - brick-pollinations-hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:8094/health]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    restart: unless-stopped
+    networks: [brick-pollinations]
+
+  router:
+    image: docker.io/regolo/brick:${BRICK_TAG:-latest}
+    depends_on:
+      classifier:
+        condition: service_healthy
+    environment:
+      BRICK_CLASSIFIER_TOKEN: ${BRICK_CLASSIFIER_TOKEN:?set BRICK_CLASSIFIER_TOKEN}
+    ports:
+      - "${BRICK_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./config.pollinations.yaml:/app/config/config.yaml:ro
+      - brick-pollinations-model-cache:/app/models
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:8000/health]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    restart: unless-stopped
+    networks: [brick-pollinations]
+
+networks:
+  brick-pollinations:
+    driver: bridge
+
+volumes:
+  brick-pollinations-hf-cache:
+  brick-pollinations-model-cache:

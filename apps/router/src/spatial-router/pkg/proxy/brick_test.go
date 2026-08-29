@@ -145,6 +145,37 @@ func TestExtractPath(t *testing.T) {
 	}
 }
 
+func TestExtractBrickAPIKey(t *testing.T) {
+	tests := []struct {
+		name           string
+		authorization  string
+		requiredPrefix string
+		want           string
+		wantErr        bool
+	}{
+		{name: "regular bearer remains supported by default", authorization: "Bearer sk_test", want: "sk_test"},
+		{name: "matching agent token", authorization: "Bearer ag_test", requiredPrefix: "ag_", want: "ag_test"},
+		{name: "rejects a different token kind", authorization: "Bearer sk_test", requiredPrefix: "ag_", wantErr: true},
+		{name: "rejects a missing bearer", requiredPrefix: "ag_", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			if tc.authorization != "" {
+				req.Header.Set("Authorization", tc.authorization)
+			}
+			got, err := extractBrickAPIKey(req, tc.requiredPrefix)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("extractBrickAPIKey() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("extractBrickAPIKey() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRewriteModelInBody(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -524,5 +555,51 @@ func TestEndToEndForwardToFakeOpenRouter(t *testing.T) {
 	}
 	if sent["top_p"] != 0.95 {
 		t.Errorf("forwarded body top_p = %v, want merged from custom_params", sent["top_p"])
+	}
+}
+
+func TestEndToEndForwardDelegatedBearer(t *testing.T) {
+	var gotAuth string
+	fakeBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer fakeBackend.Close()
+
+	cfg := &config.RouterConfig{
+		BrickExtension: config.BrickExtension{
+			Brick: config.BrickConfig{
+				Enabled:              true,
+				RequiredBearerPrefix: "ag_",
+			},
+		},
+		BackendModels: config.BackendModels{
+			ModelConfig: map[string]config.ModelParams{"gpt-5.6-luna": {}},
+		},
+		SkillRouter: config.SkillRouterConfig{
+			Enabled: true,
+			Models: []config.SkillRouterModelConfig{
+				{Model: "gpt-5.6-luna", BaseURL: fakeBackend.URL + "/v1"},
+			},
+		},
+	}
+	srv := &Server{cfg: cfg}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(`{"model":"brick","messages":[{"role":"user","content":"hi"}]}`),
+	)
+	req.Header.Set("Authorization", "Bearer ag_delegated-test-token")
+	req.Header.Set("x-selected-model", "gpt-5.6-luna")
+	w := httptest.NewRecorder()
+
+	srv.handleChatCompletions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("response status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if gotAuth != "Bearer ag_delegated-test-token" {
+		t.Errorf("backend Authorization = %q, want delegated agent token", gotAuth)
 	}
 }
