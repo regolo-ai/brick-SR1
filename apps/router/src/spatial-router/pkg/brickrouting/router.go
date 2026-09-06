@@ -8,7 +8,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -537,6 +536,7 @@ func effectiveParams(kp knobParams, preference float64) (mu, bias, beta, lambda 
 type capabilityClassifier struct {
 	modelPath string
 	labels    []string
+	order     []int
 }
 
 type capabilityResult struct {
@@ -557,11 +557,39 @@ func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabi
 	if len(labels) == 0 {
 		labels = capabilities
 	}
+	order, err := capabilityLabelOrder(labels, capabilities)
+	if err != nil {
+		return nil, err
+	}
 	logging.Infof("[Brick2] initializing capability classifier: %s", modelPath)
 	if err := candle.InitModernBertClassifier(modelPath, cfg.UseCPU); err != nil {
 		return nil, fmt.Errorf("initialize capability classifier %q: %w", modelPath, err)
 	}
-	return &capabilityClassifier{modelPath: modelPath, labels: labels}, nil
+	return &capabilityClassifier{modelPath: modelPath, labels: labels, order: order}, nil
+}
+
+// Model outputs follow checkpoint labels; routing vectors follow capabilities.
+func capabilityLabelOrder(labels, capabilities []string) ([]int, error) {
+	if len(labels) != len(capabilities) {
+		return nil, fmt.Errorf("capability labels and routing dimensions differ")
+	}
+	indices := make(map[string]int, len(labels))
+	for i, label := range labels {
+		if _, exists := indices[label]; exists {
+			return nil, fmt.Errorf("duplicate capability label %q", label)
+		}
+		indices[label] = i
+	}
+	order := make([]int, len(capabilities))
+	for i, capability := range capabilities {
+		index, exists := indices[capability]
+		if !exists {
+			return nil, fmt.Errorf("missing capability label %q", capability)
+		}
+		order[i] = index
+		delete(indices, capability)
+	}
+	return order, nil
 }
 
 func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
@@ -572,14 +600,18 @@ func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
 	if len(result.Probabilities) != len(c.labels) {
 		if len(result.Probabilities) == 0 && result.Class >= 0 && result.Class < len(c.labels) {
 			out := make([]float64, len(c.labels))
-			out[result.Class] = 1
+			for i, index := range c.order {
+				if index == result.Class {
+					out[i] = 1
+				}
+			}
 			return out, nil
 		}
 		return nil, fmt.Errorf("capability classifier returned %d probabilities for %d labels", len(result.Probabilities), len(c.labels))
 	}
 	out := make([]float64, len(result.Probabilities))
-	for i, p := range result.Probabilities {
-		out[i] = float64(p)
+	for i, index := range c.order {
+		out[i] = float64(result.Probabilities[index])
 	}
 	return normalize(out), nil
 }
@@ -595,6 +627,8 @@ var noLogprobWarn sync.Once
 type complexityClient struct {
 	baseURL           string
 	bearerToken       string
+	credentialErr     error
+	useClientKey      bool
 	protocol          string
 	modelName         string
 	defaultConfidence float64
@@ -629,20 +663,15 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 		baseURL = defaultComplexityBaseURL
 	}
 
-	// Expand env references (e.g. "${REGOLO_API_KEY}") so an unexpanded literal
-	// does not shadow the ResolveBearerToken fallback below and cause the router
-	// to send "Authorization: Bearer ${REGOLO_API_KEY}" verbatim (403 -> every
-	// request falls back to "medium").
-	token := strings.TrimSpace(os.ExpandEnv(skillCfg.BearerToken))
-	if token == "" && skillCfg.BearerTokenFile != "" {
-		if b, err := os.ReadFile(skillCfg.BearerTokenFile); err == nil {
-			token = strings.TrimSpace(string(b))
-		}
+	tokenConfig := &config.ComplexityServiceConfig{BearerToken: skillCfg.BearerToken, BearerTokenFile: skillCfg.BearerTokenFile}
+	if tokenConfig.BearerToken == "" && tokenConfig.BearerTokenFile == "" && cfg.ComplexityService != nil {
+		tokenConfig = cfg.ComplexityService
 	}
-	if token == "" && cfg.ComplexityService != nil {
-		if resolved, err := cfg.ComplexityService.ResolveBearerToken(); err == nil {
-			token = resolved
-		}
+	useClientKey := skillCfg.UseClientKey || config.IsRegoloEndpoint(baseURL) || (skillCfg.BaseURL == "" && cfg.ComplexityService.UsesClientKey())
+	var token string
+	var credentialErr error
+	if !useClientKey {
+		token, credentialErr = tokenConfig.ResolveBearerToken()
 	}
 
 	// Protocol: skill-router value wins, else the ComplexityService value,
@@ -691,6 +720,8 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 	return &complexityClient{
 		baseURL:           baseURL,
 		bearerToken:       token,
+		credentialErr:     credentialErr,
+		useClientKey:      useClientKey,
 		protocol:          protocol,
 		modelName:         modelName,
 		defaultConfidence: defaultConfidence,
@@ -705,6 +736,15 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 // recorded into the brick_cc_classify_duration_seconds histogram (success and
 // fallback both count), which `brick claude status` reads for avg/p50/p95.
 func (c *complexityClient) Classify(ctx context.Context, text string) (string, float64) {
+	if c.useClientKey {
+		requestClient := *c
+		requestClient.bearerToken, requestClient.credentialErr = config.ValidateCredential(config.ClientAPIKey(ctx))
+		c = &requestClient
+	}
+	if c.credentialErr != nil {
+		logging.Warnf("Complexity classifier credential is unavailable")
+		return "medium", 1.0
+	}
 	start := time.Now()
 	defer func() { metrics.BrickCCClassifyDuration.WithLabelValues().Observe(time.Since(start).Seconds()) }()
 	if c.protocol == "openai" {
@@ -799,7 +839,6 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 			{"role": "system", "content": complexitySystemPrompt},
 			{"role": "user", "content": "Classify: " + text},
 		},
-		"max_tokens":   1,
 		"temperature":  0,
 		"logprobs":     true,
 		"top_logprobs": 20,

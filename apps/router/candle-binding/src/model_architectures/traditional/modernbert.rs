@@ -1104,6 +1104,15 @@ impl TraditionalModernBertClassifier {
 
     /// Classify text using real model inference - REAL IMPLEMENTATION
     pub fn classify_text(&self, text: &str) -> Result<(usize, f32), candle_core::Error> {
+        let (class, confidence, _) = self.classify_text_with_probabilities(text)?;
+        Ok((class, confidence))
+    }
+
+    /// Return the complete model distribution in checkpoint class order.
+    pub fn classify_text_with_probabilities(
+        &self,
+        text: &str,
+    ) -> Result<(usize, f32, Vec<f32>), candle_core::Error> {
         // 1. Tokenize input text
         let tokenization_result = self.tokenizer.tokenize(text).map_err(|e| {
             let unified_err = processing_errors::tensor_operation("tokenization", &e.to_string());
@@ -1181,7 +1190,7 @@ impl TraditionalModernBertClassifier {
             }
         }
 
-        Ok((predicted_class, max_prob))
+        Ok((predicted_class, max_prob, probabilities_vec))
     }
 
     /// Get class labels mapping

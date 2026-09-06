@@ -1327,6 +1327,19 @@ default_model: "my-alias"
 				resolved := cfg.ResolveExternalModelID("my-alias", "ep1")
 				Expect(resolved).To(Equal("my-alias"))
 			})
+
+			It("translates the retired Regolo glm5.2-beta upstream ID", func() {
+				cfg := &RouterConfig{BackendModels: BackendModels{
+					ModelConfig: map[string]ModelParams{
+						"glm5.2-beta": {PreferredEndpoints: []string{"regolo"}},
+					},
+					ProviderProfiles: map[string]ProviderProfile{
+						"regolo": {Type: "openai_compatible", BaseURL: "https://api.regolo.ai/v1"},
+					},
+					ProviderEndpoints: []ProviderEndpoint{{Name: "regolo", ProviderProfileName: "regolo"}},
+				}}
+				Expect(cfg.ResolveExternalModelID("glm5.2-beta", "regolo")).To(Equal("glm5.2"))
+			})
 		})
 
 		Describe("ValidateEndpoints", func() {

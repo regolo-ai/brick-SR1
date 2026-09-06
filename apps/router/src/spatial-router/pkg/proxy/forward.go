@@ -23,8 +23,33 @@ const (
 // non-streaming responses and streaming SSE chunks. Only prompt/completion
 // tokens are needed for economics tracking; other usage fields are ignored.
 type openAIUsage struct {
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
+	PromptTokens        int64 `json:"prompt_tokens"`
+	CompletionTokens    int64 `json:"completion_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens int64 `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+}
+
+// splitOpenAIUsage converts OpenAI's inclusive prompt_tokens counter into the
+// store's disjoint fresh/cache-read counters. Some compatible backends have
+// emitted inconsistent details, so cached tokens are clamped to [0, prompt].
+func splitOpenAIUsage(u openAIUsage) (fresh, cached, output int64) {
+	prompt := u.PromptTokens
+	if prompt < 0 {
+		prompt = 0
+	}
+	cached = u.PromptTokensDetails.CachedTokens
+	if cached < 0 {
+		cached = 0
+	}
+	if cached > prompt {
+		cached = prompt
+	}
+	output = u.CompletionTokens
+	if output < 0 {
+		output = 0
+	}
+	return prompt - cached, cached, output
 }
 
 type openAIUsageEnvelope struct {
@@ -120,13 +145,11 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 		upstreamReq.Header.Set(key, value)
 	}
 
-	// Log auth header status for debugging credential propagation
-	if auth := upstreamReq.Header.Get("Authorization"); auth != "" {
-		prefix := auth
-		if len(prefix) > 20 {
-			prefix = prefix[:20] + "..."
-		}
-		logging.Infof("Forwarding with auth header: %s", prefix)
+	// Never log credentials or token prefixes: even partial API keys are
+	// sensitive and logs often leave the machine. Keep only the diagnostic
+	// fact that credential propagation succeeded.
+	if upstreamReq.Header.Get("Authorization") != "" {
+		logging.Infof("Forwarding with authorization header")
 	} else {
 		logging.Warnf("Forwarding WITHOUT auth header — upstream will likely reject")
 	}
@@ -256,7 +279,8 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		logging.Errorf("Error reading upstream SSE stream: %v", err)
 	}
 
-	s.recordEconomicsUsage(model, lastUsage.PromptTokens, 0, 0, lastUsage.CompletionTokens)
+	fresh, cached, output := splitOpenAIUsage(lastUsage)
+	s.recordEconomicsUsage(model, fresh, 0, cached, output)
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
@@ -286,7 +310,8 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	// alters forwarding if the body has no usage field or isn't JSON.
 	var env openAIUsageEnvelope
 	if jsonErr := json.Unmarshal(bodyBytes, &env); jsonErr == nil {
-		s.recordEconomicsUsage(model, env.Usage.PromptTokens, 0, 0, env.Usage.CompletionTokens)
+		fresh, cached, output := splitOpenAIUsage(env.Usage)
+		s.recordEconomicsUsage(model, fresh, 0, cached, output)
 	}
 
 	if maskModel != "" {

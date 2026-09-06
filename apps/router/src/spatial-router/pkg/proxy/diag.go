@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 )
 
@@ -71,7 +72,21 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 
 	// The openai probe hits an authenticated endpoint; the brick /health is open.
 	if isOpenAI {
-		if token, terr := cfg.ComplexityService.ResolveBearerToken(); terr == nil && token != "" {
+		var token string
+		var tokenErr error
+		if cfg.ComplexityService.UsesClientKey() {
+			token, tokenErr = config.ValidateCredential(extractClientAPIKey(r))
+		} else {
+			token, tokenErr = cfg.ComplexityService.ResolveBearerToken()
+		}
+		if tokenErr != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"enabled": true, "endpoint": endpoint, "reachable": false,
+				"error": "classifier credential is unavailable",
+			})
+			return
+		}
+		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 	}

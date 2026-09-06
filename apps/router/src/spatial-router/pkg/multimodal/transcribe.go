@@ -21,6 +21,13 @@ const maxAudioSize = 25 << 20
 // TranscribeAudio sends base64-encoded audio to the Whisper STT endpoint
 // and returns the transcribed text.
 func TranscribeAudio(ctx context.Context, audioBase64 string, cfg *config.BrickConfig, apiKey string) (string, error) {
+	if config.IsRegoloEndpoint(cfg.STTEndpoint) {
+		key, err := config.ValidateCredential(apiKey)
+		if err != nil {
+			return "", fmt.Errorf("Regolo credential: %w", err)
+		}
+		apiKey = key
+	}
 	// Reject oversized base64 input before decoding (base64 expands ~33%)
 	if len(audioBase64) > maxAudioSize*2 {
 		return "", fmt.Errorf("audio data too large (max %d bytes decoded)", maxAudioSize)

@@ -62,23 +62,25 @@ func TestSkillRouterModelConfig_ResolveAPIKey(t *testing.T) {
 			want:     "sk-expanded",
 		},
 		{
-			name:     "env unset falls through to next",
+			name:     "explicit missing env does not fall through to file",
 			model:    SkillRouterModelConfig{APIKeyEnv: "DEFINITELY_UNSET_ENV_VAR", APIKeyFile: keyFile},
 			envKey:   "",
 			envVal:   "",
 			fallback: "sk-fb",
-			want:     "sk-from-file",
+			want:     "",
+		},
+		{
+			name:     "explicit missing env never uses client fallback",
+			model:    SkillRouterModelConfig{APIKeyEnv: "DEFINITELY_UNSET_ENV_VAR"},
+			fallback: "codex-client-bearer",
+			want:     "",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DEFINITELY_UNSET_ENV_VAR", "")
 			if tc.envKey != "" {
-				if tc.envVal == "" {
-					os.Unsetenv(tc.envKey)
-				} else {
-					os.Setenv(tc.envKey, tc.envVal)
-					defer os.Unsetenv(tc.envKey)
-				}
+				t.Setenv(tc.envKey, tc.envVal)
 			}
 			got := tc.model.ResolveAPIKey(tc.fallback)
 			if got != tc.want {

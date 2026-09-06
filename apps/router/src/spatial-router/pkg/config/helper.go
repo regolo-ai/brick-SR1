@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 )
@@ -119,15 +118,8 @@ func (c *RouterConfig) GetModelAPIFormat(modelName string) string {
 
 // GetModelAccessKey returns the access key for the given model.
 func (c *RouterConfig) GetModelAccessKey(modelName string) string {
-	if c == nil || c.ModelConfig == nil {
-		return ""
-	}
-	if modelConfig, ok := c.ModelConfig[modelName]; ok {
-		rawKey := modelConfig.AccessKey
-		expandedKey := os.ExpandEnv(rawKey)
-		return expandedKey
-	}
-	return ""
+	key, _ := c.ResolveModelAccessKey(modelName)
+	return key
 }
 
 // GetDecisionPIIPolicy returns the PII policy for a given decision
@@ -617,7 +609,7 @@ func (c *RouterConfig) ResolveExternalModelID(modelName string, endpointName str
 	}
 
 	modelConfig, ok := c.ModelConfig[modelName]
-	if !ok || len(modelConfig.ExternalModelIDs) == 0 {
+	if !ok {
 		return modelName
 	}
 
@@ -630,8 +622,23 @@ func (c *RouterConfig) ResolveExternalModelID(modelName string, endpointName str
 	}
 
 	// Look up the external model ID for this endpoint type
-	if externalID, ok := modelConfig.ExternalModelIDs[endpointType]; ok && externalID != "" {
-		return externalID
+	if len(modelConfig.ExternalModelIDs) > 0 {
+		if externalID, ok := modelConfig.ExternalModelIDs[endpointType]; ok && externalID != "" {
+			return externalID
+		}
+	}
+
+	// Regolo retired the public glm5.2-beta identifier in favour of glm5.2.
+	// Keep profiles created while the beta identifier was advertised working:
+	// their internal routing/economics identity remains stable, while only the
+	// upstream request is translated. Restrict this compatibility shim to the
+	// Regolo endpoint so a user-defined model with the same local name is not
+	// rewritten at another provider.
+	if modelName == "glm5.2-beta" {
+		if profile, err := c.GetProviderProfileForEndpoint(endpointName); err == nil && profile != nil &&
+			strings.Contains(strings.ToLower(profile.BaseURL), "api.regolo.ai") {
+			return "glm5.2"
+		}
 	}
 
 	return modelName

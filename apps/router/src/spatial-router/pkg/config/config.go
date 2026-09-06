@@ -1763,6 +1763,9 @@ type ModelParams struct {
 	// When set, router will add "Authorization: Bearer {access_key}" header to requests
 	AccessKey string `yaml:"access_key,omitempty"`
 
+	// Environment variable injected by the deployment Secret. Mutually exclusive with AccessKey.
+	AccessKeyEnv string `yaml:"access_key_env,omitempty"`
+
 	// ParamSize represents the model parameter size (e.g., "10b", "5b", "100m")
 	// Used by confidence algorithm to determine model order.
 	// Larger parameter count typically means more capable but slower/costlier model.
@@ -2737,6 +2740,8 @@ func (s *Signals) GetRoleBindings() []RoleBinding {
 // ComplexityServiceConfig configures the external complexity classifier service.
 // The service returns a direct label ("easy", "medium", "hard") and confidence score.
 type ComplexityServiceConfig struct {
+	// UseClientKey authenticates each classifier call with the current request credential.
+	UseClientKey   bool   `yaml:"use_client_key,omitempty"`
 	Enabled        bool   `yaml:"enabled"`
 	Address        string `yaml:"address"`
 	Port           int    `yaml:"port"`
@@ -2841,6 +2846,7 @@ type SkillRouterCapabilityModelConfig struct {
 }
 
 type SkillRouterComplexityModelConfig struct {
+	UseClientKey    bool   `yaml:"use_client_key,omitempty"`
 	ModelID         string `yaml:"model_id,omitempty"`
 	BaseModelID     string `yaml:"base_model_id,omitempty"`
 	BaseURL         string `yaml:"base_url,omitempty"`
@@ -2933,22 +2939,32 @@ type SkillRouterModelConfig struct {
 //  1. APIKey literal (with $VAR expansion)
 //  2. APIKeyEnv (lookup os.Getenv)
 //  3. APIKeyFile (trimmed contents)
-//  4. fallback (e.g. client-provided Authorization header)
+//  4. fallback, but only when no explicit source is configured
+//
+// An invalid explicit source stops resolution; it never falls through.
 func (m *SkillRouterModelConfig) ResolveAPIKey(fallback string) string {
 	if m.APIKey != "" {
-		return strings.TrimSpace(os.ExpandEnv(m.APIKey))
+		key, _ := expandCredential(m.APIKey)
+		return key
 	}
 	if m.APIKeyEnv != "" {
-		if v := strings.TrimSpace(os.Getenv(m.APIKeyEnv)); v != "" {
-			return v
-		}
+		key, _ := ResolveCredentialEnv(m.APIKeyEnv)
+		return key
 	}
 	if m.APIKeyFile != "" {
 		if data, err := os.ReadFile(m.APIKeyFile); err == nil {
-			return strings.TrimSpace(string(data))
+			key, _ := ValidateCredential(string(data))
+			return key
 		}
 	}
+	if m.HasExplicitAPIKeySource() {
+		return ""
+	}
 	return fallback
+}
+
+func (m *SkillRouterModelConfig) HasExplicitAPIKeySource() bool {
+	return m != nil && (m.APIKey != "" || m.APIKeyEnv != "" || m.APIKeyFile != "")
 }
 
 type SkillRouterKeywordRule struct {
@@ -2978,7 +2994,7 @@ func (c *ComplexityServiceConfig) AutoSpawnEnabled() bool {
 // Returns empty string with no error when neither is set (auth disabled).
 func (c *ComplexityServiceConfig) ResolveBearerToken() (string, error) {
 	if c.BearerToken != "" {
-		return strings.TrimSpace(os.ExpandEnv(c.BearerToken)), nil
+		return expandCredential(c.BearerToken)
 	}
 	if c.BearerTokenFile == "" {
 		return "", nil
@@ -2987,7 +3003,7 @@ func (c *ComplexityServiceConfig) ResolveBearerToken() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read bearer_token_file %q: %w", c.BearerTokenFile, err)
 	}
-	return strings.TrimSpace(string(b)), nil
+	return ValidateCredential(string(b))
 }
 
 // ModelReasoningControl represents reasoning mode control on model level

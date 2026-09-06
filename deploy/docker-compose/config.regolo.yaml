@@ -4,15 +4,18 @@
 # Regolo OpenAI-compatible API.  There is intentionally no Anthropic, OpenAI,
 # OpenRouter, or local-model provider in this file.
 #
-# The Docker Compose deployment injects REGOLO_API_KEY. Do not put a real key
-# in this file or commit a .env file containing one.
+# Requests use the caller's Authorization Bearer key, including classification.
+# No server-side Regolo credential is required.
 
 model:
-  name: brick
+  name: brick-v1-beta
   description: Brick router backed exclusively by Regolo models
 
 server_port: 8000
-auto_model_name: brick
+auto_model_name: brick-v1-beta
+
+brick:
+  enabled: true
 
 mom_registry:
   models/modernbert-capability-classifier: regolo/modernbert-capability-classifier
@@ -34,33 +37,18 @@ provider_endpoints:
 
 default_model: qwen3.5-122b
 
-# Static credentials make this suitable for a Regolo-owned server: callers do
-# not need a separate upstream key. Each configured model uses the same Regolo
-# endpoint and the same injected credential. These IDs are a deliberately small
-# LLM-only pool selected from the official Regolo catalog (not image, OCR, STT,
-# embedding, reranking, or classifier models).
+# Inference uses the same Regolo key supplied by the caller to Brick.
 model_config:
   qwen3.5-9b:
     preferred_endpoints: [regolo]
     param_size: 9b
-    access_key: "${REGOLO_API_KEY}"
-  gemma4-31b:
-    preferred_endpoints: [regolo]
-    param_size: 31b
-    access_key: "${REGOLO_API_KEY}"
-  mistral-small-4-119b:
-    preferred_endpoints: [regolo]
-    param_size: 119b
-    access_key: "${REGOLO_API_KEY}"
   qwen3.5-122b:
     preferred_endpoints: [regolo]
     param_size: 122b
     reasoning_family: qwen3
-    access_key: "${REGOLO_API_KEY}"
-  glm5.2-beta:
+  glm5.2:
     preferred_endpoints: [regolo]
     param_size: 753b
-    access_key: "${REGOLO_API_KEY}"
 
 reasoning_families:
   qwen3:
@@ -75,7 +63,7 @@ complexity_service:
   base_url: https://api.regolo.ai
   protocol: openai
   model_name: brick-complexity-pro
-  bearer_token: "${REGOLO_API_KEY}"
+  use_client_key: true
   timeout_seconds: 8
   auto_spawn: false
 
@@ -85,7 +73,7 @@ skill_router:
   capability_model:
     model_id: models/modernbert-capability-classifier
     repo_id: regolo/modernbert-capability-classifier
-    labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+    labels: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
     use_cpu: true
   complexity_model:
     model_id: regolo/brick-complexity-pro
@@ -93,7 +81,7 @@ skill_router:
     base_url: https://api.regolo.ai
     protocol: openai
     model_name: brick-complexity-pro
-    bearer_token: "${REGOLO_API_KEY}"
+    use_client_key: true
     timeout_seconds: 8
     auto_spawn: false
   math:
@@ -120,20 +108,12 @@ skill_router:
       skill_vector: [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876]
       use_reasoning: false
       cost_weight: 0.10
-    - model: gemma4-31b
-      skill_vector: [0.58, 0.62, 0.66, 0.58, 0.58, 0.72]
-      use_reasoning: false
-      cost_weight: 0.40
-    - model: mistral-small-4-119b
-      skill_vector: [0.60, 0.46, 0.60, 0.79, 0.46, 0.73]
-      use_reasoning: false
-      cost_weight: 0.50
     - model: qwen3.5-122b
       skill_vector: [0.62, 0.48, 0.70, 0.58, 0.66, 0.78]
       use_reasoning: true
       reasoning_effort: medium
       cost_weight: 1.00
-    - model: glm5.2-beta
+    - model: glm5.2
       skill_vector: [0.78, 0.72, 0.68, 0.89, 0.73, 0.83]
       use_reasoning: true
       reasoning_effort: medium
@@ -142,7 +122,7 @@ skill_router:
     - name: force_coder
       mode: override
       importance: 10
-      model: glm5.2-beta
+      model: glm5.2
       operator: OR
       keywords: [debug, refactor, compile, runtime, write a function, function that, class called]
       case_sensitive: false

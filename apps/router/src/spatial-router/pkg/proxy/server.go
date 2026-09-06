@@ -19,6 +19,11 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/sticky"
 )
 
+type brickModelRouter interface {
+	RouteWithCandidates(context.Context, string, map[string]bool) (*brickrouting.Result, error)
+	RouteWithPreference(context.Context, string, float64) (*brickrouting.Result, error)
+}
+
 // Server is the Brick HTTP proxy server.
 // It exposes OpenAI-compatible endpoints and routes requests through Brick2.
 type Server struct {
@@ -28,7 +33,7 @@ type Server struct {
 	httpServer *http.Server
 
 	brickRouterOnce sync.Once
-	brickRouter     *brickrouting.Router
+	brickRouter     brickModelRouter
 	brickRouterErr  error
 
 	economicsStore *economics.Store
@@ -275,9 +280,59 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type modelEntry struct {
-		ID      string `json:"id"`
-		Object  string `json:"object"`
-		OwnedBy string `json:"owned_by"`
+		ID                       string `json:"id"`
+		Slug                     string `json:"slug"`
+		Object                   string `json:"object"`
+		OwnedBy                  string `json:"owned_by"`
+		DisplayName              string `json:"display_name"`
+		DefaultReasoningLevel    string `json:"default_reasoning_level"`
+		SupportedReasoningLevels []struct {
+			Effort      string `json:"effort"`
+			Description string `json:"description"`
+		} `json:"supported_reasoning_levels"`
+		ShellType            string   `json:"shell_type"`
+		Visibility           string   `json:"visibility"`
+		SupportedInAPI       bool     `json:"supported_in_api"`
+		Priority             int      `json:"priority"`
+		AdditionalSpeedTiers []string `json:"additional_speed_tiers"`
+		ServiceTiers         []struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		} `json:"service_tiers"`
+		AvailabilityNUX  interface{} `json:"availability_nux"`
+		Upgrade          interface{} `json:"upgrade"`
+		BaseInstructions string      `json:"base_instructions"`
+		Description      string      `json:"description"`
+		ModelMessages    struct {
+			InstructionsTemplate  string      `json:"instructions_template"`
+			InstructionsVariables interface{} `json:"instructions_variables"`
+			Approvals             interface{} `json:"approvals"`
+			AutoReview            interface{} `json:"auto_review"`
+			Permissions           interface{} `json:"permissions"`
+		} `json:"model_messages"`
+		IncludeSkillsUsageInstructions bool   `json:"include_skills_usage_instructions"`
+		DefaultReasoningSummary        string `json:"default_reasoning_summary"`
+		SupportVerbosity               bool   `json:"support_verbosity"`
+		DefaultVerbosity               string `json:"default_verbosity"`
+		ApplyPatchToolType             string `json:"apply_patch_tool_type"`
+		WebSearchToolType              string `json:"web_search_tool_type"`
+		TruncationPolicy               struct {
+			Mode  string `json:"mode"`
+			Limit int    `json:"limit"`
+		} `json:"truncation_policy"`
+		SupportsParallelToolCalls   bool     `json:"supports_parallel_tool_calls"`
+		SupportsImageDetailOriginal bool     `json:"supports_image_detail_original"`
+		ContextWindow               int      `json:"context_window"`
+		MaxContextWindow            int      `json:"max_context_window"`
+		CompHash                    string   `json:"comp_hash"`
+		EffectiveContextWindowPct   int      `json:"effective_context_window_percent"`
+		ExperimentalSupportedTools  []string `json:"experimental_supported_tools"`
+		InputModalities             []string `json:"input_modalities"`
+		SupportsSearchTool          bool     `json:"supports_search_tool"`
+		UseResponsesLite            bool     `json:"use_responses_lite"`
+		ToolMode                    string   `json:"tool_mode"`
+		MultiAgentVersion           string   `json:"multi_agent_version"`
 	}
 
 	poolLen := 0
@@ -291,7 +346,36 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[id] = true
-		models = append(models, modelEntry{ID: id, Object: "model", OwnedBy: owner})
+		reasoning := []struct {
+			Effort      string `json:"effort"`
+			Description string `json:"description"`
+		}{
+			{Effort: "low", Description: "Fast responses with lighter reasoning"},
+			{Effort: "medium", Description: "Balances speed and reasoning depth"},
+			{Effort: "high", Description: "Greater reasoning depth for complex tasks"},
+		}
+		serviceTiers := []struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}{{ID: "priority", Name: "Fast", Description: "Priority service tier"}}
+		entry := modelEntry{
+			ID: id, Slug: id, Object: "model", OwnedBy: owner, DisplayName: id,
+			DefaultReasoningLevel: "low", SupportedReasoningLevels: reasoning,
+			ShellType: "shell_command", Visibility: "hide", SupportedInAPI: true,
+			AdditionalSpeedTiers: []string{"fast"}, ServiceTiers: serviceTiers,
+			Description: "Brick local router", DefaultReasoningSummary: "none",
+			SupportVerbosity: true, DefaultVerbosity: "low", ApplyPatchToolType: "freeform",
+			WebSearchToolType: "text_and_image", SupportsParallelToolCalls: true,
+			SupportsImageDetailOriginal: true, ContextWindow: 272000, MaxContextWindow: 272000,
+			CompHash: "brick", EffectiveContextWindowPct: 95, ExperimentalSupportedTools: []string{},
+			InputModalities: []string{"text"}, SupportsSearchTool: false, UseResponsesLite: true,
+			ToolMode: "code_mode_only", MultiAgentVersion: "v2",
+		}
+		entry.TruncationPolicy.Mode = "tokens"
+		entry.TruncationPolicy.Limit = 10000
+		entry.ModelMessages.InstructionsTemplate = ""
+		models = append(models, entry)
 	}
 
 	// Codex uses the configured auto_model_name (normally "brick"); keep the
@@ -317,6 +401,10 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
 		"object": "list",
 		"data":   models,
+		// Codex CLI's model manager accepts the OpenAI `data` list but also
+		// requires this compatibility alias when refreshing a custom provider.
+		// Keep both shapes pointing at the same entries.
+		"models": models,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -327,6 +415,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 // handleRoutingTest is a debug endpoint that runs the routing pipeline
 // on a test message and returns the routing decision without forwarding.
 func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(config.WithClientAPIKey(r.Context(), extractClientAPIKey(r)))
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

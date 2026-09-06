@@ -81,6 +81,10 @@ func Parse(configPath string) (*RouterConfig, error) {
 		return nil, err
 	}
 
+	if err := validateCredentials(cfg); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
 }
 

@@ -104,6 +104,11 @@ type anthropicStreamEvent struct {
 //     forwards the request verbatim to that model — no skill routing, no effort
 //     override. This preserves the user's explicit model choice.
 func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
+	clientKey := extractClientAPIKey(r)
+	if clientKey == "" {
+		clientKey, _ = config.ValidateCredential(r.Header.Get("x-api-key"))
+	}
+	r = r.WithContext(config.WithClientAPIKey(r.Context(), clientKey))
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -408,6 +413,16 @@ func (s *Server) forwardAnthropicRequest(
 	compacted bool,
 	ev *routingEvent,
 ) {
+	// A skill-card entry with an explicit OpenAI-compatible base URL is a
+	// provider-backed model (for example a Regolo model added to a Claude
+	// profile). Anthropic's Messages payload cannot be forwarded verbatim to
+	// that API, so translate the text request and non-streaming response here.
+	// Native Claude models have no inline base_url and retain the transparent
+	// Anthropic pass-through below.
+	if modelCfg := findSkillRouterModel(s.cfg, selectedModel); modelCfg != nil && modelCfg.BaseURL != "" {
+		s.forwardAnthropicToOpenAI(w, r, modelCfg, body, selectedModel, label, effortStr)
+		return
+	}
 	// start bounds Brick's end-to-end view of this request: upstream request
 	// build, round-trip, and full response stream. Recorded into ev after the
 	// stream completes; used only for observability, never for serving.

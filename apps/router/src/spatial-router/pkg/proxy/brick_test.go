@@ -416,7 +416,7 @@ func TestBuildForwardResultForModel_FallbackLegacy(t *testing.T) {
 	cfg := &config.RouterConfig{
 		SkillRouter: config.SkillRouterConfig{
 			Models: []config.SkillRouterModelConfig{
-				{Model: "qwen3.5-122b"}, // no BaseURL
+				{Model: "qwen3.5-122b", APIKey: "server-key"}, // no BaseURL
 			},
 		},
 	}
@@ -427,11 +427,70 @@ func TestBuildForwardResultForModel_FallbackLegacy(t *testing.T) {
 		t.Errorf("expected regolo fallback, got %q", result.ForwardEndpoint)
 	}
 	if result.ForwardHeaders["Authorization"] != "Bearer client-key" {
-		t.Errorf("expected client key in fallback, got %q", result.ForwardHeaders["Authorization"])
+		t.Errorf("expected current user key in legacy forwarding, got %q", result.ForwardHeaders["Authorization"])
 	}
 }
 
-func TestBuildForwardResultForModel_UnknownModelFallsBack(t *testing.T) {
+func TestBuildForwardResultForModel_UsesConfiguredProviderEndpointWithoutInlineBaseURL(t *testing.T) {
+	// Older profiles store the selected provider only in model_config. A mixed
+	// pool must still use that provider rather than the legacy Regolo fallback.
+	cfg := &config.RouterConfig{BackendModels: config.BackendModels{
+		ModelConfig: map[string]config.ModelParams{
+			"openai-model": {PreferredEndpoints: []string{"openai"}, AccessKey: "${MIXED_OPENAI_KEY}"},
+		},
+		ProviderProfiles: map[string]config.ProviderProfile{
+			"openai": {
+				Type: "openai", BaseURL: "https://api.openai.example/v1",
+				ExtraHeaders: map[string]string{"X-Provider-Test": "mixed"},
+			},
+		},
+		ProviderEndpoints: []config.ProviderEndpoint{{Name: "openai", ProviderProfileName: "openai"}},
+	}}
+	t.Setenv("MIXED_OPENAI_KEY", "test-static-openai-key")
+
+	result := (&Server{cfg: cfg}).buildForwardResultForModel(
+		[]byte(`{"model":"brick","messages":[]}`), cfg, "openai-model", false, "client-key",
+	)
+	if result.ForwardEndpoint != "https://api.openai.example:443" {
+		t.Fatalf("ForwardEndpoint = %q, want configured OpenAI endpoint", result.ForwardEndpoint)
+	}
+	if result.ForwardPath != "/v1/chat/completions" {
+		t.Fatalf("ForwardPath = %q", result.ForwardPath)
+	}
+	if got := result.ForwardHeaders["Authorization"]; got != "Bearer test-static-openai-key" {
+		t.Fatalf("Authorization = %q, want model static key", got)
+	}
+	if got := result.ForwardHeaders["X-Provider-Test"]; got != "mixed" {
+		t.Fatalf("extra provider header = %q", got)
+	}
+}
+
+func TestBuildForwardResultForModel_TranslatesLegacyRegoloAlias(t *testing.T) {
+	cfg := &config.RouterConfig{BackendModels: config.BackendModels{
+		ModelConfig: map[string]config.ModelParams{
+			"glm5.2-beta": {PreferredEndpoints: []string{"regolo"}, AccessKey: "server-key"},
+		},
+		ProviderProfiles: map[string]config.ProviderProfile{
+			"regolo": {Type: "openai_compatible", BaseURL: "https://api.regolo.ai/v1"},
+		},
+		ProviderEndpoints: []config.ProviderEndpoint{{Name: "regolo", ProviderProfileName: "regolo"}},
+	}}
+	result := (&Server{cfg: cfg}).buildForwardResultForModel(
+		[]byte(`{"model":"brick","messages":[]}`), cfg, "glm5.2-beta", false, "client-key",
+	)
+	var forwarded map[string]any
+	if err := json.Unmarshal(result.ForwardBody, &forwarded); err != nil {
+		t.Fatal(err)
+	}
+	if got := forwarded["model"]; got != "glm5.2" {
+		t.Fatalf("forwarded model = %v, want glm5.2", got)
+	}
+	if result.Model != "glm5.2-beta" {
+		t.Fatalf("attribution model = %q, want legacy internal id", result.Model)
+	}
+}
+
+func TestBuildForwardResultForModel_UnknownModelFailsClosed(t *testing.T) {
 	cfg := &config.RouterConfig{
 		SkillRouter: config.SkillRouterConfig{
 			Models: []config.SkillRouterModelConfig{
@@ -442,8 +501,8 @@ func TestBuildForwardResultForModel_UnknownModelFallsBack(t *testing.T) {
 	srv := &Server{cfg: cfg}
 	body := []byte(`{"model":"unknown"}`)
 	result := srv.buildForwardResultForModel(body, cfg, "unknown", false, "client-key")
-	if result.ForwardEndpoint != "https://api.regolo.ai:443" {
-		t.Errorf("expected regolo fallback for unknown model, got %q", result.ForwardEndpoint)
+	if !result.Direct || result.StatusCode != http.StatusBadGateway || result.ForwardEndpoint != "" {
+		t.Fatal("unknown model must fail without forwarding the client key")
 	}
 }
 
@@ -524,5 +583,90 @@ func TestEndToEndForwardToFakeOpenRouter(t *testing.T) {
 	}
 	if sent["top_p"] != 0.95 {
 		t.Errorf("forwarded body top_p = %v, want merged from custom_params", sent["top_p"])
+	}
+}
+
+func TestMissingExplicitProviderCredentialReturns502WithoutUpstreamRequest(t *testing.T) {
+	var calls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.RouterConfig{
+		BrickExtension: config.BrickExtension{Brick: config.BrickConfig{Enabled: true}},
+		BackendModels:  config.BackendModels{ModelConfig: map[string]config.ModelParams{"qwen3.5-122b": {}}},
+		SkillRouter: config.SkillRouterConfig{Enabled: true, Models: []config.SkillRouterModelConfig{{
+			Model: "qwen3.5-122b", BaseURL: upstream.URL + "/v1", APIKeyEnv: "MISSING_REGOLO_KEY_FOR_TEST",
+		}}},
+	}
+	t.Setenv("MISSING_REGOLO_KEY_FOR_TEST", "")
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(
+		`{"model":"brick","messages":[{"role":"user","content":"hi"}]}`,
+	))
+	req.Header.Set("Authorization", "Bearer codex-client-bearer")
+	req.Header.Set("x-selected-model", "qwen3.5-122b")
+	rec := httptest.NewRecorder()
+
+	(&Server{cfg: cfg}).handleChatCompletions(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502; body=%s", rec.Code, rec.Body.String())
+	}
+	if calls != 0 {
+		t.Fatalf("upstream received %d requests; client bearer must never cross providers", calls)
+	}
+	if strings.Contains(rec.Body.String(), "codex-client-bearer") {
+		t.Fatal("credential leaked in error response")
+	}
+}
+
+func TestMixedPoolKeepsRegoloAndCodexBridgeCredentialsIsolated(t *testing.T) {
+	var regoloAuth, bridgeAuth string
+	backend := func(target *string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			*target = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+		}))
+	}
+	regolo := backend(&regoloAuth)
+	defer regolo.Close()
+	bridge := backend(&bridgeAuth)
+	defer bridge.Close()
+	t.Setenv("MIXED_REGOLO_KEY", "regolo-only-key")
+	t.Setenv("MIXED_CODEX_TOKEN", "bridge-only-token")
+
+	cfg := &config.RouterConfig{
+		BrickExtension: config.BrickExtension{Brick: config.BrickConfig{Enabled: true}},
+		BackendModels: config.BackendModels{ModelConfig: map[string]config.ModelParams{
+			"qwen3.5-122b": {}, "gpt-5.6-terra": {},
+		}},
+		SkillRouter: config.SkillRouterConfig{Enabled: true, Models: []config.SkillRouterModelConfig{
+			{Model: "qwen3.5-122b", BaseURL: regolo.URL + "/v1", APIKeyEnv: "MIXED_REGOLO_KEY"},
+			{Model: "gpt-5.6-terra", BaseURL: bridge.URL + "/v1", APIKeyEnv: "MIXED_CODEX_TOKEN"},
+		}},
+	}
+	srv := &Server{cfg: cfg}
+	for _, model := range []string{"qwen3.5-122b", "gpt-5.6-terra"} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(
+			`{"model":"brick","messages":[{"role":"user","content":"hi"}]}`,
+		))
+		req.Header.Set("Authorization", "Bearer codex-client-bearer")
+		req.Header.Set("x-selected-model", model)
+		rec := httptest.NewRecorder()
+		srv.handleChatCompletions(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", model, rec.Code, rec.Body.String())
+		}
+	}
+	if regoloAuth != "Bearer regolo-only-key" {
+		t.Fatalf("Regolo auth = %q", regoloAuth)
+	}
+	if bridgeAuth != "Bearer bridge-only-token" {
+		t.Fatalf("bridge auth = %q", bridgeAuth)
+	}
+	if regoloAuth == "Bearer codex-client-bearer" || bridgeAuth == "Bearer codex-client-bearer" {
+		t.Fatal("client bearer crossed a provider boundary")
 	}
 }
