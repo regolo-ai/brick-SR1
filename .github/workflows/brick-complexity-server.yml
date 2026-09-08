@@ -3,7 +3,7 @@ name: Build & Push brick-complexity-server
 on:
   workflow_dispatch:
   push:
-    branches: ["deploy", "main"]
+    branches: ["main"]
     paths:
       - "deploy/addons/brick-complexity-server/**"
       - ".github/workflows/brick-complexity-server.yml"

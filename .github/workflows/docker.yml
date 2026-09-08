@@ -2,7 +2,7 @@ name: Docker Build & Push (Docker Hub)
 
 on:
   push:
-    branches: [main, brick2, deploy]
+    branches: [main, brick2]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
