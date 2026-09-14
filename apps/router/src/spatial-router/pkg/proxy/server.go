@@ -66,6 +66,8 @@ type Server struct {
 	// /api/v1/routing/stats handler can read+aggregate the log even when the
 	// writer is disabled (e.g. a prior run's file still on disk).
 	routingEventPath string
+	// callHistory is the durable source of truth for the JSON stats API.
+	callHistory *callHistory
 }
 
 // economicsSnapshotInterval is how often the economics store is flushed to
@@ -98,6 +100,7 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
 	// as the economics snapshot. Best-effort: a failed open disables it.
 	routingEventPath := filepath.Join(filepath.Dir(configPath), "routing_events.jsonl")
 	routingEventLog := newRoutingEventLogger(routingEventPath)
+	callHistory := newCallHistory(filepath.Join(filepath.Dir(configPath), "call_history.jsonl"))
 
 	// Sticky routing state. The TTL comes from config so it can track the
 	// upstream prompt-cache TTL (default 6 min, just over the 5-min cache TTL).
@@ -123,6 +126,7 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int) *Server {
 		pricingTable:          pricingTable,
 		routingEventLog:       routingEventLog,
 		routingEventPath:      routingEventPath,
+		callHistory:           callHistory,
 	}
 }
 
@@ -140,6 +144,13 @@ func (s *Server) Start(ctx context.Context) error {
 	// /v1/responses adapts the OpenAI Responses protocol (Codex CLI 0.134+ speaks
 	// only this wire format) to the Chat Completions router core; see responses.go.
 	mux.HandleFunc("/v1/responses", s.handleResponses)
+	mux.HandleFunc("/v1/responses/compact", func(w http.ResponseWriter, r *http.Request) {
+		if s.cfg == nil || !s.cfg.CodexRouter.Enabled {
+			writeError(w, 404, "not found")
+			return
+		}
+		s.handleCodexResponses(w, r)
+	})
 	mux.HandleFunc("/v1/messages", s.handleAnthropicMessages) // Anthropic-native pass-through
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/health", s.handleHealth)
@@ -148,6 +159,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/metrics/reset", s.handleMetricsReset) // clear brick_cc_* routing counters
 	mux.HandleFunc("/api/v1/economics", s.handleEconomics)        // token usage + real savings vs. all-expensive baseline
 	mux.HandleFunc("/api/v1/routing/stats", s.handleRoutingStats) // per-mode routing event aggregates (promotion-gate harness)
+	mux.HandleFunc("/api/v1/stats", s.handleStats)
+	mux.HandleFunc("/api/v1/stats/all", s.handleStats)
+	mux.HandleFunc("/api/v1/stats/clear", s.handleStats)
 	// Also expose Prometheus metrics on the main proxy port so `brick claude status`
 	// can read routing stats without publishing the dedicated metrics port (9190).
 	mux.Handle("/metrics", promhttp.Handler())
@@ -155,8 +169,12 @@ func (s *Server) Start(ctx context.Context) error {
 	// Wrap with CORS middleware
 	handler := corsMiddleware(mux)
 
+	listenAddress := fmt.Sprintf(":%d", s.port)
+	if s.cfg != nil && s.cfg.CodexRouter.Enabled {
+		listenAddress = fmt.Sprintf("127.0.0.1:%d", s.port)
+	}
 	s.httpServer = &http.Server{
-		Addr:              fmt.Sprintf(":%d", s.port),
+		Addr:              listenAddress,
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 	}
@@ -241,6 +259,10 @@ func (s *Server) saveEconomicsSnapshot() {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if s.cfg != nil && s.cfg.CodexRouter.Enabled {
+		w.Write([]byte(`{"status":"ok","codex_router":"native-responses-v1","authentication":"not_probed","capability":"not_probed"}`))
+		return
+	}
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
@@ -415,7 +437,12 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 // handleRoutingTest is a debug endpoint that runs the routing pipeline
 // on a test message and returns the routing decision without forwarding.
 func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(config.WithClientAPIKey(r.Context(), extractClientAPIKey(r)))
+	clientKey, authErr := s.resolveClientAPIKey(r)
+	if authErr != nil {
+		writeError(w, http.StatusUnauthorized, authErr.Error())
+		return
+	}
+	r = r.WithContext(config.WithClientAPIKey(r.Context(), clientKey))
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

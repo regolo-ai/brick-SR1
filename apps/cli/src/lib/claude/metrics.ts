@@ -33,7 +33,10 @@ export interface Snapshot {
   health: boolean;
   diag: DiagClassifier | null;
   metrics: ParsedMetrics | null;
+  stats: JsonStats | null;
 }
+
+export type JsonStats = { overall: { calls: number; completed_calls: number; failed_calls: number }; models: Array<{ model: string; routed_calls: number; native_calls: number; reasoning_modes: Array<{ mode: string; calls: number }> }> };
 
 export async function probeHealth(baseUrl: string): Promise<boolean> {
   try {
@@ -76,13 +79,15 @@ export type EconomicsResponse = {
   // claude-opus, independent of which model is the most expensive observed.
   // Omitted by the router when opus is not priced in the active pool.
   savings_pct_vs_opus?: number;
+  baseline_model?: string;
   pricing_available: boolean;
   note?: string;
 };
 
-export async function fetchEconomics(baseUrl: string): Promise<EconomicsResponse | null> {
+export async function fetchEconomics(baseUrl: string, baselineModel?: string): Promise<EconomicsResponse | null> {
   try {
-    const r = await fetch(`${baseUrl}/api/v1/economics`, { signal: AbortSignal.timeout(4000) });
+    const query = baselineModel ? `?baseline_model=${encodeURIComponent(baselineModel)}` : '';
+    const r = await fetch(`${baseUrl}/api/v1/economics${query}`, { signal: AbortSignal.timeout(4000) });
     if (!r.ok) return null;
     return (await r.json()) as EconomicsResponse;
   } catch {
@@ -165,11 +170,15 @@ export async function fetchMetrics(baseUrl: string): Promise<ParsedMetrics | nul
   return null;
 }
 
+export async function fetchStats(baseUrl: string): Promise<JsonStats | null> {
+  try { const r = await fetch(`${baseUrl}/api/v1/stats`, { signal: AbortSignal.timeout(4000) }); return r.ok ? await r.json() as JsonStats : null; } catch { return null; }
+}
+
 /** One-shot fetch of everything the status/dashboard views need. */
-export async function fetchSnapshot(baseUrl: string, envUrl?: string): Promise<Snapshot> {
+export async function fetchSnapshot(baseUrl: string, envUrl?: string, attached?: boolean): Promise<Snapshot> {
   const [health, diag] = await Promise.all([probeHealth(baseUrl), fetchDiag(baseUrl)]);
-  const metrics = health ? await fetchMetrics(baseUrl) : null;
-  return { baseUrl, envUrl, attached: envUrl === baseUrl, health, diag, metrics };
+  const [metrics, stats] = health ? await Promise.all([fetchMetrics(baseUrl), fetchStats(baseUrl)]) : [null, null];
+  return { baseUrl, envUrl, attached: attached ?? (envUrl === baseUrl), health, diag, metrics, stats };
 }
 
 /**
@@ -180,7 +189,7 @@ export async function fetchSnapshot(baseUrl: string, envUrl?: string): Promise<S
  */
 export async function resetMetrics(baseUrl: string): Promise<boolean> {
   try {
-    const r = await fetch(`${baseUrl}/api/v1/metrics/reset`, {
+    const r = await fetch(`${baseUrl}/api/v1/stats/clear`, {
       method: 'POST',
       signal: AbortSignal.timeout(4000),
     });
@@ -494,7 +503,7 @@ export function economy(m: ParsedMetrics): Economy {
 }
 
 export type UnifiedEconomy = {
-  source: 'real' | 'estimate';
+  source: 'real' | 'estimate' | 'unavailable';
   savedPct: number;
   // Present only when source === 'real':
   totalInputTokens?: number;
@@ -511,6 +520,8 @@ export type UnifiedEconomy = {
   // the dashboard show a "vs opus" figure even when a pricier model (Fable)
   // owns the most-expensive baseline above.
   savedPctVsOpus?: number;
+  baselineModel?: string;
+  note?: string;
   // Present only when source === 'estimate' (mirrors legacy Economy):
   totalRoutedReqs?: number;
 };
@@ -520,22 +531,26 @@ export type UnifiedEconomy = {
 // with non-zero estimated_cost_units contributing to the baseline).
 // Falls back to the legacy request-count estimate otherwise (older router,
 // endpoint unreachable, or no priced traffic yet).
-export function unifyEconomy(econ: EconomicsResponse | null, m: ParsedMetrics): UnifiedEconomy {
+export function unifyEconomy(econ: EconomicsResponse | null, m: ParsedMetrics, baselineModel?: string): UnifiedEconomy {
+  const totals = econ ? {
+    totalInputTokens: econ.models.reduce((sum, row) => sum + row.input_tokens, 0),
+    totalCacheCreationTokens: econ.models.reduce((sum, row) => sum + (row.cache_creation_input_tokens ?? 0), 0),
+    totalCacheReadTokens: econ.models.reduce((sum, row) => sum + (row.cache_read_input_tokens ?? 0), 0),
+    totalOutputTokens: econ.models.reduce((sum, row) => sum + row.output_tokens, 0),
+  } : {};
   if (econ && econ.pricing_available && econ.baseline_cost_units_all_expensive > 0) {
-    const totalInputTokens = econ.models.reduce((sum, row) => sum + row.input_tokens, 0);
-    const totalCacheCreationTokens = econ.models.reduce((sum, row) => sum + (row.cache_creation_input_tokens ?? 0), 0);
-    const totalCacheReadTokens = econ.models.reduce((sum, row) => sum + (row.cache_read_input_tokens ?? 0), 0);
-    const totalOutputTokens = econ.models.reduce((sum, row) => sum + row.output_tokens, 0);
     return {
       source: 'real',
       savedPct: econ.savings_pct,
-      totalInputTokens,
-      totalCacheCreationTokens,
-      totalCacheReadTokens,
-      totalOutputTokens,
+      ...totals,
       mostExpensiveModel: econ.most_expensive_model,
       savedPctVsOpus: econ.savings_pct_vs_opus,
+      baselineModel: econ.baseline_model ?? baselineModel,
+      note: econ.note,
     };
+  }
+  if (baselineModel) {
+    return { source: 'unavailable', savedPct: 0, ...totals, baselineModel, note: econ?.note };
   }
   const legacy = economy(m);
   return {

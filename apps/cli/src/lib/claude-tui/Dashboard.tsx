@@ -4,40 +4,12 @@ import {
   fetchSnapshot,
   fetchEconomics,
   resetMetrics,
-  routedRowsByModel,
-  nativeRowsByModel,
-  difficultyDistribution,
-  effortRowsForModel,
   unifyEconomy,
-  totalRequests,
-  classifierPercentiles,
-  classifierMean,
-  fallbackPct,
-  formatLatency,
   type Snapshot,
   type EconomicsResponse,
 } from '../claude/metrics.js';
 
 const ACCENT = '#00d4aa';
-
-// Fixed colour per model family so a model keeps the same hue across the stacked
-// bar, the per-model bars and the legend. Matched by prefix so version bumps
-// (sonnet-4-6 -> 4-7) don't need a new entry.
-const MODEL_COLORS: Array<[string, string]> = [
-  ['claude-haiku', '#7aa2f7'],
-  ['claude-sonnet', '#bb9af7'],
-  ['claude-opus', '#f7768e'],
-  ['gpt-', '#7aa2f7'],
-  ['o3', '#bb9af7'],
-  ['o4', '#f7768e'],
-];
-
-function colorForModel(model: string): string {
-  for (const [prefix, color] of MODEL_COLORS) {
-    if (model.startsWith(prefix)) return color;
-  }
-  return ACCENT;
-}
 
 // Trims the trailing date stamp (e.g. claude-haiku-4-5-20251001 -> claude-haiku-4-5)
 // so model names stay short enough not to wrap the dashboard rows.
@@ -45,139 +17,34 @@ function shortModel(model: string): string {
   return model.replace(/-\d{8}$/, '');
 }
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  easy: 'green',
-  medium: 'yellow',
-  hard: 'red',
-};
-
-function colorForDifficulty(label: string): string {
-  return DIFFICULTY_COLORS[label] ?? 'gray';
-}
-
-const EFFORT_COLORS: Record<string, string> = {
-  low: 'gray',
-  medium: 'cyan',
-  high: 'green',
-  xhigh: 'yellow',
-  max: 'red',
-};
-
-function colorForEffort(effort: string): string {
-  return EFFORT_COLORS[effort] ?? 'gray';
-}
-
-// Palette cycled by the shimmer banner: the dashboard's accent plus the three
-// model hues, so the wave sweeps through every brand colour.
-const SHIMMER_PALETTE = ['#00d4aa', '#7aa2f7', '#bb9af7', '#f7768e'];
-
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const c = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
-  return `#${c(r)}${c(g)}${c(b)}`;
-}
-
-// Colour of one banner character: a palette gradient scrolling along the text,
-// modulated by a travelling brightness wave (the "ultrathink" sweep). `pos` is
-// the char index in [0,1), `phase` advances every animation frame.
-function shimmerColorAt(pos: number, phase: number): string {
-  // Gradient: map (pos + phase) onto the palette, interpolating between stops.
-  const t = ((pos * 2 + phase) % 1 + 1) % 1;
-  const scaled = t * SHIMMER_PALETTE.length;
-  const i = Math.floor(scaled) % SHIMMER_PALETTE.length;
-  const j = (i + 1) % SHIMMER_PALETTE.length;
-  const f = scaled - Math.floor(scaled);
-  const [r1, g1, b1] = hexToRgb(SHIMMER_PALETTE[i]);
-  const [r2, g2, b2] = hexToRgb(SHIMMER_PALETTE[j]);
-  let r = r1 + (r2 - r1) * f;
-  let g = g1 + (g2 - g1) * f;
-  let b = b1 + (b2 - b1) * f;
-  // Brightness wave: a soft peak travelling left→right lifts a band to full,
-  // the rest sits dimmed, giving the shimmer that runs along the text.
-  const dist = Math.abs(((pos - phase) % 1 + 1) % 1 - 0.5); // 0 at the peak, 0.5 farthest
-  const lift = 0.45 + 0.55 * (1 - dist / 0.5); // 0.45..1.0
-  r *= lift; g *= lift; b *= lift;
-  return rgbToHex(r, g, b);
-}
-
-// Full-width animated banner shown while Brick is live: a field of Braille dot
-// matrices whose fill density ripples left→right while a colour wave sweeps the
-// dashboard palette across them (the Claude Code "ultrathink" effect). Purely
-// decorative, driven by its own ~12fps timer.
-//
-// Braille ramp from empty to full (each glyph is a 2x4 dot matrix), so the wave
-// reads as dots lighting up and dying down rather than a flat bar.
-const DOT_RAMP = ['⠀', '⢀', '⢠', '⢤', '⢴', '⢶', '⣶', '⣷', '⣿'];
-
-function ShimmerBanner() {
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setPhase((p) => (p + 0.02) % 1), 100);
-    return () => clearInterval(id);
-  }, []);
-
-  const cols = process.stdout.columns ?? 80;
-  const inner = Math.max(20, Math.min(120, cols - 6));
-  const label = ' brick is routing requests ';
-  // Centre the phrase; the dot matrices fill the rest of the full-width banner.
-  const pad = Math.max(0, Math.floor((inner - label.length) / 2));
-  const leftLen = pad;
-  const rightLen = Math.max(0, inner - pad - label.length);
-
-  // A run of Braille dot cells whose density follows a travelling wave; `offset`
-  // keeps the wave continuous across the left field, label gap and right field.
-  const dotCell = (i: number, offset: number) => {
-    const pos = (i + offset) / inner;
-    // Distance from the moving wave crest → 0 at crest (full), 0.5 farthest (empty).
-    const dist = Math.abs(((pos - phase) % 1 + 1) % 1 - 0.5);
-    const level = Math.round((1 - dist / 0.5) * (DOT_RAMP.length - 1));
-    return (
-      <Text key={`d${offset}-${i}`} color={shimmerColorAt(pos, phase)}>
-        {DOT_RAMP[Math.max(0, Math.min(DOT_RAMP.length - 1, level))]}
-      </Text>
-    );
-  };
-
-  const labelChars = [...label];
-  return (
-    <Box>
-      <Text>
-        {Array.from({ length: leftLen }, (_, i) => dotCell(i, 0))}
-        {labelChars.map((ch, i) => (
-          <Text key={`l${i}`} color={shimmerColorAt((leftLen + i) / inner, phase)} bold>
-            {ch}
-          </Text>
-        ))}
-        {Array.from({ length: rightLen }, (_, i) => dotCell(i, leftLen + label.length))}
-      </Text>
-    </Box>
-  );
-}
-
 export interface DashboardProps {
   baseUrl: string;
   envUrl?: string;
+  attached?: boolean;
   intervalMs: number;
   mode?: string;
   connectionLabel?: string;
+  disconnectedLabel?: string;
+  unattachedLabel?: string;
   emptyRequestsLabel?: string;
   nativeLabel?: string;
   showEconomy?: boolean;
+  economyBaselineModel?: string;
 }
 
 export function Dashboard({
   baseUrl,
   envUrl,
+  attached,
   intervalMs,
   mode,
   connectionLabel = 'ANTHROPIC_BASE_URL',
+  disconnectedLabel = '(not set)',
+  unattachedLabel = 'not pointing at this router',
   emptyRequestsLabel = 'no /v1/messages requests served yet',
   nativeLabel = 'subagents (native model, router bypass)',
   showEconomy = true,
+  economyBaselineModel,
 }: DashboardProps) {
   const { exit } = useApp();
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -214,19 +81,19 @@ export function Dashboard({
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const [s, e] = await Promise.all([fetchSnapshot(baseUrl, envUrl), fetchEconomics(baseUrl)]);
+      const [s, e] = await Promise.all([fetchSnapshot(baseUrl, envUrl, attached), fetchEconomics(baseUrl, economyBaselineModel)]);
       if (alive) { setSnap(s); setEcon(e); setLoading(false); }
     };
     run();
     const id = setInterval(run, intervalMs);
     return () => { alive = false; clearInterval(id); };
-  }, [baseUrl, envUrl, intervalMs, tick]);
+  }, [baseUrl, envUrl, attached, intervalMs, tick, economyBaselineModel]);
 
   return (
     <Box flexDirection="column" paddingX={1}>
       <RoutingBox snap={snap} emptyRequestsLabel={emptyRequestsLabel} nativeLabel={nativeLabel} />
-      <EconomyBox snap={snap} econ={econ} enabled={showEconomy} />
-      <ConnectionBox snap={snap} loading={loading} mode={mode} connectionLabel={connectionLabel} />
+      <EconomyBox snap={snap} econ={econ} enabled={showEconomy} baselineModel={economyBaselineModel} />
+      <ConnectionBox snap={snap} loading={loading} mode={mode} connectionLabel={connectionLabel} disconnectedLabel={disconnectedLabel} unattachedLabel={unattachedLabel} />
       <ClassifierBox snap={snap} />
 
       <Box marginTop={1}>
@@ -258,11 +125,15 @@ function ConnectionBox({
   loading,
   mode,
   connectionLabel,
+  disconnectedLabel,
+  unattachedLabel,
 }: {
   snap: Snapshot | null;
   loading: boolean;
   mode?: string;
   connectionLabel: string;
+  disconnectedLabel: string;
+  unattachedLabel: string;
 }) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
@@ -274,8 +145,8 @@ function ConnectionBox({
           <Row label={connectionLabel}>
             {snap?.envUrl ? (
               snap.attached ? <Text color="green">{snap.envUrl} ✓ attached</Text>
-                : <Text color="yellow">{snap.envUrl} ✗ not pointing at this router</Text>
-            ) : <Text dimColor>(not set)</Text>}
+                : <Text color="yellow">{snap.envUrl} ✗ {unattachedLabel}</Text>
+            ) : <Text color="yellow">{disconnectedLabel}</Text>}
           </Row>
           <Row label="brick router">
             <Text color={snap?.health ? 'green' : 'red'}>
@@ -321,124 +192,53 @@ function RoutingBox({
   emptyRequestsLabel: string;
   nativeLabel: string;
 }) {
-  const m = snap?.metrics;
-  if (snap?.health && !m) {
+  const stats = snap?.stats;
+  const m = snap?.metrics ?? { requestsByLabelModel: new Map(), effortByModelEffort: new Map(), routingByDiffEffortModel: new Map(), fallbackTotal: 0, classifyDurationCount: 0, classifyDurationSum: 0, classifyDurationBuckets: [] };
+  if (snap?.health && !stats) {
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
         <Text color={ACCENT} bold>◆ Routing</Text>
-        <Text dimColor>metrics endpoint not reachable (port 9190/19190)</Text>
+        <Text dimColor>stats API not reachable</Text>
       </Box>
     );
   }
-  if (!m) return null;
-
-  const total = totalRequests(m);
-  const routed = routedRowsByModel(m);
-  const native = nativeRowsByModel(m);
-  const difficulty = difficultyDistribution(m);
-  const mean = classifierMean(m);
-  const { p50, p95 } = classifierPercentiles(m);
-  const fb = fallbackPct(m);
-  const fbColor = fb > 5 ? 'red' : fb > 1 ? 'yellow' : 'green';
-
+  if (!stats) return null;
+  if (stats.overall.calls === 0) return <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}><Text color={ACCENT} bold>◆ Routing</Text><Text dimColor>{emptyRequestsLabel}</Text></Box>;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>◆ Routing</Text>
-      {total === 0 ? (
-        <Text dimColor>{emptyRequestsLabel}</Text>
-      ) : (
-        <>
-          <Row label="total requests"><Text bold>{String(total)}</Text></Row>
-          <Text> </Text>
-          <ShimmerBanner />
-          <Text> </Text>
-          <Text dimColor>routed by model</Text>
-          {routed.length > 0 && (
-            <>
-              <Box marginBottom={1}>
-                <StackedBar segments={routed.map((r) => ({ pct: r.pct, color: colorForModel(r.model) }))} />
-              </Box>
-              <Box>
-                <Legend items={routed.map((r) => ({ label: shortModel(r.model), color: colorForModel(r.model), pct: r.pct }))} />
-              </Box>
-            </>
-          )}
-          {routed.map((r) => {
-            const efforts = effortRowsForModel(m, r.model);
-            return (
-              <Box key={`routed|${r.model}`} flexDirection="column" marginTop={1}>
-                <Box>
-                  <Box width={22} flexShrink={0}><Text color={colorForModel(r.model)} bold>{shortModel(r.model)}</Text></Box>
-                  <ColoredBar pct={r.pct} color={colorForModel(r.model)} />
-                  <Text>{`  ${r.count} (${r.pct.toFixed(0)}%)`}</Text>
-                </Box>
-                {efforts.map((e) => (
-                  <Box key={`eff|${r.model}|${e.label}`} paddingLeft={2}>
-                    <Box width={20} flexShrink={0}><Text color={colorForEffort(e.label)} dimColor>{`└ ${e.label}`}</Text></Box>
-                    <ColoredBar pct={e.pct} color={colorForEffort(e.label)} width={10} />
-                    <Text dimColor>{`  ${e.count} (${e.pct.toFixed(0)}%)`}</Text>
-                  </Box>
-                ))}
-              </Box>
-            );
-          })}
-          {native.length > 0 && (
-            <>
-              <Text> </Text>
-              <Text dimColor>{nativeLabel}</Text>
-              {native.map((r) => (
-                <Box key={`native|${r.model}`} paddingLeft={2}>
-                  <Box width={22}><Text dimColor>{shortModel(r.model)}</Text></Box>
-                  <ColoredBar pct={r.pct} color="gray" />
-                  <Text dimColor>{`  ${r.count} (${r.pct.toFixed(0)}%)`}</Text>
-                </Box>
-              ))}
-            </>
-          )}
-          {difficulty.length > 0 && (
-            <>
-              <Text> </Text>
-              <Text dimColor>difficulty mix (routed only)</Text>
-              <Box>
-                <StackedBar segments={difficulty.map((r) => ({ pct: r.pct, color: colorForDifficulty(r.label) }))} />
-              </Box>
-              <Box>
-                <Legend items={difficulty.map((r) => ({ label: r.label, color: colorForDifficulty(r.label), pct: r.pct }))} />
-              </Box>
-            </>
-          )}
-          <Text> </Text>
-          {mean !== null && p50 !== null && p95 !== null && (
-            <Row label="classifier latency">{`avg ${formatLatency(mean)} · p50 ${formatLatency(p50)} · p95 ${formatLatency(p95)}`}</Row>
-          )}
-          <Row label="fallback rate">
-            <Text color={fbColor}>{`${fb.toFixed(1)}% (${m.fallbackTotal})`}</Text>
-          </Row>
-        </>
-      )}
+      <Row label="total requests"><Text bold>{String(stats.overall.calls)}</Text><Text dimColor>{` · ${stats.overall.completed_calls} completed · ${stats.overall.failed_calls} failed`}</Text></Row>
+      {stats.models.map((row) => <Box key={row.model} flexDirection="column" marginTop={1}><Row label={shortModel(row.model)}><Text>{`${row.routed_calls} routed · ${row.native_calls} ${nativeLabel}`}</Text></Row><Row label="thinking"><Text dimColor>{row.reasoning_modes.map((mode) => `${mode.mode}: ${mode.calls}`).join(' · ') || 'default'}</Text></Row></Box>)}
     </Box>
   );
+
 }
 
 function EconomyBox({
   snap,
   econ,
   enabled,
+  baselineModel,
 }: {
   snap: Snapshot | null;
   econ: EconomicsResponse | null;
   enabled: boolean;
+  baselineModel?: string;
 }) {
   if (!enabled) return null;
   const m = snap?.metrics;
-  if (!m) return null;
-  const ue = unifyEconomy(econ, m);
-  const hasData = ue.source === 'real' || (ue.totalRoutedReqs ?? 0) > 0;
+  if (!m && !baselineModel) return null;
+  const metrics = m ?? {
+    requestsByLabelModel: new Map(), effortByModelEffort: new Map(), routingByDiffEffortModel: new Map(),
+    fallbackTotal: 0, classifyDurationCount: 0, classifyDurationSum: 0, classifyDurationBuckets: [],
+  };
+  const ue = unifyEconomy(econ, metrics, baselineModel);
+  const hasData = ue.source === 'real' || ue.source === 'unavailable' || (ue.totalRoutedReqs ?? 0) > 0;
   if (!hasData) return null;
 
   const spentPct = Math.max(0, Math.min(100, 100 - ue.savedPct));
   const savedColor = ue.savedPct > 50 ? 'green' : ue.savedPct > 20 ? 'yellow' : 'gray';
-  const baselineLabel = ue.source === 'real' ? `all-${ue.mostExpensiveModel}` : 'all-opus';
+  const baselineLabel = ue.source === 'real' ? `all-${ue.baselineModel ?? ue.mostExpensiveModel}` : baselineModel ? `all-${baselineModel}` : 'all-opus';
   // Show the opus-anchored line only when the primary baseline is a pricier
   // model than opus (e.g. Fable); when opus already IS the most expensive
   // model the router returns an equal figure, so the extra row is redundant.
@@ -451,6 +251,14 @@ function EconomyBox({
     <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1} marginTop={1}>
       <Text color={ACCENT} bold>◆ Economy</Text>
       <Text dimColor>{`spent vs ${baselineLabel} baseline`}</Text>
+      {ue.source === 'unavailable' ? (
+        <>
+          <Text color="yellow">pricing unavailable — savings cannot be calculated</Text>
+          <Text dimColor>token-based, cache-read-aware</Text>
+          <Text dimColor>{ue.note ?? `no pricing data for ${baselineModel}`}</Text>
+          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString() ?? 0} fresh in + ${ue.totalCacheReadTokens?.toLocaleString() ?? 0} cached in / ${ue.totalOutputTokens?.toLocaleString() ?? 0} out`}</Text>
+        </>
+      ) : <>
       <Box>
         <StackedBar
           segments={[
@@ -459,15 +267,15 @@ function EconomyBox({
           ]}
         />
         <Text>{'  '}</Text>
-        <Text color={savedColor} bold>{`saved ${ue.savedPct.toFixed(0)}%`}</Text>
+        <Text color={savedColor} bold>{ue.savedPct >= 0 ? `saved ${ue.savedPct.toFixed(0)}%` : `${Math.abs(ue.savedPct).toFixed(0)}% more`}</Text>
       </Box>
       {ue.source === 'real' ? (
         <>
-          <Text dimColor>{`~${ue.savedPct.toFixed(0)}% cheaper than ${baselineLabel} (real token counts, cache-aware)`}</Text>
+          <Text dimColor>{ue.savedPct >= 0 ? `${ue.savedPct.toFixed(0)}% saved vs ${baselineLabel}` : `${Math.abs(ue.savedPct).toFixed(0)}% more than ${baselineLabel}`}<Text>{' · '}</Text><Text dimColor>token-based, cache-read-aware</Text></Text>
           {showVsOpus && (
             <Text dimColor>{`~${ue.savedPctVsOpus!.toFixed(0)}% cheaper than all-opus`}</Text>
           )}
-          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} in + ${((ue.totalCacheReadTokens ?? 0) + (ue.totalCacheCreationTokens ?? 0)).toLocaleString()} cache / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
+          <Text dimColor>{`tokens: ${ue.totalInputTokens?.toLocaleString()} fresh in + ${ue.totalCacheReadTokens?.toLocaleString()} cached in / ${ue.totalOutputTokens?.toLocaleString()} out`}</Text>
         </>
       ) : (
         <>
@@ -475,59 +283,12 @@ function EconomyBox({
           <Text dimColor>relative estimate from request mix; excludes real token counts &amp; caching</Text>
         </>
       )}
+      </>}
     </Box>
   );
 }
 
-function ColoredBar({ pct, color = ACCENT, width = 16 }: { pct: number; color?: string; width?: number }) {
-  const filled = Math.round((pct / 100) * width);
-  return (
-    <Text color={color}>
-      {'█'.repeat(filled)}
-      <Text dimColor>{'░'.repeat(Math.max(0, width - filled))}</Text>
-    </Text>
-  );
-}
-
-// Splits a bar of `width` cells across segments proportional to their pct,
-// using largest-remainder rounding so the cell counts always sum to exactly
-// `width` (no drift, no overflow). Pure + exported so it can be unit-tested
-// without rendering Ink.
-export function stackedWidths(pcts: number[], width: number): number[] {
-  const raw = pcts.map((p) => (p / 100) * width);
-  const counts = raw.map((r) => Math.floor(r));
-  let used = counts.reduce((a, c) => a + c, 0);
-  const byRemainder = raw
-    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (let k = 0; used < width && k < byRemainder.length; k++, used++) {
-    counts[byRemainder[k].i] += 1;
-  }
-  return counts;
-}
-
-// "Pie chart for the terminal": a single fixed-width bar split into coloured
-// segments whose lengths are proportional to each segment's pct.
 function StackedBar({ segments, width = 28 }: { segments: Array<{ pct: number; color: string }>; width?: number }) {
-  const widths = stackedWidths(segments.map((s) => s.pct), width);
-  return (
-    <Text>
-      {segments.map((s, i) => (
-        <Text key={i} color={s.color}>{'█'.repeat(widths[i])}</Text>
-      ))}
-    </Text>
-  );
-}
-
-function Legend({ items, hidePct }: { items: Array<{ label: string; color: string; pct: number }>; hidePct?: boolean }) {
-  return (
-    <Box flexWrap="wrap">
-      {items.map((it, i) => (
-        <Box key={i} marginRight={2}>
-          <Text color={it.color}>■ </Text>
-          <Text dimColor>{hidePct ? it.label : `${it.label} ${it.pct.toFixed(0)}%`}</Text>
-        </Box>
-      ))}
-    </Box>
-  );
+  const total = segments.reduce((sum, segment) => sum + segment.pct, 0) || 1;
+  return <Text>{segments.map((segment, index) => <Text key={index} color={segment.color}>{'█'.repeat(Math.round((segment.pct / total) * width))}</Text>)}</Text>;
 }

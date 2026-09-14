@@ -72,12 +72,17 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		logging.Infof("Brick: x-selected-model=%s, bypassing routing", selectedModel)
 		rewrittenBody := rewriteModelInBody(body, selectedModel)
-		clientKey := extractClientAPIKey(r)
+		clientKey, authErr := s.resolveClientAPIKey(r)
+		if authErr != nil {
+			writeError(w, http.StatusUnauthorized, authErr.Error())
+			return
+		}
 		if clientKey == "" {
-			writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+			writeError(w, http.StatusUnauthorized, missingAPIKeyMessage(s.cfg))
 			return
 		}
 		result := s.buildForwardResultForModel(rewrittenBody, cfg, selectedModel, req.Stream, clientKey)
+		result.RoutingSource, result.RoutingMode = "native", cfg.Brick.EffectiveRoutingMode()
 		if writeDirectRoutingResult(w, result) {
 			return
 		}
@@ -98,10 +103,15 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// API key must come from the client's Authorization header
-	apiKey := extractClientAPIKey(r)
+	// Resolve the request credential from the configured proxy boundary or from
+	// Authorization for direct deployments.
+	apiKey, authErr := s.resolveClientAPIKey(r)
+	if authErr != nil {
+		writeError(w, http.StatusUnauthorized, authErr.Error())
+		return
+	}
 	if apiKey == "" {
-		writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+		writeError(w, http.StatusUnauthorized, missingAPIKeyMessage(s.cfg))
 		return
 	}
 
@@ -141,6 +151,8 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 				}
 				forwardBody = adaptForRegoloAPI(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
+				result.RoutingSource, result.RoutingMode = "routed", cfg.Brick.EffectiveRoutingMode()
+				result.ReasoningMode = effortStr
 				if writeDirectRoutingResult(w, result) {
 					return
 				}
@@ -200,6 +212,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			IsStreaming: req.Stream,
 			Model:       preprocessResult.DirectModel,
 		}
+		result.RoutingSource, result.RoutingMode = "native", cfg.Brick.EffectiveRoutingMode()
 		w.Header().Set(headers.VSRSelectedModel, preprocessResult.DirectModel)
 		s.forwardToBackend(w, r, result, responseModel)
 		return
@@ -232,6 +245,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
 	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
+	regoloResult.RoutingSource, regoloResult.RoutingMode, regoloResult.ReasoningMode = "routed", cfg.Brick.EffectiveRoutingMode(), effortStr
 	if writeDirectRoutingResult(w, regoloResult) {
 		return
 	}
@@ -682,7 +696,7 @@ func extractPath(rawURL string) string {
 	return path
 }
 
-// extractClientAPIKey extracts the Bearer token from the client's Authorization header.
+// extractClientAPIKey extracts the Bearer token from the Authorization header.
 func extractClientAPIKey(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
@@ -694,6 +708,41 @@ func extractClientAPIKey(r *http.Request) string {
 		return key
 	}
 	return ""
+}
+
+// resolveClientAPIKey selects a request-scoped credential. When a trusted
+// proxy header is configured, either that header or Authorization may be used,
+// but conflicting values are rejected so proxy and direct credentials can
+// never be confused.
+func (s *Server) resolveClientAPIKey(r *http.Request) (string, error) {
+	authorizationKey := extractClientAPIKey(r)
+	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.TrustedProxyHeader) == "" {
+		return authorizationKey, nil
+	}
+
+	trustedValue := r.Header.Get(s.cfg.TrustedProxyHeader)
+	trustedKey := ""
+	if trustedValue != "" {
+		var err error
+		trustedKey, err = config.ValidateCredential(trustedValue)
+		if err != nil {
+			return "", fmt.Errorf("invalid trusted proxy credential")
+		}
+	}
+	if trustedKey != "" && authorizationKey != "" && trustedKey != authorizationKey {
+		return "", fmt.Errorf("conflicting request credentials")
+	}
+	if trustedKey != "" {
+		return trustedKey, nil
+	}
+	return authorizationKey, nil
+}
+
+func missingAPIKeyMessage(cfg *config.RouterConfig) string {
+	if cfg != nil && strings.TrimSpace(cfg.TrustedProxyHeader) != "" {
+		return "missing API key: provide the trusted proxy credential or an Authorization Bearer token"
+	}
+	return "missing API key: provide Authorization Bearer token"
 }
 
 // mergeMaps merges src into dst, returning dst. src values don't overwrite existing dst values.

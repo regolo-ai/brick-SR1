@@ -104,7 +104,11 @@ type anthropicStreamEvent struct {
 //     forwards the request verbatim to that model — no skill routing, no effort
 //     override. This preserves the user's explicit model choice.
 func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
-	clientKey := extractClientAPIKey(r)
+	clientKey, authErr := s.resolveClientAPIKey(r)
+	if authErr != nil {
+		writeError(w, http.StatusUnauthorized, authErr.Error())
+		return
+	}
 	if clientKey == "" {
 		clientKey, _ = config.ValidateCredential(r.Header.Get("x-api-key"))
 	}
@@ -556,6 +560,28 @@ func (s *Server) forwardAnthropicRequest(
 		}
 	}
 	s.recordEconomicsUsage(selectedModel, usage.InputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens, usage.OutputTokens)
+	// Keep the dashboard independent from Prometheus: append one completed
+	// privacy-preserving record only after the upstream body has supplied its
+	// final usage (when available).
+	if s.callHistory != nil {
+		var in, out *int64
+		if usage.InputTokens != 0 || usage.CacheCreationInputTokens != 0 || usage.CacheReadInputTokens != 0 || usage.OutputTokens != 0 {
+			input := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+			output := usage.OutputTokens
+			in, out = &input, &output
+		}
+		status := "completed"
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			status = "failed"
+		}
+		source := "native"
+		if routedViaSkill {
+			source = "routed"
+		}
+		if err := s.callHistory.append(callRecord{CallID: newBrickCallID(), StartedAt: start.UTC(), FinishedAt: time.Now().UTC(), Model: selectedModel, ReasoningMode: effortStr, RoutingMode: apCfg.EffectiveRoutingMode(), RoutingSource: source, Status: status, InputTokens: in, OutputTokens: out}); err != nil {
+			logging.Warnf("Call history: append failed: %v", err)
+		}
+	}
 
 	// Sticky routing bookkeeping: record the model actually served for this
 	// conversation, keyed by response-arrival time so out-of-order concurrent

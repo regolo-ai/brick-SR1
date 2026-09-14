@@ -27,6 +27,9 @@ type RoutingResult struct {
 	RemoveHeaders   []string          // headers to strip before forwarding
 	IsStreaming     bool              // whether the original request has stream=true
 	Model           string            // selected model name, used for economics tracking
+	RoutingSource   string            // "routed" or "native", for durable call history
+	ReasoningMode   string
+	RoutingMode     string
 }
 
 // ProviderInfo holds provider details resolved during routing.
