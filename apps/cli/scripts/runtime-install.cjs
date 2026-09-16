@@ -12,10 +12,9 @@ const manifest = require('../assets/modernbert.json');
 const version = require('../package.json').version;
 function runtimeBundle() {
   if (!['linux', 'darwin'].includes(process.platform) || !['x64', 'arm64'].includes(process.arch)) throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
-  const name = `@regoloai/brick-runtime-${process.platform}-${process.arch}`;
-  let file;
-  try { file = require.resolve(`${name}/package.json`); }
-  catch { throw new Error(`Missing ${name}@${version}; reinstall Brick with optional dependencies enabled.`); }
+  const target = `${process.platform}-${process.arch}`;
+  const file = path.join(root, 'runtimes', target, 'package.json');
+  if (!fs.existsSync(file)) throw new Error(`Missing bundled ${target} runtime; reinstall @regoloai/brick@${version}.`);
   const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (pkg.version !== version) throw new Error(`CLI/runtime version mismatch: ${version}/${pkg.version}`);
   const binary = path.join(path.dirname(file), 'bin', 'brick-runtime');

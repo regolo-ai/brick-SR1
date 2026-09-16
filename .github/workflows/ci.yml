@@ -166,6 +166,8 @@ jobs:
       - name: Pack and install actual artifacts
         run: |
           mkdir -p dist/tarballs dist/installed
+          mkdir -p apps/cli/runtimes
+          cp -R dist/runtime-linux-x64 apps/cli/runtimes/linux-x64
           npm pack ./dist/runtime-linux-x64 --pack-destination dist/tarballs
           npm pack ./apps/cli --pack-destination dist/tarballs
           npm install --prefix dist/installed --foreground-scripts --no-audit --no-fund dist/tarballs/*.tgz
@@ -176,14 +178,14 @@ jobs:
       - name: Verify process lifecycle with installed assets
         run: node scripts/test_native_runtime.mjs dist/installed/node_modules/@regoloai/brick
       - name: Verify unavailable inference preserves direct forwarding
-        run: node scripts/test_native_unavailable.mjs dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/brick-runtime
+        run: node scripts/test_native_unavailable.mjs dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/brick-runtime
       - name: Verify update failure and explicit rollback
         run: node scripts/test_native_update.mjs dist/installed/node_modules/@regoloai/brick
       - name: Verify real inference corpus and C ABI
         run: |
           models=$(node -e "process.stdout.write(require('./dist/installed/node_modules/@regoloai/brick/scripts/runtime-install.cjs').installedRuntime().models)")
-          python3 scripts/test_native_model.py dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/libcandle_spatial_router.so "$models"
-          python3 scripts/test_native_labels.py dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/brick-runtime "$models"
+          python3 scripts/test_native_model.py dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/libcandle_spatial_router.so "$models"
+          python3 scripts/test_native_labels.py dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/brick-runtime "$models"
       - name: Verify runtime native dependencies and exports
         run: |
           ldd dist/runtime-linux-x64/bin/brick-runtime
@@ -192,7 +194,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64-npm
-          path: dist/tarballs/*.tgz
+          path: dist/tarballs/*-runtime-*.tgz
 
   portable-package:
     name: ${{ matrix.target }} installed runtime

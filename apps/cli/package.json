@@ -33,6 +33,7 @@
     "/scripts/runtime-install.cjs",
     "/assets/config-schema.json",
     "/assets/pricing.yaml",
+    "/runtimes",
     "/NOTICE",
     "/THIRD_PARTY_NOTICES.md"
   ],
@@ -94,11 +95,5 @@
   },
   "engines": {
     "node": "20 || >=22"
-  },
-  "optionalDependencies": {
-    "@regoloai/brick-runtime-darwin-arm64": "3.0.1",
-    "@regoloai/brick-runtime-darwin-x64": "3.0.1",
-    "@regoloai/brick-runtime-linux-arm64": "3.0.1",
-    "@regoloai/brick-runtime-linux-x64": "3.0.1"
   }
 }

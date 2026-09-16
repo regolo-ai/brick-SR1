@@ -14,7 +14,7 @@ const scratch = await mkdtemp(join(tmpdir(), 'brick-update-command-'));
 const prefix = join(scratch, 'global');
 const modules = join(prefix, 'lib/node_modules');
 const cli = join(modules, '@regoloai/brick');
-const native = join(modules, '@regoloai/brick-runtime-linux-x64');
+const native = join(cli, 'runtimes/linux-x64');
 const home = join(scratch, 'profiles-home');
 const profile = join(home, 'profiles', 'update-test');
 let manager;

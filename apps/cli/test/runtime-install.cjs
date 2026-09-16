@@ -15,7 +15,7 @@ async function fixture(run) {
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1.0.0' }));
     const content = Buffer.from('test-asset');
     fs.writeFileSync(path.join(root, 'assets/modernbert.json'), JSON.stringify({ repository: 'test/model', revision: 'pinned', files: { 'config.json': { bytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') } } }));
-    const runtime = path.join(root, 'node_modules', '@regoloai', `brick-runtime-${process.platform}-${process.arch}`);
+    const runtime = path.join(root, 'runtimes', `${process.platform}-${process.arch}`);
     fs.mkdirSync(path.join(runtime, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({ version: '1.0.0' }));
     fs.writeFileSync(path.join(runtime, 'bin/brick-runtime'), '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.0.0; fi\nexit 0\n', { mode: 0o755 });
@@ -61,7 +61,7 @@ test('mismatched runtime versions are fatal', () => fixture(async ({ installer, 
 }));
 
 
-test('a missing optional runtime is fatal', () => fixture(async ({ installer, runtime }) => {
+test('a missing bundled runtime is fatal', () => fixture(async ({ installer, runtime }) => {
   fs.rmSync(runtime, { recursive: true });
   assert.throws(() => installer.runtimeBundle(), /Missing.*runtime/);
 }));

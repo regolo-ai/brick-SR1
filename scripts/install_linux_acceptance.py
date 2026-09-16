@@ -107,11 +107,7 @@ repo = Path(__file__).resolve().parents[1]
 package = root / "installed/node_modules/@regoloai/brick"
 for script in ["test_native_runtime.mjs", "test_native_unavailable.mjs"]:
     shutil.copy2(repo / "scripts" / script, root / script)
-    target = (
-        package
-        if script == "test_native_runtime.mjs"
-        else root / "installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/brick-runtime"
-    )
+    target = package if script == "test_native_runtime.mjs" else package / "runtimes/linux-x64/bin/brick-runtime"
     subprocess.run(
         [str(root / "bin/node"), str(root / script), str(target)], env=env, cwd=root, preexec_fn=identity, check=True
     )
