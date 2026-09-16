@@ -13,14 +13,25 @@ members = [
     "packages/datasets",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
+    "brick-evals",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6.0",
 ]
 
+baselines = [
+    "routellm",
+    "sentence-transformers",
+]
+
+[tool.uv.sources]
+brick-evals = { workspace = true }
+routellm = { git = "https://github.com/lm-sys/RouteLLM", rev = "0b64fdafe049e596a3f5657c219329f24af24198" }
+
 [tool.ruff]
+extend-exclude = ["packages/evals/vendor", "packages/evals/external"]
 line-length = 120
 target-version = "py310"
 
@@ -32,7 +43,9 @@ ignore = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/evals/tests"]
+addopts = "-m 'not generated_data'"
+markers = ["generated_data: checks requiring externally generated datasets and quality reports"]
+testpaths = ["packages/evals/tests", "packages/training/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

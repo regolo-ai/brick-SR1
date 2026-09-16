@@ -10,16 +10,18 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
-
-import numpy as np
+import os
 
 # Import predict pipeline from sweep V2
 import sys
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sweep_brick_v2_wandb import (  # type: ignore
-    BASE_CAPABILITIES, MODELS, COST, RANK,
-    rows_from_debug, prepare_arrays, evaluate_prepared, SKILL_VECTORS_6,
+    SKILL_VECTORS_6,
+    evaluate_prepared,
+    prepare_arrays,
+    rows_from_debug,
 )
 
 
@@ -27,8 +29,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sweep", type=Path, required=True, help="Output JSONL of sweep_brick_v2_wandb.py")
     parser.add_argument("--skills", type=Path, default=None, help="Skills JSON; if omitted uses production")
-    parser.add_argument("--input", type=Path, default=Path("external_comparison/predictions/brick_debug_gpu.jsonl"))
-    parser.add_argument("--comparison", type=Path, default=Path("external_comparison/predictions/comparison.jsonl.gz"))
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=(Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_debug_gpu.jsonl"),
+    )
+    parser.add_argument(
+        "--comparison",
+        type=Path,
+        default=(Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "comparison.jsonl.gz"),
+    )
     parser.add_argument("--top-k", type=int, default=10)
     args = parser.parse_args()
 
@@ -55,16 +65,33 @@ def main():
     sweep_rows.sort(key=lambda r: r["holdout_accuracy"], reverse=True)
 
     print(f"\n=== TOP {args.top_k} sweep configs by holdout_accuracy ===")
-    for i, r in enumerate(sweep_rows[:args.top_k]):
-        print(f"{i+1}. holdout={r['holdout_accuracy']:.4f} dev={r['dev_accuracy']:.4f}"
-              f"  pref={r['routing_preference']:.2f} mu={r['complexity_mu']:.2f}"
-              f"  bias={r['complexity_bias']:.2f} beta={r['cost_penalty_beta']:.2f}"
-              f"  lam={r['over_penalty_lambda']:.2f} tau={r['tau_base']:.2f}"
-              f"  q={r['holdout_model_qwen_pct']:.2f} d={r['holdout_model_ds4_pct']:.2f} k={r['holdout_model_kimi_pct']:.2f}")
+    for i, r in enumerate(sweep_rows[: args.top_k]):
+        print(
+            f"{i + 1}. holdout={r['holdout_accuracy']:.4f} dev={r['dev_accuracy']:.4f}"
+            f"  pref={r['routing_preference']:.2f} mu={r['complexity_mu']:.2f}"
+            f"  bias={r['complexity_bias']:.2f} beta={r['cost_penalty_beta']:.2f}"
+            f"  lam={r['over_penalty_lambda']:.2f} tau={r['tau_base']:.2f}"
+            f"  q={r['holdout_model_qwen_pct']:.2f} d={r['holdout_model_ds4_pct']:.2f} k={r['holdout_model_kimi_pct']:.2f}"
+        )
 
     best = sweep_rows[0]
-    print(f"\n=== BEST CONFIG ===")
-    print(json.dumps({k: best[k] for k in ["routing_preference","complexity_mu","complexity_bias","cost_penalty_beta","over_penalty_lambda","tau_base"]}, indent=2))
+    print("\n=== BEST CONFIG ===")
+    print(
+        json.dumps(
+            {
+                k: best[k]
+                for k in [
+                    "routing_preference",
+                    "complexity_mu",
+                    "complexity_bias",
+                    "cost_penalty_beta",
+                    "over_penalty_lambda",
+                    "tau_base",
+                ]
+            },
+            indent=2,
+        )
+    )
 
     params = {
         "routing_preference": best["routing_preference"],
@@ -83,8 +110,10 @@ def main():
     print(f"cost_per_correct: {full_metrics['cost_per_correct']:.4f}")
     print(f"over_route_rate : {full_metrics['over_route_rate']:.4f}")
     print(f"under_route_rate: {full_metrics['under_route_rate']:.4f}")
-    print(f"distribution    : qwen={full_metrics['model_qwen_pct']:.3f}  ds4={full_metrics['model_ds4_pct']:.3f}  kimi={full_metrics['model_kimi_pct']:.3f}")
-    print(f"\nPer-dimension accuracy:")
+    print(
+        f"distribution    : qwen={full_metrics['model_qwen_pct']:.3f}  ds4={full_metrics['model_ds4_pct']:.3f}  kimi={full_metrics['model_kimi_pct']:.3f}"
+    )
+    print("\nPer-dimension accuracy:")
     for k in sorted(full_metrics):
         if k.startswith("acc_"):
             print(f"  {k[4:]:30s} : {full_metrics[k]:.4f}")

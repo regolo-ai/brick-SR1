@@ -62,9 +62,6 @@ func (s *Store) GetAt(key string, now time.Time) (Entry, bool) {
 	return e, true
 }
 
-// Get is GetAt with the current wall clock.
-func (s *Store) Get(key string) (Entry, bool) { return s.GetAt(key, time.Now()) }
-
 // Record stores the model chosen for a conversation turn, ordered by the
 // response-arrival timestamp arrivedAt. A write whose arrivedAt is not strictly
 // newer than the stored LastSeen is ignored, so an out-of-order or concurrent

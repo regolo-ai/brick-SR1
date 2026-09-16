@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""115 - Aggrega i graded file di più giudici LLM in un verdetto di panel.
-
-Workflow panel (vedi skill `/llmevals`): si esegue `110_grade_inference.py` una volta
-per giudice (`--judge-model`), producendo N graded file. Questo script li fonde per
-`query_id` applicando **majority vote 2/3**:
-
-  - protocollo judge (`rubric_judge` / `llm_judge_factual`): voto a maggioranza sui
-    verdetti dei giudici. `None` = astensione (output non parsabile / truncation).
-    Si vota solo sui non-None; <2 voti validi o tie 1-1 → `correct=None`.
-  - protocollo deterministico (`tool_call_match`, ...): identico in tutti i file →
-    passthrough dal primo file disponibile.
-
-Output: un JSONL con una riga per `query_id`. Le righe judge ottengono i campi extra
-`panel` (verdetto per giudice), `panel_vote` ("<accept>-<reject>"), `panel_cost_usd`.
-
-Usage:
-  python scripts/115_aggregate_panel.py \\
-      --inputs a_graded.jsonl b_graded.jsonl c_graded.jsonl \\
-      --output a_graded__panel.jsonl
-"""
+"""Merge graded JSONL files by query_id using judge majority votes. None abstains; fewer than two valid votes or a tie gives correct=None. Deterministic protocols pass through the first available result. Include individual decisions, vote counts and total panel cost."""
 
 from __future__ import annotations
 
@@ -36,15 +17,7 @@ JUDGE_PROTOCOLS = {"rubric_judge", "llm_judge_factual"}
 
 
 def majority_vote(verdicts: list[bool | None]) -> tuple[bool | None, str]:
-    """Majority vote sui verdetti di N giudici.
-
-    `None` = astensione (non conta). Si vota solo sui validi (non-None):
-      - accept > reject → True
-      - reject > accept → False
-      - <2 voti validi, oppure tie con esattamente 2 validi → None
-
-    Ritorna `(label, "<accepts>-<rejects>")` dove i conteggi sono SOLO sui validi.
-    """
+    """Return (label, accept-reject counts) over non-None votes. Fewer than two valid votes or a tie yields None; otherwise the majority wins."""
     valid = [v for v in verdicts if v is not None]
     accepts = sum(1 for v in valid if v is True)
     rejects = sum(1 for v in valid if v is False)
@@ -59,24 +32,21 @@ def majority_vote(verdicts: list[bool | None]) -> tuple[bool | None, str]:
 
 
 def _judge_decision(row: dict) -> str | None:
-    """Estrae la decisione testuale del giudice da una riga gradata."""
+    """Extract the textual judge decision from a graded row."""
     meta = row.get("grader_meta") or {}
     return meta.get("judge_decision") or meta.get("judge_label")
 
 
 def aggregate_row(query_id: str, rows: dict[str, dict]) -> dict:
-    """Fonde le righe gradate dei giudici (dict judge_model -> graded row) per un query_id.
-
-    `rows` può avere meno di N entry: un giudice mancante = astensione.
-    """
+    """Merge judge rows for one query ID. A missing judge counts as abstention."""
     any_row = next(iter(rows.values()))
     protocol = any_row.get("evaluation_protocol_id")
 
-    # Protocollo deterministico → passthrough (identico in tutti i file).
+    # Deterministic protocols pass through the identical result.
     if protocol not in JUDGE_PROTOCOLS:
         return dict(any_row)
 
-    # Protocollo judge → majority vote.
+    # Judge protocols use majority votes.
     [rows[m].get("correct") if m in rows else None for m in rows]
     final, vote_str = majority_vote([r.get("correct") for r in rows.values()])
 
@@ -114,12 +84,12 @@ def _load(path: Path) -> dict[str, dict]:
 
 
 def _judge_model_of(rows: dict[str, dict], fallback: str) -> str:
-    """Identifica il judge_model di un file dal primo grader_meta che ce l'ha."""
+    """Identify a file’s judge model from the first available grader metadata."""
     for r in rows.values():
         meta = r.get("grader_meta") or {}
         if jm := meta.get("judge_model"):
             return jm
-    return fallback  # file senza righe judge (improbabile) → usa il path
+    return fallback  # Fall back to the path when a file has no judge rows.
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -136,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[FAIL] input non trovato: {path}")
             return 1
 
-    # Carica ogni file, indicizzato per query_id; chiave = judge_model.
+    # Load each file indexed by query ID, keyed by judge model.
     files: dict[str, dict[str, dict]] = {}
     for path in args.inputs:
         rows = _load(path)

@@ -1,7 +1,10 @@
 import { regoloCatalog } from './regolo.js';
 import { openaiCatalog } from './openai.js';
+import { openaiCodexCatalog } from './openai-codex.js';
 import { anthropicCatalog } from './anthropic.js';
-import { localCatalog } from './local.js';
+import { claudeApiCatalog } from './claude-api.js';
+import { claudeCodeCatalog } from './claude-code.js';
+import { openrouterCatalog } from './openrouter.js';
 
 export interface CatalogModel {
   id: string;
@@ -21,6 +24,7 @@ export interface CatalogProvider {
   type: string;
   base_url: string;
   env_key: string;
+  optional?: boolean;
   models: CatalogModel[];
   multimodal: {
     stt?: MultimodalEndpoint;
@@ -32,12 +36,15 @@ export interface CatalogProvider {
 export const catalog: Record<string, CatalogProvider> = {
   regolo: regoloCatalog,
   openai: openaiCatalog,
+  'openai-codex': openaiCodexCatalog,
   anthropic: anthropicCatalog,
-  local: localCatalog,
+  'claude-api': claudeApiCatalog,
+  'claude-code': claudeCodeCatalog,
+  openrouter: openrouterCatalog,
 };
 
 export const reasoningFamiliesDefault = {
-  qwen3: { type: 'chat_template_kwargs', parameter: 'enable_thinking' },
-  minimax: { type: 'reasoning_effort', parameter: 'reasoning_effort' },
-  openai_reasoning: { type: 'reasoning_effort', parameter: 'reasoning_effort' },
+  qwen3: { parameter: 'enable_thinking' },
+  minimax: { parameter: 'reasoning_effort' },
+  openai_reasoning: { parameter: 'reasoning_effort' },
 };

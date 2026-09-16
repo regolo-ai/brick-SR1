@@ -66,9 +66,7 @@ func applyBrickReasoning(body []byte, cfg *config.RouterConfig, modelName, compl
 		effort = "medium"
 	}
 
-	// Enforce per-model allowlist: se allowed_thinking_modes è configurato,
-	// clamp l'effort al valore consentito più vicino (scala decrescente).
-	// "off" in allowlist = strip completo del reasoning.
+	// Clamp effort to the nearest lower allowed mode; "off" strips reasoning.
 	if allowed := cfg.GetAllowedThinkingModes(modelName); len(allowed) > 0 {
 		if slices.Contains(allowed, "off") {
 			stripBrickReasoningFields(raw)

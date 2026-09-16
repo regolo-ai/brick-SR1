@@ -21,20 +21,19 @@ import math
 import os
 import random
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-
 PROJECT = "brick-risk-adjusted-routing"
 ENTITY = "massa-industries"
-DEBUG_INPUT = Path("external_comparison/predictions/brick_debug_gpu.jsonl")
-COMPARISON_INPUT = Path("external_comparison/predictions/comparison.jsonl.gz")
-OUT_JSONL = Path("external_comparison/predictions/brick_v2_sweep.jsonl")
-PARETO_JSONL = Path("external_comparison/predictions/brick_v2_pareto.jsonl")
-SKILL_OUT = Path("external_comparison/predictions/brick_v2_skills.json")
+DEBUG_INPUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_debug_gpu.jsonl"
+COMPARISON_INPUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "comparison.jsonl.gz"
+OUT_JSONL = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_v2_sweep.jsonl"
+PARETO_JSONL = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_v2_pareto.jsonl"
+SKILL_OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_v2_skills.json"
 
 BASE_CAPABILITIES = (
     "coding",
@@ -107,16 +106,20 @@ def rows_from_debug(path: Path, comparison_path: Path) -> list[dict[str, Any]]:
         gt = row.get("ground_truth") or comp.get("ground_truth")
         if gt not in MODELS:
             continue
-        out.append({
-            "query_id": row["query_id"],
-            "dimension": row.get("dimension") or comp.get("dimension"),
-            "ground_truth": gt,
-            "probabilities": probs,
-            "tau_query": row.get("brick_tau_query") if row.get("brick_tau_query") is not None else debug.get("tau_query"),
-            "gt_qwen_correct": bool(row.get("gt_qwen_correct", comp.get("gt_qwen_correct", False))),
-            "gt_ds4_correct": bool(row.get("gt_ds4_correct", comp.get("gt_ds4_correct", False))),
-            "gt_kimi_correct": bool(row.get("gt_kimi_correct", comp.get("gt_kimi_correct", False))),
-        })
+        out.append(
+            {
+                "query_id": row["query_id"],
+                "dimension": row.get("dimension") or comp.get("dimension"),
+                "ground_truth": gt,
+                "probabilities": probs,
+                "tau_query": row.get("brick_tau_query")
+                if row.get("brick_tau_query") is not None
+                else debug.get("tau_query"),
+                "gt_qwen_correct": bool(row.get("gt_qwen_correct", comp.get("gt_qwen_correct", False))),
+                "gt_ds4_correct": bool(row.get("gt_ds4_correct", comp.get("gt_ds4_correct", False))),
+                "gt_kimi_correct": bool(row.get("gt_kimi_correct", comp.get("gt_kimi_correct", False))),
+            }
+        )
     return out
 
 
@@ -125,7 +128,6 @@ def calibrate_skills(dev_rows: list[dict[str, Any]]) -> dict[str, list[float]]:
 
     skill[model][cap] = P(model correct | dominant capability = cap on dev)
     """
-    cap_index = {cap: i for i, cap in enumerate(BASE_CAPABILITIES)}
     correct_keys = {"qwen": "gt_qwen_correct", "ds4": "gt_ds4_correct", "kimi": "gt_kimi_correct"}
     counts = np.zeros((len(MODELS), len(BASE_CAPABILITIES)), dtype=np.float64)
     weights = np.zeros((len(MODELS), len(BASE_CAPABILITIES)), dtype=np.float64)
@@ -142,16 +144,12 @@ def calibrate_skills(dev_rows: list[dict[str, Any]]) -> dict[str, list[float]]:
 
 def prepare_arrays(rows: list[dict[str, Any]], skill_vectors: dict[str, list[float]]) -> dict[str, Any]:
     probabilities = np.asarray([row["probabilities"] for row in rows], dtype=np.float64)
-    tau = np.asarray([
-        np.nan if row.get("tau_query") is None else float(row["tau_query"])
-        for row in rows
-    ], dtype=np.float64)
+    tau = np.asarray(
+        [np.nan if row.get("tau_query") is None else float(row["tau_query"]) for row in rows], dtype=np.float64
+    )
     gt = np.asarray([RANK[row["ground_truth"]] for row in rows], dtype=np.int64)
     dims = np.asarray([row["dimension"] for row in rows], dtype=object)
-    model_logits = np.asarray([
-        [logit(skill) for skill in skill_vectors[model]]
-        for model in MODELS
-    ], dtype=np.float64)
+    model_logits = np.asarray([[logit(skill) for skill in skill_vectors[model]] for model in MODELS], dtype=np.float64)
     model_values = probabilities[None, :, :] * model_logits[:, None, :]
     return {
         "probabilities": probabilities,
@@ -163,7 +161,9 @@ def prepare_arrays(rows: list[dict[str, Any]], skill_vectors: dict[str, list[flo
     }
 
 
-def evaluate_prepared(data: dict[str, Any], params: dict[str, float], per_cap_mu: np.ndarray | None = None) -> dict[str, Any]:
+def evaluate_prepared(
+    data: dict[str, Any], params: dict[str, float], per_cap_mu: np.ndarray | None = None
+) -> dict[str, Any]:
     eff = effective_params(params)
     raw_tau = data["tau"]
     if params.get("tau_override_mode", "auto") == "force_base" or np.all(np.isnan(raw_tau)):
@@ -226,12 +226,18 @@ def split_rows(rows, dev_fraction: float, seed: str):
 
 def grid_combinations(quick: bool, tau_sweep: bool) -> list[dict[str, float]]:
     grid = {
-        "routing_preference": [-1.0, -0.5, 0.0, 0.5, 1.0] if quick else [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0],
-        "complexity_mu": [0.4, 0.7, 1.0, 1.4] if quick else [0.25, 0.40, 0.55, 0.70, 0.85, 1.00, 1.25, 1.60, 2.00, 2.50],
+        "routing_preference": [-1.0, -0.5, 0.0, 0.5, 1.0]
+        if quick
+        else [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0],
+        "complexity_mu": [0.4, 0.7, 1.0, 1.4]
+        if quick
+        else [0.25, 0.40, 0.55, 0.70, 0.85, 1.00, 1.25, 1.60, 2.00, 2.50],
         "complexity_bias": [-0.6, 0.0, 0.6] if quick else [-1.50, -1.00, -0.60, -0.30, 0.00, 0.30, 0.60, 1.00, 1.50],
         "cost_penalty_beta": [0.0, 0.1, 0.4] if quick else [0.00, 0.02, 0.05, 0.10, 0.20, 0.40, 0.80, 1.50],
         "over_penalty_lambda": [0.02, 0.10, 0.50] if quick else [0.00, 0.02, 0.05, 0.10, 0.20, 0.50, 1.00, 2.00, 4.00],
-        "tau_base": ([0.55, 0.72, 0.88] if quick else [0.45, 0.55, 0.62, 0.72, 0.80, 0.88, 0.95]) if tau_sweep else [0.72],
+        "tau_base": ([0.55, 0.72, 0.88] if quick else [0.45, 0.55, 0.62, 0.72, 0.80, 0.88, 0.95])
+        if tau_sweep
+        else [0.72],
     }
     combos = [{}]
     for key, vals in grid.items():
@@ -245,24 +251,32 @@ def random_combinations(n: int, seed: int, focused_around: dict | None = None) -
     if focused_around is not None:
         # Narrow Gaussian-ish sampling around `focused_around`
         for _ in range(n):
-            combos.append({
-                "routing_preference": max(-1.0, min(1.0, focused_around.get("routing_preference", -0.5) + rnd.gauss(0, 0.2))),
-                "complexity_mu":      max(0.05, focused_around.get("complexity_mu", 0.25) + rnd.gauss(0, 0.15)),
-                "complexity_bias":    focused_around.get("complexity_bias", 0.3) + rnd.gauss(0, 0.25),
-                "cost_penalty_beta":  max(0.0, focused_around.get("cost_penalty_beta", 0.02) + rnd.gauss(0, 0.05)),
-                "over_penalty_lambda":max(0.0, focused_around.get("over_penalty_lambda", 0.2) + rnd.gauss(0, 0.20)),
-                "tau_base":           max(0.30, min(0.97, focused_around.get("tau_base", 0.45) + rnd.gauss(0, 0.10))),
-            })
+            combos.append(
+                {
+                    "routing_preference": max(
+                        -1.0, min(1.0, focused_around.get("routing_preference", -0.5) + rnd.gauss(0, 0.2))
+                    ),
+                    "complexity_mu": max(0.05, focused_around.get("complexity_mu", 0.25) + rnd.gauss(0, 0.15)),
+                    "complexity_bias": focused_around.get("complexity_bias", 0.3) + rnd.gauss(0, 0.25),
+                    "cost_penalty_beta": max(0.0, focused_around.get("cost_penalty_beta", 0.02) + rnd.gauss(0, 0.05)),
+                    "over_penalty_lambda": max(
+                        0.0, focused_around.get("over_penalty_lambda", 0.2) + rnd.gauss(0, 0.20)
+                    ),
+                    "tau_base": max(0.30, min(0.97, focused_around.get("tau_base", 0.45) + rnd.gauss(0, 0.10))),
+                }
+            )
     else:
         for _ in range(n):
-            combos.append({
-                "routing_preference": rnd.uniform(-1.0, 1.0),
-                "complexity_mu": rnd.uniform(0.2, 3.0),
-                "complexity_bias": rnd.uniform(-2.0, 2.0),
-                "cost_penalty_beta": rnd.choice([0.0]) if rnd.random() < 0.1 else rnd.uniform(0.0, 2.0),
-                "over_penalty_lambda": rnd.uniform(0.0, 5.0),
-                "tau_base": rnd.uniform(0.40, 0.95),
-            })
+            combos.append(
+                {
+                    "routing_preference": rnd.uniform(-1.0, 1.0),
+                    "complexity_mu": rnd.uniform(0.2, 3.0),
+                    "complexity_bias": rnd.uniform(-2.0, 2.0),
+                    "cost_penalty_beta": rnd.choice([0.0]) if rnd.random() < 0.1 else rnd.uniform(0.0, 2.0),
+                    "over_penalty_lambda": rnd.uniform(0.0, 5.0),
+                    "tau_base": rnd.uniform(0.40, 0.95),
+                }
+            )
     return combos
 
 
@@ -285,16 +299,21 @@ def setup_wandb(args):
         return None, None
     os.environ["WANDB_MODE"] = args.wandb_mode
     if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
-        kp = Path("/root/.wandb_key")
+        kp = Path.home() / ".wandb_key"
         if kp.exists():
             os.environ["WANDB_API_KEY"] = kp.read_text().strip()
     import wandb
+
     run = wandb.init(
         entity=args.entity,
         project=args.project,
         name=args.run_name or None,
         job_type="risk_sweep_v2",
-        tags=["v2", "calibrated" if args.calibrate_skills else "production_skills", "tau_sweep" if args.tau_sweep else "tau_fixed"],
+        tags=[
+            "v2",
+            "calibrated" if args.calibrate_skills else "production_skills",
+            "tau_sweep" if args.tau_sweep else "tau_fixed",
+        ],
         config={
             "input": str(args.input),
             "comparison": str(args.comparison),
@@ -318,13 +337,16 @@ def main() -> int:
     parser.add_argument("--pareto-out", type=Path, default=PARETO_JSONL)
     parser.add_argument("--skill-out", type=Path, default=SKILL_OUT)
     parser.add_argument("--quick", action="store_true")
-    parser.add_argument("--tau-sweep", action="store_true", help="Sweep tau_base globally even with raw tau_query present")
+    parser.add_argument(
+        "--tau-sweep", action="store_true", help="Sweep tau_base globally even with raw tau_query present"
+    )
     parser.add_argument("--tau-mode", choices=["raw", "force_base", "blend"], default="raw")
     parser.add_argument("--calibrate-skills", action="store_true")
     parser.add_argument("--per-cap-mu", action="store_true")
     parser.add_argument("--random-trials", type=int, default=0)
-    parser.add_argument("--focused-around", type=str, default=None,
-                        help="JSON dict of params to narrow random sampling around")
+    parser.add_argument(
+        "--focused-around", type=str, default=None, help="JSON dict of params to narrow random sampling around"
+    )
     parser.add_argument("--dev-fraction", type=float, default=0.70)
     parser.add_argument("--seed", default="brick-v2")
     parser.add_argument("--wandb-mode", choices=["disabled", "offline", "online"], default="offline")
@@ -349,7 +371,7 @@ def main() -> int:
             json.dump({"capabilities": list(BASE_CAPABILITIES), "skill_vectors": skill_vectors}, f, indent=2)
         print(f"[skills] calibrated → {args.skill_out}")
         for m, v in skill_vectors.items():
-            print(f"  {m}: {[round(x,3) for x in v]}")
+            print(f"  {m}: {[round(x, 3) for x in v]}")
     else:
         skill_vectors = SKILL_VECTORS_6
 
@@ -383,18 +405,20 @@ def main() -> int:
         row["calibrated"] = args.calibrate_skills
         results.append(row)
         if wandb_mod is not None and i % log_every == 0:
-            wandb_mod.log({
-                "i": i,
-                "holdout_accuracy": hold_m["accuracy"],
-                "holdout_avg_cost": hold_m["avg_cost"],
-                "dev_accuracy": dev_m["accuracy"],
-                "best_holdout_accuracy_so_far": max(best_holdout, hold_m["accuracy"]),
-            })
+            wandb_mod.log(
+                {
+                    "i": i,
+                    "holdout_accuracy": hold_m["accuracy"],
+                    "holdout_avg_cost": hold_m["avg_cost"],
+                    "dev_accuracy": dev_m["accuracy"],
+                    "best_holdout_accuracy_so_far": max(best_holdout, hold_m["accuracy"]),
+                }
+            )
         if hold_m["accuracy"] > best_holdout:
             best_holdout = hold_m["accuracy"]
         if (i + 1) % (len(combos) // 10 + 1) == 0:
             el = time.time() - t0
-            print(f"  [{i+1}/{len(combos)}] best_holdout={best_holdout:.4f} elapsed={el:.1f}s")
+            print(f"  [{i + 1}/{len(combos)}] best_holdout={best_holdout:.4f} elapsed={el:.1f}s")
 
     pareto = mark_pareto(results)
     results.sort(key=lambda r: (not r["is_pareto"], -r["holdout_accuracy"], r["holdout_avg_cost"]))
@@ -409,9 +433,15 @@ def main() -> int:
 
     best = max(results, key=lambda r: (r["holdout_accuracy"], -r["holdout_avg_cost"]))
     elapsed = time.time() - t0
-    print(f"\n[done] best_holdout_accuracy={best['holdout_accuracy']:.4f}  avg_cost={best['holdout_avg_cost']:.4f}  elapsed={elapsed:.1f}s")
-    print(f"  params: pref={best['routing_preference']:.2f}  mu={best['complexity_mu']:.2f}  bias={best['complexity_bias']:.2f}  beta={best['cost_penalty_beta']:.2f}  lambda={best['over_penalty_lambda']:.2f}  tau={best['tau_base']:.2f}")
-    print(f"  distribution: qwen={best['holdout_model_qwen_pct']:.3f}  ds4={best['holdout_model_ds4_pct']:.3f}  kimi={best['holdout_model_kimi_pct']:.3f}")
+    print(
+        f"\n[done] best_holdout_accuracy={best['holdout_accuracy']:.4f}  avg_cost={best['holdout_avg_cost']:.4f}  elapsed={elapsed:.1f}s"
+    )
+    print(
+        f"  params: pref={best['routing_preference']:.2f}  mu={best['complexity_mu']:.2f}  bias={best['complexity_bias']:.2f}  beta={best['cost_penalty_beta']:.2f}  lambda={best['over_penalty_lambda']:.2f}  tau={best['tau_base']:.2f}"
+    )
+    print(
+        f"  distribution: qwen={best['holdout_model_qwen_pct']:.3f}  ds4={best['holdout_model_ds4_pct']:.3f}  kimi={best['holdout_model_kimi_pct']:.3f}"
+    )
 
     if wandb_mod is not None:
         run.summary["best_holdout_accuracy"] = best["holdout_accuracy"]
@@ -430,7 +460,7 @@ def main() -> int:
         run.summary["elapsed_seconds"] = elapsed
 
         # Log full results as table
-        scalar_keys = sorted({k for r in results for k, v in r.items() if isinstance(v, (int, float, bool, str))})
+        scalar_keys = sorted({k for r in results for k, v in r.items() if isinstance(v, int | float | bool | str)})
         table = wandb_mod.Table(columns=scalar_keys)
         for r in results[:5000]:  # cap to avoid bloating wandb
             table.add_data(*(r.get(k) for k in scalar_keys))

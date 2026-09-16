@@ -250,32 +250,6 @@ func extractRequestedModel(body []byte) string {
 	return strings.TrimSpace(raw.Model)
 }
 
-// applyEffortAnthropic overwrites output_config.effort on an Anthropic
-// /v1/messages body with the complexity+mode derived effort. Haiku stripping is
-// handled separately by stripUnsupportedFieldsForModel (Haiku rejects effort).
-func applyEffortAnthropic(body []byte, cfg *config.RouterConfig, complexityLabel string) []byte {
-	if cfg == nil {
-		return body
-	}
-	effort := vocabAt(claudeEffortVocab, resolveEffortLevel(complexityLabel, routingPreferenceOf(cfg)))
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return body
-	}
-	oc, _ := raw["output_config"].(map[string]interface{})
-	if oc == nil {
-		oc = map[string]interface{}{}
-	}
-	oc["effort"] = effort
-	raw["output_config"] = oc
-	out, err := json.Marshal(raw)
-	if err != nil {
-		return body
-	}
-	return out
-}
-
 // applyEffortAnthropicLevel overwrites output_config.effort on an Anthropic
 // /v1/messages body with the effort string for an explicit ladder ordinal
 // (0..5), using the vocabulary the target model accepts (Sonnet lacks "xhigh").
@@ -302,34 +276,31 @@ func applyEffortAnthropicLevel(body []byte, level int, model string) []byte {
 	return out
 }
 
-// clampEffortLevelToAllowlist restituisce il livello di effort da usare per
-// selectedModel, rispettando l'eventuale allowlist configurata in model_config.
-// Se allowed_thinking_modes contiene "off", restituisce -1 come sentinel:
-// il sito di chiamata deve saltare l'iniezione dell'effort.
-// In tutti gli altri casi il livello viene clampato al valore consentito più
-// basso nella scala (5=max, 4=xhigh, 3=high, 2=medium, 1-0=low).
+// clampEffortLevelToAllowlist selects the nearest allowed effort no higher than
+// the requested level, or the lowest allowed level if none is lower. An "off"
+// entry returns -1: callers must omit reasoning injection.
 func clampEffortLevelToAllowlist(level int, modelName string, cfg *config.RouterConfig) int {
 	allowed := cfg.GetAllowedThinkingModes(modelName)
 	if len(allowed) == 0 {
-		return level // nessun vincolo
+		return level // unrestricted
 	}
-	// "off" in allowlist = blocca tutto il reasoning
+	// "off" disables all reasoning
 	if slices.Contains(allowed, "off") {
-		return -1 // sentinel: il chiamante deve saltare l'iniezione
+		return -1 // sentinel: the caller must skip injection
 	}
-	// Mappa ladder ordinal → vocabolario condiviso per il confronto
+	// Map ladder ordinals to the shared effort vocabulary
 	effortVocabOrder := []string{"low", "low", "medium", "high", "xhigh", "max"}
-	// Scende dal livello richiesto finché trova un valore permesso
+	// Search downward from the requested level
 	for i := level; i >= 0; i-- {
 		if i < len(effortVocabOrder) && slices.Contains(allowed, effortVocabOrder[i]) {
 			return i
 		}
 	}
-	// Nessun valore consentito uguale o inferiore: usa il minimo permesso
+	// No allowed level is lower: use the lowest allowed level
 	for i := 0; i < len(effortVocabOrder); i++ {
 		if slices.Contains(allowed, effortVocabOrder[i]) {
 			return i
 		}
 	}
-	return level // fallback conservativo
+	return level // conservative fallback
 }

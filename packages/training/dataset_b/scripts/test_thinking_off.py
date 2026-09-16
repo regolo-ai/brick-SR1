@@ -32,7 +32,7 @@ def call(payload, label):
         finish = r.json()["choices"][0].get("finish_reason")
         usage = r.json().get("usage", {})
         print(
-            f"=== {label} ({time.time()-t0:.1f}s, finish={finish}, completion_tokens={usage.get('completion_tokens')}) ==="
+            f"=== {label} ({time.time() - t0:.1f}s, finish={finish}, completion_tokens={usage.get('completion_tokens')}) ==="
         )
         print(f"REASONING_LEN: {len(reasoning)}")
         print(f"CONTENT[:500]: {repr(content[:500])}")

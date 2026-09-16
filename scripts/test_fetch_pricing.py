@@ -121,10 +121,26 @@ class TestBuildPricingRecordsRegolo:
         assert qwen["output_price"] == 0.35
 
 
+class TestBuildPricingRecordsOpenAI:
+    def test_openai_prices_are_official_curated_and_cache_aware(self):
+        records = fp.build_pricing_records(LITELLM_FIXTURE, "2026-08-06T00:00:00Z")
+        expected = {
+            "gpt-5.6-sol": (5.0, 0.50, 30.0),
+            "gpt-5.6-terra": (2.50, 0.25, 15.0),
+            "gpt-5.6-luna": (1.0, 0.10, 6.0),
+        }
+        for model, prices in expected.items():
+            row = next(r for r in records if r["model"] == model)
+            assert (row["input_price"], row["cached_input_price"], row["output_price"]) == prices
+            assert row["provider"] == "openai"
+            assert row["source"] == "openai_official_curated"
+            assert row["source_url"] == fp.OPENAI_PRICING_URL
+
+
 class TestRecordCount:
     def test_every_known_model_produces_exactly_one_record(self):
         records = fp.build_pricing_records(LITELLM_FIXTURE, "2026-07-03T00:00:00Z")
-        assert len(records) == len(fp.ANTHROPIC_MODELS) + len(fp.REGOLO_MODELS)
+        assert len(records) == len(fp.ANTHROPIC_MODELS) + len(fp.OPENAI_MODELS) + len(fp.REGOLO_MODELS)
 
 
 class TestPerModelFailureIsolation:
@@ -139,7 +155,7 @@ class TestPerModelFailureIsolation:
         with patch("fetch_pricing.litellm_price", side_effect=flaky):
             records = fp.build_pricing_records(LITELLM_FIXTURE, "2026-07-03T00:00:00Z")
 
-        assert len(records) == len(fp.ANTHROPIC_MODELS) + len(fp.REGOLO_MODELS)
+        assert len(records) == len(fp.ANTHROPIC_MODELS) + len(fp.OPENAI_MODELS) + len(fp.REGOLO_MODELS)
 
         sonnet = next(r for r in records if r["model"] == "claude-sonnet")
         assert sonnet["source"] == "fallback_static"
@@ -200,7 +216,7 @@ class TestWritePricingYaml:
         loaded = yaml.safe_load(out_path.read_text())
 
         assert isinstance(loaded, list)
-        assert len(loaded) == len(fp.ANTHROPIC_MODELS) + len(fp.REGOLO_MODELS)
+        assert len(loaded) == len(fp.ANTHROPIC_MODELS) + len(fp.OPENAI_MODELS) + len(fp.REGOLO_MODELS)
 
         expected_keys = {
             "provider",
@@ -213,8 +229,13 @@ class TestWritePricingYaml:
             "fetched_at",
         }
         for row in loaded:
-            assert set(row.keys()) == expected_keys
-            assert row["provider"] in ("anthropic", "regolo")
+            row_keys = set(row.keys())
+            if row["provider"] == "openai":
+                assert row_keys == expected_keys | {"cached_input_price"}
+                assert isinstance(row["cached_input_price"], float)
+            else:
+                assert row_keys == expected_keys
+            assert row["provider"] in ("anthropic", "openai", "regolo")
             assert isinstance(row["input_price"], float)
             assert isinstance(row["output_price"], float)
             assert isinstance(row["fetched_at"], str)
@@ -234,7 +255,7 @@ class TestMainEndToEnd:
         fp.main(output_path=out_path)
 
         loaded = yaml.safe_load(out_path.read_text())
-        assert len(loaded) == len(fp.ANTHROPIC_MODELS) + len(fp.REGOLO_MODELS)
+        assert len(loaded) == len(fp.ANTHROPIC_MODELS) + len(fp.OPENAI_MODELS) + len(fp.REGOLO_MODELS)
 
         anthropic = [r for r in loaded if r["provider"] == "anthropic"]
         assert all(r["source"] == "fallback_static" for r in anthropic)

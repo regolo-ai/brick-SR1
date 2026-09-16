@@ -3,13 +3,18 @@ package brickrouting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
 
@@ -30,6 +35,15 @@ func TestClassifyOpenAI_LabelAndLogprobConfidence(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		for _, field := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
+			if _, exists := request[field]; exists {
+				t.Errorf("classifier must not inject %s", field)
+			}
 		}
 		resp := map[string]any{
 			"choices": []map[string]any{{
@@ -208,5 +222,100 @@ func TestClassifyOpenAI_UnrecognizedLabelFallsBackAndCountsMetric(t *testing.T) 
 	}
 	if got := testutil.ToFloat64(metrics.BrickCCClassifyFallback.WithLabelValues()); got != 1 {
 		t.Fatalf("BrickCCClassifyFallback = %v, want 1", got)
+	}
+}
+
+func TestComplexityCredentialResolutionFailsClosed(t *testing.T) {
+	for _, source := range []string{"service", "skill"} {
+		for _, value := range []string{"server-key", "", "${REGOLO_API_KEY}"} {
+			t.Run(source+"/"+value, func(t *testing.T) {
+				t.Setenv("REGOLO_API_KEY", value)
+				var calls atomic.Int32
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls.Add(1)
+					if r.Header.Get("Authorization") != "Bearer server-key" {
+						t.Error("classifier received incorrect authorization")
+					}
+					fmt.Fprint(w, `{"choices":[{"message":{"content":"easy"}}]}`)
+				}))
+				defer upstream.Close()
+				cfg := &config.RouterConfig{}
+				cfg.ComplexityService = &config.ComplexityServiceConfig{
+					BaseURL: upstream.URL, Protocol: "openai", BearerToken: "${REGOLO_API_KEY}",
+				}
+				if source == "skill" {
+					cfg.SkillRouter.ComplexityModel.BearerToken = "${REGOLO_API_KEY}"
+					// A broken explicit skill source must not fall back to this valid token.
+					cfg.ComplexityService.BearerToken = "server-key"
+				}
+				c := newComplexityClient(cfg, cfg.SkillRouter.ComplexityModel)
+				label, _ := c.Classify(context.Background(), "hello")
+				if value == "server-key" {
+					if calls.Load() != 1 || label != "easy" {
+						t.Fatalf("expected authenticated classifier call, calls=%d label=%s", calls.Load(), label)
+					}
+				} else if calls.Load() != 0 || c.credentialErr == nil {
+					t.Fatal("invalid classifier credential must prevent network requests")
+				}
+			})
+		}
+	}
+}
+
+func TestComplexityClientKeepsConcurrentUserKeysSeparate(t *testing.T) {
+	t.Setenv("REGOLO_API_KEY", "server-key-must-not-be-used")
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var body struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Messages) != 2 {
+			t.Error("invalid classifier request")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		userKey := strings.TrimPrefix(body.Messages[1].Content, "Classify: ")
+		if got := r.Header.Get("Authorization"); got != "Bearer "+userKey {
+			t.Error("classifier credential crossed request boundaries")
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"easy"}}]}`)
+	}))
+	defer upstream.Close()
+	for _, source := range []string{"service", "skill"} {
+		cfg := &config.RouterConfig{}
+		cfg.ComplexityService = &config.ComplexityServiceConfig{
+			BaseURL: upstream.URL, Protocol: "openai", BearerToken: "${REGOLO_API_KEY}", UseClientKey: source == "service",
+		}
+		cfg.SkillRouter.ComplexityModel.UseClientKey = source == "skill"
+		c := newComplexityClient(cfg, cfg.SkillRouter.ComplexityModel)
+		var wg sync.WaitGroup
+		for i := 0; i < 20; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				key := fmt.Sprintf("user-%d-key", i)
+				ctx := config.WithClientAPIKey(context.Background(), key)
+				if label, _ := c.Classify(ctx, key); label != "easy" {
+					t.Error("authenticated classifier call failed")
+				}
+			}(i)
+		}
+		wg.Wait()
+		if c.bearerToken != "" {
+			t.Fatal("shared classifier must not retain a user or server key")
+		}
+		before := calls.Load()
+		for _, invalid := range []string{"", "  ", "${REGOLO_API_KEY}"} {
+			c.Classify(config.WithClientAPIKey(context.Background(), invalid), "invalid")
+		}
+		if calls.Load() != before {
+			t.Fatal("missing user credential must not fall back to the server token")
+		}
+	}
+	if calls.Load() != 40 {
+		t.Fatalf("expected 40 requests, got %d", calls.Load())
 	}
 }

@@ -46,7 +46,7 @@ updates:
       gomod-router:
         patterns: ["*"]
 
-  # Rust crates: candle / ml / nlp bindings
+  # CPU ModernBERT binding
   - package-ecosystem: cargo
     directory: "/apps/router/candle-binding"
     target-branch: "dev"
@@ -56,36 +56,4 @@ updates:
     labels: ["dependencies", "rust"]
     groups:
       cargo-candle:
-        patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: "/apps/router/ml-binding"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-ml:
-        patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: "/apps/router/nlp-binding"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-nlp:
-        patterns: ["*"]
-
-  # Python: complexity classifier server
-  - package-ecosystem: pip
-    directory: "/deploy/addons/brick-complexity-server"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "python"]
-    groups:
-      pip-complexity-server:
         patterns: ["*"]

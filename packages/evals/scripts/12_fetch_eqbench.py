@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""12 - Fetch EQ-Bench Creative Writing v3 prompts.
-
-Tenta multiple sorgenti possibili:
-1. Il manifest URL configurato in sources.yaml::eqbench_creative_v3.manifest_url
-2. Repo HF candidati (Disya/eq-bench-creative-writing-v3, EQ-Bench/creative-writing-v3)
-3. Static fallback (96 prompt da generation hardcoded; se tutti falliscono -> warn)
-
-Output: data/raw/eqbench_creative_v3.jsonl (target 96 prompt)
-"""
+"""Fetch EQ-Bench Creative Writing v3 prompts from the configured manifest or candidate Hub repositories. If unavailable, use the explicit static fallback and warn. Expand iterations to the configured target count and write data/raw/eqbench_creative_v3.jsonl."""
 
 from __future__ import annotations
 
@@ -70,7 +62,7 @@ def try_hf_repo(repo_id: str) -> list[dict] | None:
 
 
 def expand_iterations(rows: list[dict], target_n: int = 96) -> list[dict]:
-    """Se source ha 24-32 prompt-base, espandi a 96 con 'iteration' field (1..3 o 1..4)."""
+    """Expand 24-32 base prompts to 96 rows with numbered iterations."""
     if len(rows) >= target_n:
         return rows[:target_n]
     if len(rows) == 0:
@@ -109,7 +101,7 @@ def main():
                 break
 
     if not rows:
-        print("[FAIL] no source for EQ-Bench v3 prompts. Skipping (creative_synthesis dimension scenderà di 96).")
+        print("[FAIL] no source for EQ-Bench v3 prompts. Skipping (creative_synthesis will contain 96 fewer rows).")
         # write empty file marker
         out_path = data_dir("raw") / "eqbench_creative_v3.jsonl"
         save_jsonl(out_path, [])

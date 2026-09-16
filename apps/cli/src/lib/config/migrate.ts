@@ -1,68 +1,24 @@
-import { stat, mkdir, rename } from 'node:fs/promises';
-import { LEGACY, paths, profilesDir, readState, writeState, listProfiles } from './paths.js';
-import { writeCompose } from '../docker/compose.js';
-import { loadConfig } from './load.js';
-
-let migrated = false;
-
-async function exists(p: string): Promise<boolean> {
-  try { await stat(p); return true; } catch { return false; }
+import { stat, mkdir, cp, rename, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { LEGACY, paths, profilesDir, listProfiles, root } from './paths.js';
+async function exists(file: string): Promise<boolean> {
+  try { await stat(file); return true; } catch (error: any) { if (error.code === 'ENOENT') return false; throw error; }
 }
-
-/**
- * Migrate a legacy `~/.brick/{config.yaml,docker-compose.yml,.env,models/}`
- * layout into `~/.brick/profiles/default/`. Idempotent: runs at most once
- * per process and is a no-op once `profiles/` already exists.
- */
+/** Copy the legacy layout atomically; original files remain the backup. */
 export async function migrateLegacyLayout(): Promise<{ migrated: boolean; reason?: string }> {
-  if (migrated) return { migrated: false, reason: 'already-migrated' };
-  migrated = true;
-
-  const hasProfiles = await exists(profilesDir());
-  const hasLegacyConfig = await exists(LEGACY.config);
-  if (hasProfiles || !hasLegacyConfig) return { migrated: false };
-
-  const target = paths('default');
-  await mkdir(target.profileDir, { recursive: true, mode: 0o700 });
-
-  for (const [src, dst] of [
-    [LEGACY.config, target.config],
-    [LEGACY.env, target.env],
-    [LEGACY.models, target.models],
-  ] as const) {
-    if (await exists(src)) {
-      try { await rename(src, dst); } catch { /* ignore individual move errors */ }
-    }
-  }
-
-  // Compose was rendered with legacy ~/.brick/config.yaml + ~/.brick/.env paths.
-  // Regenerate from the new profile layout so bind/env_file paths point at the
-  // moved files; fall back to copying the legacy compose only if regeneration fails.
+  if (listProfiles().length || !await exists(LEGACY.config)) return { migrated: false };
+  await mkdir(profilesDir(), { recursive: true, mode: 0o700 });
+  const temporary = join(profilesDir(), `.migration-${randomUUID()}`);
+  await mkdir(temporary, { mode: 0o700 });
   try {
-    const cfg = await loadConfig('default');
-    await writeCompose({ profile: 'default', port: cfg.server_port });
-  } catch {
-    if (await exists(LEGACY.compose)) {
-      try { await rename(LEGACY.compose, target.compose); } catch { /* best-effort */ }
+    await cp(LEGACY.config, join(temporary, 'config.yaml'));
+    if (await exists(LEGACY.env)) await cp(LEGACY.env, join(temporary, '.env'));
+    for (const name of ['pricing.yaml', 'call_history.jsonl', 'routing_events.jsonl', 'economics_snapshot.json', 'codex-model-catalog.json']) {
+      if (await exists(join(root(), name))) await cp(join(root(), name), join(temporary, name));
     }
-  }
-
-  const state = readState();
-  if (!state.activeProfile) {
-    state.activeProfile = 'default';
-    writeState(state);
-  }
-
+    await rename(temporary, paths('default').profileDir);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
   return { migrated: true };
 }
-
-/** Run migration synchronously-style (fire-and-forget) for hooks. */
-export async function ensureMigrated(): Promise<void> {
-  await migrateLegacyLayout();
-  // Self-heal: if state has no active profile but at least one profile exists, pick the first.
-  const state = readState();
-  if (!state.activeProfile) {
-    const profs = listProfiles();
-    if (profs.length > 0) writeState({ ...state, activeProfile: profs[0] });
-  }
-}
+export async function ensureMigrated(): Promise<void> { await migrateLegacyLayout(); }

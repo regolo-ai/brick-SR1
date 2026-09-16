@@ -27,19 +27,15 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eval_brick_3way import split_3way  # type: ignore
 from sweep_brick_v2_wandb import (  # type: ignore
-    BASE_CAPABILITIES,
     COMPARISON_INPUT,
-    COST,
     DEBUG_INPUT,
     MODELS,
     calibrate_skills,
-    logit,
     rows_from_debug,
 )
 from sweep_brick_v3_percap import prepare_arrays  # type: ignore
 
-
-DEFAULT_OUT = Path("external_comparison/predictions/brick_knob_aggressive.json")
+DEFAULT_OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_knob_aggressive.json"
 KNOBS = (-1.0, -0.5, 0.0, 0.5, 1.0)
 
 
@@ -66,9 +62,7 @@ def effective_knob_params(params: dict[str, float], preference: float) -> dict[s
     return {
         "complexity_mu": params["complexity_mu"]
         * math.exp(pos * math.log(params["max_mu_multiplier"]) + neg * math.log(params["min_mu_multiplier"])),
-        "complexity_bias": params["complexity_bias"]
-        + pos * params["max_bias_shift"]
-        + neg * params["min_bias_shift"],
+        "complexity_bias": params["complexity_bias"] + pos * params["max_bias_shift"] + neg * params["min_bias_shift"],
         "cost_penalty_beta": params["cost_penalty_beta"]
         * math.exp(-pos * math.log(params["max_cost_relief"]) + neg * math.log(params["min_cost_boost"])),
         "over_penalty_lambda": params["over_penalty_lambda"]
@@ -81,9 +75,7 @@ def evaluate_knob(data: dict[str, Any], params: dict[str, float], preference: fl
     raw_tau = data["tau"]
     tau_q = np.where(np.isnan(raw_tau), params["tau_base"], raw_tau)
     log_tau = np.log(np.clip(tau_q, 1e-6, 1 - 1e-6) / np.clip(1 - tau_q, 1e-6, 1))
-    requirement = data["probabilities"] * (
-        eff["complexity_bias"] + eff["complexity_mu"] * log_tau
-    )[:, None]
+    requirement = data["probabilities"] * (eff["complexity_bias"] + eff["complexity_mu"] * log_tau)[:, None]
 
     under = np.maximum(0.0, requirement[None, :, :] - data["model_values"])
     over = np.maximum(0.0, data["model_values"] - requirement[None, :, :])
@@ -161,7 +153,7 @@ def setup_wandb(args: argparse.Namespace):
         return None, None
     os.environ["WANDB_MODE"] = args.wandb_mode
     if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
-        key_path = Path("/root/.wandb_key")
+        key_path = Path.home() / ".wandb_key"
         if key_path.exists():
             os.environ["WANDB_API_KEY"] = key_path.read_text().strip()
     import wandb
@@ -221,28 +213,33 @@ def main() -> int:
         if best is None or score > best["objective"]:
             best = row
             if wandb_mod is not None:
-                wandb_mod.log({
-                    "i": i,
-                    "best_objective": score,
-                    "best_val_min_cost": val_metrics[-1.0]["avg_cost"],
-                    "best_val_neutral_answer_acc": val_metrics[0.0]["selected_answer_accuracy"],
-                    "best_val_max_answer_acc": val_metrics[1.0]["selected_answer_accuracy"],
-                    "best_val_max_strong_pct": val_metrics[1.0]["model_ds4_pct"] + val_metrics[1.0]["model_kimi_pct"],
-                })
+                wandb_mod.log(
+                    {
+                        "i": i,
+                        "best_objective": score,
+                        "best_val_min_cost": val_metrics[-1.0]["avg_cost"],
+                        "best_val_neutral_answer_acc": val_metrics[0.0]["selected_answer_accuracy"],
+                        "best_val_max_answer_acc": val_metrics[1.0]["selected_answer_accuracy"],
+                        "best_val_max_strong_pct": val_metrics[1.0]["model_ds4_pct"]
+                        + val_metrics[1.0]["model_kimi_pct"],
+                    }
+                )
         top.append(row)
         top.sort(key=lambda item: item["objective"], reverse=True)
         del top[20:]
 
         if wandb_mod is not None and i % log_every == 0:
-            wandb_mod.log({
-                "i": i,
-                "trial_objective": score,
-                "trial_val_min_cost": val_metrics[-1.0]["avg_cost"],
-                "trial_val_neutral_answer_acc": val_metrics[0.0]["selected_answer_accuracy"],
-                "trial_val_max_answer_acc": val_metrics[1.0]["selected_answer_accuracy"],
-            })
+            wandb_mod.log(
+                {
+                    "i": i,
+                    "trial_objective": score,
+                    "trial_val_min_cost": val_metrics[-1.0]["avg_cost"],
+                    "trial_val_neutral_answer_acc": val_metrics[0.0]["selected_answer_accuracy"],
+                    "trial_val_max_answer_acc": val_metrics[1.0]["selected_answer_accuracy"],
+                }
+            )
         if (i + 1) % (args.trials // 10 + 1) == 0:
-            print(f"[{i+1}/{args.trials}] best={best['objective']:.4f} elapsed={time.time()-t0:.1f}s")
+            print(f"[{i + 1}/{args.trials}] best={best['objective']:.4f} elapsed={time.time() - t0:.1f}s")
 
     assert best is not None
     test_metrics = {knob: evaluate_knob(test_arr, best["params"], knob) for knob in KNOBS}
@@ -278,14 +275,14 @@ def main() -> int:
         for key, value in best["params"].items():
             run.summary[f"best_{key}"] = value
         for knob, metrics in test_metrics.items():
-            prefix = { -1.0: "min", -0.5: "low", 0.0: "neutral", 0.5: "high", 1.0: "max" }[knob]
+            prefix = {-1.0: "min", -0.5: "low", 0.0: "neutral", 0.5: "high", 1.0: "max"}[knob]
             for key, value in metrics.items():
-                if isinstance(value, (int, float)):
+                if isinstance(value, int | float):
                     run.summary[f"test_{prefix}_{key}"] = value
         table = wandb_mod.Table(columns=["knob", "metric", "value"])
         for knob, metrics in test_metrics.items():
             for key, value in metrics.items():
-                if isinstance(value, (int, float)):
+                if isinstance(value, int | float):
                     table.add_data(knob, key, value)
         wandb_mod.log({"test_knob_curve": table})
         artifact = wandb_mod.Artifact(f"brick_knob_aggressive_{args.seed}", type="dataset")

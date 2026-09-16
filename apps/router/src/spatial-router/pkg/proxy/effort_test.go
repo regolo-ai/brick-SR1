@@ -59,7 +59,7 @@ func TestApplyEffortAnthropic(t *testing.T) {
 	cfgMax.SkillRouter.Math.RoutingPreference = ptrF(1) // max -> window [3,5]
 
 	// hard @ max -> L3 -> claude "high"
-	out := applyEffortAnthropic([]byte(`{"model":"claude-opus-4-8","messages":[]}`), cfgMax, "hard")
+	out := applyEffortAnthropicLevel([]byte(`{"model":"claude-opus-4-8","messages":[]}`), resolveEffortLevel("hard", routingPreferenceOf(cfgMax)), "claude-opus-4-8")
 	var raw map[string]interface{}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -75,7 +75,7 @@ func TestApplyEffortAnthropic(t *testing.T) {
 	// easy @ eco -> L0 -> claude "low"; overwrites a client-sent xhigh
 	cfgEco := &config.RouterConfig{}
 	cfgEco.SkillRouter.Math.RoutingPreference = ptrF(-1)
-	out = applyEffortAnthropic([]byte(`{"output_config":{"effort":"xhigh"}}`), cfgEco, "easy")
+	out = applyEffortAnthropicLevel([]byte(`{"output_config":{"effort":"xhigh"}}`), resolveEffortLevel("easy", routingPreferenceOf(cfgEco)), "claude-opus-4-8")
 	_ = json.Unmarshal(out, &raw)
 	oc, _ = raw["output_config"].(map[string]interface{})
 	if oc["effort"] != "low" {
@@ -87,7 +87,7 @@ func TestStripUnsupportedFieldsForHaiku(t *testing.T) {
 	// Inject effort then strip for Haiku: output_config.effort must be gone.
 	cfg := &config.RouterConfig{}
 	cfg.SkillRouter.Math.RoutingPreference = ptrF(1)
-	body := applyEffortAnthropic([]byte(`{"model":"claude-haiku-4-5"}`), cfg, "hard")
+	body := applyEffortAnthropicLevel([]byte(`{"model":"claude-haiku-4-5"}`), resolveEffortLevel("hard", routingPreferenceOf(cfg)), "claude-haiku-4-5")
 	stripped := stripUnsupportedFieldsForModel(body, "claude-haiku-4-5")
 	var raw map[string]interface{}
 	if err := json.Unmarshal(stripped, &raw); err != nil {

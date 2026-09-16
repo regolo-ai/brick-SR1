@@ -1,39 +1,68 @@
-# Default Brick profile for Claude Code — materialized automatically by `brick claude on`.
-# Two-container stack: complexity classifier + Brick router. The classifier is reached
-# via Docker Compose service DNS (classifier:8094). No API key needed: the client's own
+config_version: 1
+# Default Brick profile for Claude Code — materialized automatically by `brick start claude`.
 # Anthropic bearer (OAuth subscription or API key) is forwarded verbatim.
 #
 # Model selection runs the FULL Brick skill router (capability classifier + skill
 # vectors + complexity) over the Claude pool, not a static complexity->model map.
 # The mode (eco/lite/mid/pro/max) sets skill_router.math.routing_preference and the
-# effort clamp window; `brick claude <mode>` rewrites those and restarts the router.
+# effort clamp window; the profile editor rewrites those and restarts the router.
 
-model:
-  name: brick-claude
-  description: Default Brick router for Claude Code pass-through
 
 server_port: 8000
 auto_model_name: brick-claude
-
-# Model download registry: maps the local model path used by the skill router's
-# capability classifier to its Hugging Face repo, so the router downloads ModernBERT
-# on first start. Required whenever skill_router.enabled is true.
-mom_registry:
-  models/modernbert-capability-classifier: "regolo/modernbert-capability-classifier"
 
 # Stubs required by the config loader (not exercised on the /v1/messages path —
 # Claude models forward via anthropic_passthrough.upstream_url, not per-model base_url).
 providers:
   regolo:
-    type: openai_compatible
     base_url: https://api.regolo.ai/v1
+  openai:
+    base_url: https://api.openai.com/v1
+  openai-codex:
+    base_url: https://chatgpt.com/backend-api/codex
+  claude-api:
+    base_url: https://api.anthropic.com
+  claude-code:
+    base_url: https://api.anthropic.com
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
 provider_profiles:
   regolo:
     type: openai_compatible
     base_url: https://api.regolo.ai/v1
+  openai:
+    type: openai_compatible
+    base_url: https://api.openai.com/v1
+  openai-codex:
+    type: openai_compatible
+    base_url: https://chatgpt.com/backend-api/codex
+  claude-api:
+    type: openai_compatible
+    base_url: https://api.anthropic.com
+  claude-code:
+    type: openai_compatible
+    base_url: https://api.anthropic.com
+  openrouter:
+    type: openai_compatible
+    base_url: https://openrouter.ai/api/v1
 provider_endpoints:
   - name: regolo
     provider_profile: regolo
+    weight: 1
+  - name: openai
+    provider_profile: openai
+    weight: 1
+  - name: openai-codex
+    provider_profile: openai-codex
+    weight: 1
+  - name: claude-api
+    provider_profile: claude-api
+    weight: 1
+  - name: claude-code
+    provider_profile: claude-code
+    weight: 1
+  - name: openrouter
+    provider_profile: openrouter
     weight: 1
 default_model: claude-sonnet-4-6
 model_config:
@@ -41,15 +70,13 @@ model_config:
   claude-sonnet-4-6: { preferred_endpoints: ["regolo"], param_size: "1b" }
   # Keep every model in skill_router.models declared here as well. The Go
   # validator rejects a profile at startup when a pool member is missing from
-  # model_config (this used to break `brick claude on` on fresh devices).
+  # model_config (this used to break `brick start claude` on fresh devices).
   claude-sonnet-5: { preferred_endpoints: ["regolo"], param_size: "unknown" }
   claude-opus-4-8: { preferred_endpoints: ["regolo"], param_size: "1b" }
   claude-fable-5: { preferred_endpoints: ["regolo"], param_size: "unknown" }
 
 # Complexity classifier: hosted on Regolo's OpenAI-compatible API by default
 # (model brick-complexity-pro). No local GPU/sidecar needed; the router expands
-# ${REGOLO_API_KEY} from the profile .env. Switch to a self-hosted local
-# classifier any time with: brick claude settings compute local
 complexity_service:
   enabled: true
   base_url: https://api.regolo.ai
@@ -57,7 +84,6 @@ complexity_service:
   model_name: brick-complexity-pro
   bearer_token: "${REGOLO_API_KEY}"
   timeout_seconds: 8
-  auto_spawn: false
 
 # Full skill router over the Claude pool. dynamic_effort derives the per-query
 # output_config.effort from complexity, clamped by routing_preference.
@@ -67,18 +93,14 @@ skill_router:
   capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
   capability_model:
     model_id: models/modernbert-capability-classifier
-    repo_id: regolo/modernbert-capability-classifier
-    labels: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
-    use_cpu: true
+    labels: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
   complexity_model:
     model_id: regolo/brick-complexity-pro
-    base_model_id: Qwen/Qwen3.5-0.8B
     base_url: https://api.regolo.ai
     protocol: openai
     model_name: brick-complexity-pro
     bearer_token: "${REGOLO_API_KEY}"
     timeout_seconds: 8
-    auto_spawn: false
   math:
     routing_preference: 0
     # Softened preference knob (paper default is 2.920351): widens the transition
@@ -87,27 +109,8 @@ skill_router:
     # must stay in sync with the effort->preference anchors in effort.go.
     preference_power: 2.2
     tau: { easy: 0.55, medium: 0.72, hard: 0.88 }
-  models:
-    - model: claude-haiku-4-5
-      skill_vector: [0.45, 0.45, 0.40, 0.35, 0.32, 0.45]
-      cost_weight: 0.1
-      use_reasoning: false
-    - model: claude-sonnet-4-6
-      skill_vector: [0.68, 0.66, 0.72, 0.62, 0.62, 0.70]
-      cost_weight: 0.4
-      use_reasoning: true
-    - model: claude-sonnet-5
-      skill_vector: [0.87, 0.89, 0.85, 0.90, 0.83, 0.90]
-      cost_weight: 0.6
-      use_reasoning: true
-    - model: claude-opus-4-8
-      skill_vector: [0.90, 0.90, 0.89, 0.95, 0.85, 0.93]
-      cost_weight: 1.0
-      use_reasoning: true
-    - model: claude-fable-5
-      skill_vector: [0.97, 0.95, 0.94, 0.98, 0.93, 0.92]
-      cost_weight: 1.3
-      use_reasoning: true
+  models: []
+  active_models: []
   keyword_rules: []
 
 # Anthropic pass-through transport. use_skill_router routes via the skill_router

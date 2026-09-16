@@ -49,7 +49,7 @@ def test_parse_multiple_calls_list(runner):
 
 
 def test_parse_prose_only(runner):
-    """Plain text senza call -> mode none."""
+    """Plain text without calls produces mode none."""
     calls, mode = runner._parse_model_response("I think we should start by checking the file system.")
     assert calls is None
     assert mode == "none"
@@ -65,7 +65,7 @@ def test_parse_python_code_block(runner):
 def test_tool_catalog_for_gorilla_filesystem(runner):
     catalog = runner._build_tool_catalog(["GorillaFileSystem"])
     assert "GorillaFileSystem" in catalog
-    # Sappiamo che esistono cd, mkdir, mv, ecc. (dal sample task)
+    # The sample environment includes cd, mkdir and mv.
     assert "cd" in catalog
     assert "mkdir" in catalog
 

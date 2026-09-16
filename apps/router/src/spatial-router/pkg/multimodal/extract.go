@@ -11,19 +11,6 @@ type Modality struct {
 	HasAudio bool
 }
 
-// ContentPart represents a single content part in an OpenAI message.
-// content can be a string or an array of parts like:
-//
-//	{"type": "text", "text": "..."}
-//	{"type": "image_url", "image_url": {"url": "..."}}
-//	{"type": "input_audio", "input_audio": {"data": "...", "format": "..."}}
-type ContentPart struct {
-	Type       string                 `json:"type"`
-	Text       string                 `json:"text,omitempty"`
-	ImageURL   map[string]interface{} `json:"image_url,omitempty"`
-	InputAudio map[string]interface{} `json:"input_audio,omitempty"`
-}
-
 // ExtractedContent holds text, images, and audio extracted from a message array.
 type ExtractedContent struct {
 	TextParts  []string // plain text strings

@@ -1,8 +1,4 @@
-"""Normalize functions per source: row nativo -> dict allineato a schema target.
-
-Output: dict con keys query, expected_answer, language, difficulty_band, dataset_release_date,
-contamination_risk, gated, license, source_meta (informazione raw extra non in schema).
-"""
+"""Normalize source rows to the common query/expected-answer schema, retaining language, difficulty, release date, contamination risk, access restrictions, license and source metadata."""
 
 from __future__ import annotations
 
@@ -291,10 +287,7 @@ def normalize_eqbench_creative(row: dict) -> dict:
 
 
 def normalize_litbench(row: dict) -> dict:
-    """LitBench-Test schema: prompt + chosen_story / rejected_story (preference pair).
-
-    Normalizziamo a single-output prendendo prompt come query, chosen_story come reference rubric anchor.
-    """
+    """Use the LitBench prompt as query and the chosen story as the reference rubric anchor."""
     prompt = row.get("prompt") or row.get("writing_prompt", "")
     chosen = row.get("chosen_story") or row.get("chosen", "")
     return {

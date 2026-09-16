@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""40 - Assemble eval params: merge tutti i normalized + few-shot pools.
-
-Per ogni source:
-- Carica normalized rows
-- Carica few-shot examples (se shots > 0)
-- Render prompt completo (few-shot + query)
-- Assegna query_id deterministico (q_NNNNN), query_hash, language band, etc.
-- Costruisce schema target completo (sans tokens, che li aggiunge 50_)
-
-Output: data/final/evaluation_parameters_full.jsonl (tokens=0 placeholder, popolati da 50_)
-"""
+"""Merge normalized sources and few-shot pools into evaluation parameters. Render prompts, assign deterministic query IDs and hashes, and initialize token counts for the subsequent tokenizer stage."""
 
 from __future__ import annotations
 

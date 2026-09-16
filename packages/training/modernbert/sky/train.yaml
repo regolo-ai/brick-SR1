@@ -1,33 +1,16 @@
-# SkyPilot task: ModernBERT training + W&B sweep on qwen-bench (4xL40S)
+# External-capacity provisioning only. Use the scheduler for an existing GPU pool.
+# Run from the repository root; provide uv and credentials through the machine environment.
 name: modernbert-capability
-
 resources:
   cloud: seeweb
-  accelerators: L40S:4
+  accelerators: L40S:1
   cpus: 16+
   memory: 64+
-
-workdir: ./modernbert
-
-file_mounts:
-  /root/.hf_token_regolo: /root/.hf_token_regolo
-  /root/.wandb_key: /root/.wandb_key
-  /root/.gmail_app_password: /root/.gmail_app_password
-
+workdir: .
 setup: |
-  set -e
-  python -m venv /tmp/venv --system-site-packages || true
-  source /tmp/venv/bin/activate
-  pip install --upgrade pip
-  pip install 'transformers>=4.49' 'datasets>=2.18' 'accelerate>=0.30' \
-              'flash-attn>=2.6' 'scipy' 'scikit-learn' 'wandb' \
-              'huggingface_hub' 'safetensors'
-  huggingface-cli login --token "$(cat /root/.hf_token_regolo)" --add-to-git-credential || true
-  wandb login "$(cat /root/.wandb_key)" || true
-
+  set -eu
+  command -v uv
+  uv sync --frozen --package brick-training
 run: |
-  set -e
-  source /tmp/venv/bin/activate
-  cd ./modernbert
-  # Default: smoke test. Override via `sky exec ... -- --cmd "..."`
-  python scripts/train_modernbert.py --smoke --model-size base
+  set -eu
+  uv run --frozen --package brick-training python packages/training/modernbert/scripts/train_modernbert.py --smoke --model_size base --no_wandb

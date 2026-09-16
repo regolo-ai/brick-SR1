@@ -132,25 +132,6 @@ func parseBool(s string) bool {
 	return s == "1" || s == "true" || s == "yes" || s == "on"
 }
 
-// LogEvent emits a structured log at info level with a standard envelope.
-// Fields provided by callers take precedence and will not be overwritten.
-func LogEvent(event string, fields map[string]interface{}) {
-	if fields == nil {
-		fields = map[string]interface{}{}
-	}
-	if _, ok := fields["event"]; !ok {
-		fields["event"] = event
-	}
-	// Zap already includes a timestamp; preserve provided ts if any
-
-	// Convert the map to zap fields
-	zfields := make([]zap.Field, 0, len(fields))
-	for k, v := range fields {
-		zfields = append(zfields, zap.Any(k, v))
-	}
-	zap.L().With(zfields...).Info(event)
-}
-
 // Helper printf-style wrappers to ease migration from log.Printf.
 func Infof(format string, args ...interface{})  { zap.S().Infof(format, args...) }
 func Warnf(format string, args ...interface{})  { zap.S().Warnf(format, args...) }

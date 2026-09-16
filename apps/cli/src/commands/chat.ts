@@ -1,11 +1,11 @@
-import { Command, Flags } from '@oclif/core';
-import React from 'react';
+import { Command,Flags } from '@oclif/core';
 import { render } from 'ink';
-import { loadConfig } from '../lib/config/load.js';
-import { paths, resolveProfile, readState } from '../lib/config/paths.js';
-import type { ThinkingMode } from '../lib/client/openai.js';
+import React from 'react';
 import { App } from '../lib/chat-tui/App.js';
+import type { ThinkingMode } from '../lib/client/openai.js';
+import { loadConfig } from '../lib/config/load.js';
 import { localBaseUrl } from '../lib/net/local.js';
+import { requireExactlyOneRunning } from '../lib/profiles.js';
 
 export default class Chat extends Command {
   static description = 'Interactive chat (ink TUI: bottom input + scrolling history, Claude Code style)';
@@ -19,11 +19,7 @@ export default class Chat extends Command {
   };
   async run(): Promise<void> {
     const { flags } = await this.parse(Chat);
-    const profile = resolveProfile(flags.profile);
-    const state = readState();
-    if (!state.runningProfile) this.error(`no profile is running. Start one with \`brick serve ${profile}\``, { exit: 1 });
-    if (state.runningProfile !== profile) this.warn(`requested profile '${profile}' but '${state.runningProfile}' is running — connecting to '${state.runningProfile}'.`);
-    const target = state.runningProfile;
+    const target = await requireExactlyOneRunning();
     const cfg = await loadConfig(target);
     const baseUrl = localBaseUrl(cfg.server_port);
     const initialThinking = (flags.thinking as ThinkingMode | undefined) ?? 'auto';

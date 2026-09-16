@@ -1,4 +1,4 @@
-"""Sanity check: query del dataset non devono contenere PII evidenti."""
+"""Check the generated dataset for obvious personal information."""
 
 import re
 import sys
@@ -16,10 +16,7 @@ SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 CC_RE = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
 
 
-@pytest.mark.skipif(
-    not (data_dir("final") / "evaluation_parameters_full.jsonl").exists(),
-    reason="Pipeline not yet run; final/evaluation_parameters_full.jsonl missing",
-)
+@pytest.mark.generated_data
 def test_no_pii_in_queries():
     path = data_dir("final") / "evaluation_parameters_full.jsonl"
     found = []

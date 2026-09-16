@@ -8,7 +8,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -21,12 +20,10 @@ import (
 )
 
 const (
-	defaultPriorStrength     = 8.0
 	defaultTieEpsilon        = 0.03
 	defaultClipMin           = 0.02
 	defaultClipMax           = 0.98
 	defaultCapabilityModelID = "models/modernbert-capability-classifier"
-	defaultComplexityBaseURL = "http://127.0.0.1:8094"
 
 	// defaultOpenAINoLogprobConfidence is the confidence used by the OpenAI
 	// complexity protocol when the endpoint returns no usable token logprobs.
@@ -37,7 +34,7 @@ const (
 
 	// Locked production math configuration (paper Table 7). These are the
 	// calibrated base parameters and preference-knob anchors; the same values
-	// are written by `brick init` (apps/cli wizard) so an absent field in the
+	// are written by the CLI profile editor so an absent field in the
 	// yaml resolves to identical behavior.
 	defaultComplexityMu      = 0.345170
 	defaultComplexityBias    = 0.822235
@@ -276,10 +273,6 @@ func (r *Router) routeCore(ctx context.Context, text string, allow map[string]bo
 	}, nil
 }
 
-func (r *Router) scoreModels(probabilities []float64, tauQuery float64, allow map[string]bool) []ModelScore {
-	return r.scoreModelsWithConfig(probabilities, tauQuery, allow, r.mathCfg)
-}
-
 func (r *Router) scoreModelsWithConfig(probabilities []float64, tauQuery float64, allow map[string]bool, mc mathConfig) []ModelScore {
 	// Difficulty lift in log-odds space (paper sec. brick-math):
 	//   z_q = bias + mu * logit(tau_query)
@@ -376,10 +369,6 @@ func intersectAllow(a, b map[string]bool) map[string]bool {
 	return out
 }
 
-func (r *Router) tauQuery(label string, confidence float64) float64 {
-	return tauQueryFrom(r.mathCfg, label, confidence)
-}
-
 // tauQueryFrom computes the complexity interpolation parameter from the
 // mathConfig, complexity label and classifier confidence. It is a pure function
 // so that routeCore can use any mathConfig (including an on-the-fly one built by
@@ -411,18 +400,13 @@ func applyDefaults(cfg *config.SkillRouterConfig) {
 	if len(cfg.Capabilities) == 0 {
 		cfg.Capabilities = append([]string(nil), defaultCapabilities...)
 	}
-	if len(cfg.CapabilityModel.Labels) == 0 {
-		cfg.CapabilityModel.Labels = append([]string(nil), cfg.Capabilities...)
-	}
 	if cfg.CapabilityModel.ModelID == "" && cfg.CapabilityModel.LocalPath == "" {
 		cfg.CapabilityModel.ModelID = defaultCapabilityModelID
 	}
 	if cfg.ComplexityModel.ModelID == "" {
 		cfg.ComplexityModel.ModelID = "regolo/brick-complexity-2-eco"
 	}
-	if cfg.ComplexityModel.BaseModelID == "" {
-		cfg.ComplexityModel.BaseModelID = "Qwen/Qwen3.5-0.8B"
-	}
+
 }
 
 func newMathConfig(cfg config.SkillRouterMathConfig) mathConfig {
@@ -537,6 +521,7 @@ func effectiveParams(kp knobParams, preference float64) (mu, bias, beta, lambda 
 type capabilityClassifier struct {
 	modelPath string
 	labels    []string
+	order     []int
 }
 
 type capabilityResult struct {
@@ -552,16 +537,50 @@ func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabi
 	if modelPath == "" {
 		modelPath = defaultCapabilityModelID
 	}
-	modelPath = config.ResolveModelPath(modelPath)
-	labels := cfg.Labels
-	if len(labels) == 0 {
-		labels = capabilities
+	labels := []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"}
+	if len(cfg.Labels) > 0 {
+		if len(cfg.Labels) != len(labels) {
+			return nil, fmt.Errorf("capability labels differ from the pinned checkpoint")
+		}
+		for i, label := range labels {
+			if cfg.Labels[i] != label {
+				return nil, fmt.Errorf("capability labels differ from the pinned checkpoint; migrate the profile with the CLI")
+			}
+		}
+	}
+	order, err := capabilityLabelOrder(labels, capabilities)
+	if err != nil {
+		return nil, err
 	}
 	logging.Infof("[Brick2] initializing capability classifier: %s", modelPath)
-	if err := candle.InitModernBertClassifier(modelPath, cfg.UseCPU); err != nil {
+	if err := candle.InitModernBertClassifier(modelPath); err != nil {
 		return nil, fmt.Errorf("initialize capability classifier %q: %w", modelPath, err)
 	}
-	return &capabilityClassifier{modelPath: modelPath, labels: labels}, nil
+	return &capabilityClassifier{modelPath: modelPath, labels: labels, order: order}, nil
+}
+
+// Model outputs follow checkpoint labels; routing vectors follow capabilities.
+func capabilityLabelOrder(labels, capabilities []string) ([]int, error) {
+	if len(labels) != len(capabilities) {
+		return nil, fmt.Errorf("capability labels and routing dimensions differ")
+	}
+	indices := make(map[string]int, len(labels))
+	for i, label := range labels {
+		if _, exists := indices[label]; exists {
+			return nil, fmt.Errorf("duplicate capability label %q", label)
+		}
+		indices[label] = i
+	}
+	order := make([]int, len(capabilities))
+	for i, capability := range capabilities {
+		index, exists := indices[capability]
+		if !exists {
+			return nil, fmt.Errorf("missing capability label %q", capability)
+		}
+		order[i] = index
+		delete(indices, capability)
+	}
+	return order, nil
 }
 
 func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
@@ -570,16 +589,11 @@ func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
 		return nil, fmt.Errorf("capability classification failed: %w", err)
 	}
 	if len(result.Probabilities) != len(c.labels) {
-		if len(result.Probabilities) == 0 && result.Class >= 0 && result.Class < len(c.labels) {
-			out := make([]float64, len(c.labels))
-			out[result.Class] = 1
-			return out, nil
-		}
 		return nil, fmt.Errorf("capability classifier returned %d probabilities for %d labels", len(result.Probabilities), len(c.labels))
 	}
 	out := make([]float64, len(result.Probabilities))
-	for i, p := range result.Probabilities {
-		out[i] = float64(p)
+	for i, index := range c.order {
+		out[i] = float64(result.Probabilities[index])
 	}
 	return normalize(out), nil
 }
@@ -595,6 +609,8 @@ var noLogprobWarn sync.Once
 type complexityClient struct {
 	baseURL           string
 	bearerToken       string
+	credentialErr     error
+	useClientKey      bool
 	protocol          string
 	modelName         string
 	defaultConfidence float64
@@ -617,32 +633,25 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 	baseURL := strings.TrimRight(skillCfg.BaseURL, "/")
 	if baseURL == "" && cfg.ComplexityService != nil {
 		baseURL = strings.TrimRight(cfg.ComplexityService.BaseURL, "/")
-		if baseURL == "" && cfg.ComplexityService.Address != "" {
-			port := cfg.ComplexityService.Port
-			if port == 0 {
-				port = 8094
-			}
-			baseURL = fmt.Sprintf("http://%s:%d", cfg.ComplexityService.Address, port)
-		}
-	}
-	if baseURL == "" {
-		baseURL = defaultComplexityBaseURL
+
 	}
 
-	// Expand env references (e.g. "${REGOLO_API_KEY}") so an unexpanded literal
-	// does not shadow the ResolveBearerToken fallback below and cause the router
-	// to send "Authorization: Bearer ${REGOLO_API_KEY}" verbatim (403 -> every
-	// request falls back to "medium").
-	token := strings.TrimSpace(os.ExpandEnv(skillCfg.BearerToken))
-	if token == "" && skillCfg.BearerTokenFile != "" {
-		if b, err := os.ReadFile(skillCfg.BearerTokenFile); err == nil {
-			token = strings.TrimSpace(string(b))
+	tokenConfig := &config.ComplexityServiceConfig{BearerToken: skillCfg.BearerToken, BearerTokenFile: skillCfg.BearerTokenFile}
+	if tokenConfig.BearerToken == "" && tokenConfig.BearerTokenFile == "" && cfg.ComplexityService != nil {
+		tokenConfig = cfg.ComplexityService
+	}
+	useClientKey := !cfg.CodexRouter.Enabled && (skillCfg.UseClientKey || (skillCfg.BaseURL == "" && cfg.ComplexityService.UsesClientKey()))
+	var token string
+	var credentialErr error
+	if !useClientKey {
+		token, credentialErr = tokenConfig.ResolveBearerToken()
+		if cfg.CodexRouter.Enabled && credentialErr == nil {
+			token, credentialErr = config.ValidateCredential(token)
 		}
 	}
-	if token == "" && cfg.ComplexityService != nil {
-		if resolved, err := cfg.ComplexityService.ResolveBearerToken(); err == nil {
-			token = resolved
-		}
+
+	if baseURL == "" {
+		credentialErr = fmt.Errorf("classifier API base_url is required")
 	}
 
 	// Protocol: skill-router value wins, else the ComplexityService value,
@@ -691,10 +700,12 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 	return &complexityClient{
 		baseURL:           baseURL,
 		bearerToken:       token,
+		credentialErr:     credentialErr,
+		useClientKey:      useClientKey,
 		protocol:          protocol,
 		modelName:         modelName,
 		defaultConfidence: defaultConfidence,
-		httpClient:        &http.Client{Timeout: timeout},
+		httpClient:        &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 
@@ -705,6 +716,15 @@ func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterCo
 // recorded into the brick_cc_classify_duration_seconds histogram (success and
 // fallback both count), which `brick claude status` reads for avg/p50/p95.
 func (c *complexityClient) Classify(ctx context.Context, text string) (string, float64) {
+	if c.useClientKey {
+		requestClient := *c
+		requestClient.bearerToken, requestClient.credentialErr = config.ValidateCredential(config.ClientAPIKey(ctx))
+		c = &requestClient
+	}
+	if c.credentialErr != nil {
+		logging.Warnf("Complexity classifier credential is unavailable")
+		return "medium", 1.0
+	}
 	start := time.Now()
 	defer func() { metrics.BrickCCClassifyDuration.WithLabelValues().Observe(time.Since(start).Seconds()) }()
 	if c.protocol == "openai" {
@@ -799,7 +819,6 @@ func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (str
 			{"role": "system", "content": complexitySystemPrompt},
 			{"role": "user", "content": "Classify: " + text},
 		},
-		"max_tokens":   1,
 		"temperature":  0,
 		"logprobs":     true,
 		"top_logprobs": 20,

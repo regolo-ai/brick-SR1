@@ -55,7 +55,13 @@ def build_train_val(tokenizer, max_length: int = 512, val_ratio: float = 0.1, se
 def build_human_eval(tokenizer, max_length: int = 512, csv_path: str | Path | None = None) -> Dataset:
     """Load human_eval CSV (Claude-annotated 200 samples) for held-out test."""
     if csv_path is None:
-        csv_path = Path(__file__).resolve().parent.parent.parent / "data" / "human_eval" / "sample_200_filled.csv"
+        csv_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "dataset_b"
+            / "data"
+            / "human_eval"
+            / "sample_200_filled.csv"
+        )
     rows = []
     with open(csv_path) as f:
         for r in csv.DictReader(f):

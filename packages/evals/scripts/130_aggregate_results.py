@@ -1,32 +1,5 @@
 #!/usr/bin/env python3
-"""Aggrega i risultati di valutazione (graded JSONL) in tabelle per il report.
-
-Legge gli 8 file graded canonici di qwen3.5-9b + deepseek-v4-flash, calcola per
-ogni (model, protocol-instance) i conteggi e le metriche di accuratezza, e scrive
-`data/reports/evaluation_results.{csv,md}`.
-
-Disambiguazione protocolli: `rubric_judge` e `tool_call_match` coprono due
-dimensioni ciascuno (creative vs planning; BFCL single-turn vs BFCL multi-turn)
-- la label viene derivata dal file di provenienza, non solo dal
-campo `evaluation_protocol_id`.
-
-Classificazione di `correct is None`:
-  - `trunc`        : risposta vuota per troncamento (finish_reason=length) -
-                     fallimento di misura del modello
-  - `notattempted` : llm_judge_factual label C (SimpleQA NOT_ATTEMPTED) -
-                     astensione semanticamente valida, NON un errore
-  - `error`        : errore di inference/grading
-  - `other`        : None non classificato
-
-Metriche per riga:
-  completion_rate      = (T+F) / n
-  accuracy_conditional = T / (T+F)        # accuratezza sulle righe completate
-  accuracy_overall     = T / n            # il None conta come non-corretto
-                                          # (per factual: headline SimpleQA "correct %")
-
-Uso:
-  python scripts/130_aggregate_results.py
-"""
+"""Aggregate canonical graded inference files into data/reports/evaluation_results.csv and .md. Distinguish protocol instances by source file, not protocol ID alone. Classify None as truncation, valid abstention, error or other. Report completion rate, conditional accuracy and overall accuracy with None counted as incorrect."""
 
 from __future__ import annotations
 
@@ -39,8 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
-# (model_alias, path_relativo_al_repo). La label di protocollo è derivata a
-# runtime da evaluation_protocol_id + nome file (vedi protocol_label()).
+# Pairs of model alias and repository-relative path. Derive protocol labels from the protocol ID and filename.
 FILE_SPECS: list[tuple[str, str]] = [
     ("qwen3.5-9b", "runs_individual/R1/qwen9b/outputs/qwen35_9b_full_graded_v2.jsonl"),
     ("qwen3.5-9b", "runs_individual/R1/qwen9b/outputs/qwen35_9b_llmjudge_graded.jsonl"),
@@ -57,7 +29,7 @@ FILE_SPECS: list[tuple[str, str]] = [
     ("kimi2.6", "data/inference/kimi2.6/multi_turn_full_graded.jsonl"),
 ]
 
-# Ordine di presentazione delle protocol-instance + dimensione del paper.
+# Presentation order of protocol instances and paper dimensions.
 PROTOCOL_ORDER: list[tuple[str, str, str]] = [
     # (label, dimension, source descrittivo)
     ("gsm8k_final_answer", "math_reasoning", "GSM8K"),
@@ -72,7 +44,7 @@ PROTOCOL_ORDER: list[tuple[str, str, str]] = [
     ("tool_call_match:bfcl_mt", "planning_agentic", "BFCL-v4 multi-turn"),
 ]
 
-# Conteggi attesi per protocol-instance (assert hard, come gli altri stage pipeline).
+# Required protocol-instance counts, enforced like other pipeline stages.
 EXPECTED_N: dict[str, int] = {
     "gsm8k_final_answer": 470,
     "math_equiv": 530,
@@ -88,7 +60,7 @@ EXPECTED_N: dict[str, int] = {
 
 
 def protocol_label(protocol: str, path: str) -> str:
-    """Deriva la protocol-instance label da protocollo + file di provenienza."""
+    """Derive the protocol-instance label from its protocol ID and source filename."""
     if protocol == "rubric_judge":
         return "rubric_judge:planning" if "planning" in path else "rubric_judge:creative"
     if protocol == "tool_call_match":
@@ -97,7 +69,7 @@ def protocol_label(protocol: str, path: str) -> str:
 
 
 def classify_none(row: dict) -> str:
-    """Classifica una riga con correct is None in trunc/notattempted/error/other."""
+    """Classify a missing correctness result as trunc, notattempted, error or other."""
     gm = row.get("grader_meta") or {}
     if not isinstance(gm, dict):
         gm = {}
@@ -226,8 +198,8 @@ def main() -> int:
             fmd.write(
                 f"| {r['model']} | {r['protocol']} | {r['dimension']} | {r['n']} | "
                 f"{r['correct']} | {r['incorrect']} | {none_detail} | "
-                f"{r['completion_rate']*100:.1f}% | {r['accuracy_conditional']*100:.1f}% | "
-                f"{r['accuracy_overall']*100:.1f}% |\n"
+                f"{r['completion_rate'] * 100:.1f}% | {r['accuracy_conditional'] * 100:.1f}% | "
+                f"{r['accuracy_overall'] * 100:.1f}% |\n"
             )
         fmd.write(f"\n**Costo LLM-judge totale**: ${total_cost:.2f}\n")
     print(f"[write] {md_path}")

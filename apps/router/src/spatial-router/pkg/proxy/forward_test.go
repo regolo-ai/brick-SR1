@@ -84,7 +84,7 @@ func TestForwardToBackend_RecordsNonStreamingUsage(t *testing.T) {
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","model":"backend-model","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}}`))
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","model":"backend-model","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}],"usage":{"prompt_tokens":12,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens":7,"total_tokens":19}}`))
 	}))
 	defer fake.Close()
 
@@ -122,10 +122,10 @@ func TestForwardToBackend_RecordsNonStreamingUsage(t *testing.T) {
 	if len(snap) != 1 {
 		t.Fatalf("expected 1 usage entry, got %d: %+v", len(snap), snap)
 	}
-	if snap[0].Model != "test-model" || snap[0].InputTokens != 12 || snap[0].OutputTokens != 7 {
+	if snap[0].Model != "test-model" || snap[0].InputTokens != 7 || snap[0].CacheReadInputTokens != 5 || snap[0].OutputTokens != 7 {
 		t.Errorf("unexpected usage entry: %+v", snap[0])
 	}
-	stickyEntry, ok := stickyStore.Get("conversation-1")
+	stickyEntry, ok := stickyStore.GetAt("conversation-1", time.Now())
 	if !ok {
 		t.Fatal("expected successful OpenAI response to update sticky state")
 	}
@@ -152,7 +152,7 @@ func TestForwardToBackend_RecordsStreamingUsage(t *testing.T) {
 		chunks := []string{
 			`data: {"id":"1","choices":[{"delta":{"content":"Hel"}}]}`,
 			`data: {"id":"1","choices":[{"delta":{"content":"lo"}}]}`,
-			`data: {"id":"1","choices":[],"usage":{"prompt_tokens":20,"completion_tokens":9,"total_tokens":29}}`,
+			`data: {"id":"1","choices":[],"usage":{"prompt_tokens":20,"prompt_tokens_details":{"cached_tokens":8},"completion_tokens":9,"total_tokens":29}}`,
 			`data: [DONE]`,
 		}
 		for _, c := range chunks {
@@ -191,8 +191,23 @@ func TestForwardToBackend_RecordsStreamingUsage(t *testing.T) {
 	if len(snap) != 1 {
 		t.Fatalf("expected 1 usage entry, got %d: %+v", len(snap), snap)
 	}
-	if snap[0].Model != "stream-model" || snap[0].InputTokens != 20 || snap[0].OutputTokens != 9 {
+	if snap[0].Model != "stream-model" || snap[0].InputTokens != 12 || snap[0].CacheReadInputTokens != 8 || snap[0].OutputTokens != 9 {
 		t.Errorf("unexpected usage entry: %+v", snap[0])
+	}
+}
+
+func TestSplitOpenAIUsageClampsInconsistentCounters(t *testing.T) {
+	u := openAIUsage{PromptTokens: 10, CompletionTokens: -2}
+	u.PromptTokensDetails.CachedTokens = 99
+	fresh, cached, output := splitOpenAIUsage(u)
+	if fresh != 0 || cached != 10 || output != 0 {
+		t.Fatalf("unexpected clamped usage: fresh=%d cached=%d output=%d", fresh, cached, output)
+	}
+	u = openAIUsage{PromptTokens: 10, CompletionTokens: 2}
+	u.PromptTokensDetails.CachedTokens = -4
+	fresh, cached, output = splitOpenAIUsage(u)
+	if fresh != 10 || cached != 0 || output != 2 {
+		t.Fatalf("unexpected negative-cache clamp: fresh=%d cached=%d output=%d", fresh, cached, output)
 	}
 }
 
@@ -227,7 +242,7 @@ func TestForwardToBackend_NoUsageNoRecord(t *testing.T) {
 	}
 }
 
-// TestForwardToBackend_EmptyModelSkipsRecord verifies RecordUsage is never
+// TestForwardToBackend_EmptyModelSkipsRecord verifies RecordCachedUsage is never
 // called with an empty model name, even if the upstream body has usage.
 func TestForwardToBackend_EmptyModelSkipsRecord(t *testing.T) {
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

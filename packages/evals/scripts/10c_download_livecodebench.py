@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""10c - Download LiveCodeBench v6 via hf_hub_download (datasets script deprecated in datasets>=4.0).
-
-Strategia:
-1. Lista i file del repo `livecodebench/code_generation_lite`.
-2. Identifica i parquet/jsonl files che contengono i problemi.
-3. Filtra `release_version == 'release_v6'` o `contest_date >= 2024-08-01`.
-4. Sample 1000 con seed=42.
-"""
+"""Download LiveCodeBench v6 files directly from the Hub, filter release/date metadata, and sample 1000 problems with seed 42."""
 
 from __future__ import annotations
 
@@ -64,7 +57,7 @@ def main():
     if all_rows:
         print(f"sample fields: {list(all_rows[0].keys())[:10]}")
 
-    # Filter release_v6 (or fallback) - se troppo pochi, allarga
+    # Filter the requested release, widening the selection if too few tasks remain.
     v6 = [r for r in all_rows if r.get("release_version") == "release_v6"]
     if len(v6) < TARGET_N:
         print(f"  release_v6 has {len(v6)} rows < target {TARGET_N}; trying contest_date >= 2024-08-01")

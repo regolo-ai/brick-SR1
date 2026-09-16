@@ -10,39 +10,10 @@ import (
 
 // Brick-specific configuration extensions for Brick proxy mode.
 
-// VirtualModelConfig holds the virtual model identity exposed to clients.
-type VirtualModelConfig struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description,omitempty"`
-}
-
 // ProviderConfig represents an LLM provider backend.
 type ProviderConfig struct {
-	Type    string `yaml:"type"`     // "openai_compatible", "openai", "anthropic", etc.
 	BaseURL string `yaml:"base_url"` // e.g., "https://api.openai.com"
 	APIKey  string `yaml:"api_key"`  // supports ${ENV_VAR} syntax
-}
-
-// ModalityRoutesConfig holds routing rules for non-text modalities.
-type ModalityRoutesConfig struct {
-	Image *ModalityRoute `yaml:"image,omitempty"`
-	Audio *ModalityRoute `yaml:"audio,omitempty"`
-	Video *ModalityRoute `yaml:"video,omitempty"`
-}
-
-// ModalityRoute maps a modality to a provider and model.
-type ModalityRoute struct {
-	Provider string `yaml:"provider"`
-	Model    string `yaml:"model"`
-}
-
-// TextRoute defines a spatial routing rule for text requests.
-type TextRoute struct {
-	Name     string            `yaml:"name"`
-	Priority int               `yaml:"priority,omitempty"`
-	Signals  map[string]string `yaml:"signals,omitempty"` // signal_type -> value/pattern
-	Provider string            `yaml:"provider"`
-	Model    string            `yaml:"model"`
 }
 
 // BrickConfig holds configuration for the "brick" virtual model gateway.
@@ -189,10 +160,7 @@ func (b *BrickConfig) Validate() error {
 // BrickExtension holds all Brick-specific config fields.
 // These are embedded into the main RouterConfig.
 type BrickExtension struct {
-	Model                VirtualModelConfig         `yaml:"model,omitempty"`
 	Providers            map[string]*ProviderConfig `yaml:"providers,omitempty"`
-	ModalityRoutes       ModalityRoutesConfig       `yaml:"modality_routes,omitempty"`
-	TextRoutes           []TextRoute                `yaml:"text_routes,omitempty"`
 	ServerPort           int                        `yaml:"server_port,omitempty"`
 	Brick                BrickConfig                `yaml:"brick,omitempty"`
 	AnthropicPassthrough AnthropicPassthroughConfig `yaml:"anthropic_passthrough,omitempty"`
@@ -220,12 +188,4 @@ func (ext *BrickExtension) ResolveProviderKeys() {
 			p.APIKey = ResolveEnvVars(p.APIKey)
 		}
 	}
-}
-
-// GetServerPort returns the configured port or the default (8000).
-func (ext *BrickExtension) GetServerPort() int {
-	if ext.ServerPort > 0 {
-		return ext.ServerPort
-	}
-	return 8000
 }

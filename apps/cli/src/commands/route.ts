@@ -4,6 +4,7 @@ import { loadConfig } from '../lib/config/load.js';
 import { print } from '../lib/ui/banners.js';
 import { localBaseUrl } from '../lib/net/local.js';
 import chalk from 'chalk';
+import { requireExactlyOneRunning } from '../lib/profiles.js';
 
 function fmtLatency(ms: number): string {
   if (ms < 1000) return chalk.green(`${ms} ms`);
@@ -24,7 +25,8 @@ export default class Route extends Command {
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Route);
-    const cfg = await loadConfig(flags.profile);
+    const running = await requireExactlyOneRunning();
+    const cfg = await loadConfig(running);
     const baseUrl = localBaseUrl(cfg.server_port);
     const maxTokens = flags['no-generate'] ? 1 : 8;
     const samples: { latencyMs: number; selectedModel?: string; thinkingApplied?: string; status: number; content: string }[] = [];

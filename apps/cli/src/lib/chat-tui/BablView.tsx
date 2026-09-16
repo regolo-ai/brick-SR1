@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text, useStdout } from 'ink';
+import { Box,Text,useStdout } from 'ink';
 import Spinner from 'ink-spinner';
+import { useEffect,useState } from 'react';
 import type { BablSession } from './babl-types.js';
 import { BablPane } from './BablPane.js';
 

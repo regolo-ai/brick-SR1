@@ -3,6 +3,9 @@ package proxy
 import (
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 )
 
 // maxRequestBodySize is the maximum allowed request body size (10 MB).
@@ -11,6 +14,8 @@ const maxRequestBodySize = 10 << 20
 
 // RoutingResult represents the outcome of running the routing pipeline.
 type RoutingResult struct {
+	StickyKey string // Conversation identity for cache-aware routing.
+	Compacted bool   // Whether this request used a compacted prompt.
 	// Direct means the pipeline produced a direct response (cache hit, error, block).
 	// If true, StatusCode and Body are set; the proxy writes them directly to the client.
 	Direct     bool
@@ -24,26 +29,17 @@ type RoutingResult struct {
 	ForwardEndpoint string            // backend "host:port"
 	ForwardPath     string            // backend path (e.g., "/v1/chat/completions")
 	ForwardHeaders  map[string]string // headers to set on the upstream request
-	RemoveHeaders   []string          // headers to strip before forwarding
 	IsStreaming     bool              // whether the original request has stream=true
 	IsResponses     bool              // native Responses protocol; disables Chat-only body mutation
 	Model           string            // selected model name, used for economics tracking
-	StickyKey       string            // conversation identity for cache-aware routing bookkeeping
-	Compacted       bool              // whether this turn served a compacted prompt
-}
-
-// ProviderInfo holds provider details resolved during routing.
-type ProviderInfo struct {
-	BaseURL string
-	APIKey  string
-	Type    string // "openai", "anthropic", etc.
-}
-
-// ChatCompletionRequest is a minimal representation used for model extraction.
-type ChatCompletionRequest struct {
-	Model    string        `json:"model"`
-	Messages []interface{} `json:"messages"`
-	Stream   bool          `json:"stream"`
+	RoutingSource   string            // "routed" or "native", for durable call history
+	ReasoningMode   string
+	RoutingMode     string
+	// AcceptedAt starts the end-to-end clock at request acceptance. Route is
+	// retained only as privacy-safe routing metadata for durable history.
+	AcceptedAt       time.Time
+	Route            *brickrouting.Result
+	RoutingLatencyMS *int64
 }
 
 // ErrorResponse is the OpenAI-compatible error format.

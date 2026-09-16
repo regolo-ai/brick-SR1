@@ -1,4 +1,4 @@
-"""Few-shot prompt builder. Estrae 5 esempi dal train split disgiunti dall'eval, formatta CoT."""
+"""Build few-shot prompts from training examples disjoint from evaluation queries."""
 
 from __future__ import annotations
 
@@ -13,10 +13,7 @@ def _load_prompts() -> dict:
 
 
 def _render_template(template: str, ctx: dict) -> str:
-    """Mini Jinja-like renderer: {{var}}, {%for x in xs%}...{%endfor%}, {{loop.index}}.
-
-    Sufficiente per i template in prompts.yaml senza dipendenze extra.
-    """
+    """Render the limited variable, loop and loop.index syntax used by prompts.yaml without an extra template dependency."""
     import re
 
     # Loop blocks
@@ -55,7 +52,7 @@ def _render_template(template: str, ctx: dict) -> str:
 
 
 def render_prompt(template_id: str, query: str, few_shot_examples: list[dict], **extra) -> str:
-    """Render un template di prompts.yaml con query + few-shot examples."""
+    """Render a configured prompt with its query and few-shot examples."""
     prompts = _load_prompts()
     if template_id not in prompts:
         raise KeyError(f"template_id '{template_id}' not found in prompts.yaml")

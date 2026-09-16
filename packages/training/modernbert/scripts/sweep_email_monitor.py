@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "utils"))
+sys.path.insert(0, str(ROOT / "dataset_b" / "scripts" / "utils"))
 from notify import send  # noqa: E402
 
 
@@ -26,7 +26,8 @@ def main() -> int:
     ap.add_argument("--interval", type=int, default=1800, help="poll seconds")
     args = ap.parse_args()
 
-    os.environ.setdefault("WANDB_API_KEY", Path("/root/.wandb_key").read_text().strip())
+    if not os.environ.get("WANDB_API_KEY"):
+        raise SystemExit("Set WANDB_API_KEY before monitoring a sweep")
     import wandb
 
     api = wandb.Api()

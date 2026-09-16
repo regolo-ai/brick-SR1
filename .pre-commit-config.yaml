@@ -1,16 +1,26 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
+  # Repository hygiene: block internal plans / dev notes (see AGENTS.md)
+  - repo: local
+    hooks:
+      - id: no-internal-files
+        name: no internal plans or dev notes
+        entry: scripts/check_no_internal_files.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
   # Basic hooks for Go, Rust, Python And JavaScript files only
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.2.0
     hooks:
       - id: trailing-whitespace
         files: \.(go|rs|py|js|ts|tsx)$
-        exclude: ^(packages/evals/baselines/|docs/paper/)
+        exclude: ^(docs/paper/)
       - id: end-of-file-fixer
         files: \.(go|rs|py|js|ts|tsx)$
-        exclude: ^(packages/evals/baselines/|docs/paper/|website/build/)
+        exclude: ^(docs/paper/)
       - id: check-added-large-files
         args: ["--maxkb=500"]
         files: \.(go|rs|py|js|ts|tsx)$
@@ -61,7 +71,7 @@ repos:
         entry: bash -c "make yaml-lint"
         language: system
         files: \.(yaml|yml)$
-        exclude: ^(node_modules/|packages/evals/baselines/)
+        exclude: ^(node_modules/)
         pass_filenames: false
 
   # JavaScript and TypeScript specific hooks (apps/cli)
@@ -69,7 +79,7 @@ repos:
     hooks:
       - id: js-ts-lint
         name: js/ts lint
-        entry: bash -c 'cd apps/cli && (npm install --silent 2>/dev/null || true) && npm run lint'
+        entry: npm run lint --workspace=apps/cli
         language: system
         files: ^apps/cli/.*\.(js|ts|tsx)$
         exclude: ^apps/cli/(node_modules|dist)/
@@ -80,13 +90,13 @@ repos:
     hooks:
       - id: cargo-fmt
         name: cargo fmt
-        entry: bash -c 'cd apps/router/candle-binding && (rustup component add rustfmt 2>/dev/null || true) && cargo fmt'
+        entry: bash -c 'cd apps/router/candle-binding && cargo fmt --check'
         language: system
         files: ^apps/router/candle-binding/.*\.rs$
         pass_filenames: false
       - id: cargo-check
         name: cargo check
-        entry: bash -c 'cd apps/router/candle-binding && cargo check --no-default-features'
+        entry: bash -c 'cd apps/router/candle-binding && cargo check --locked --no-default-features'
         language: system
         files: ^apps/router/candle-binding/.*\.rs$
         pass_filenames: false
@@ -97,8 +107,8 @@ repos:
     hooks:
       - id: ruff
         args: ["--fix"]
-        files: ^packages/.*\.py$
-        exclude: ^(packages/evals/baselines/|packages/.*/.venv/)
+        files: ^(packages|scripts)/.*\.py$
+        exclude: ^(packages/evals/external/|packages/evals/vendor/|packages/.*/.venv/)
       - id: ruff-format
-        files: ^packages/.*\.py$
-        exclude: ^(packages/evals/baselines/|packages/.*/.venv/)
+        files: ^(packages|scripts)/.*\.py$
+        exclude: ^(packages/evals/external/|packages/evals/vendor/|packages/.*/.venv/)

@@ -42,6 +42,9 @@ describe('codex config.toml wiring', () => {
     expect(text).toContain('requires_openai_auth = true');
     expect(text).toContain('base_url = "http://localhost:8000/v1"');
     expect(text).not.toContain('[profiles.brick]');
+    expect(text).not.toContain('REGOLO_API_KEY');
+    expect(text).not.toContain('CODEX_FLAT_BRIDGE_TOKEN');
+    expect(text).not.toContain('host.docker.internal');
   });
 
   it('captures and restores prior top-level model/provider values', () => {
@@ -110,5 +113,19 @@ describe('codex config.toml wiring', () => {
   it('refuses to overwrite an unmanaged brick provider table', () => {
     writeFileSync(codexConfigPath(), '[model_providers.brick]\nbase_url = "http://example.test/v1"\n');
     expect(() => wireCodex('http://localhost:8000')).toThrow(/unmanaged \[model_providers\.brick\]/);
+  });
+});
+
+describe('native wiring security and restoration', () => {
+  it('restores a prior catalog and configures a separate local key', () => {
+    writeFileSync(codexConfigPath(), 'model_catalog_json = "/custom/catalog.json"\n');
+    const state = wireCodex('http://127.0.0.1:8000', '/managed/catalog.json', 'local-key');
+    expect(readCodexConfig()).toContain('"X-Brick-Key" = "local-key"');
+    expect(readCodexConfig()).toContain('supports_websockets = false');
+    unwireCodex(state);
+    expect(readCodexConfig()).toContain('model_catalog_json = "/custom/catalog.json"');
+  });
+  it('rejects non-loopback router addresses', () => {
+    expect(() => wireCodex('http://0.0.0.0:8000')).toThrow('loopback');
   });
 });

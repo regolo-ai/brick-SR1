@@ -16,10 +16,7 @@ QUERY_MARKERS = (
 
 
 def extract_actual_query(query: str, max_tail_chars: int = 800) -> str:
-    """Strip few-shot prefix dal query, ritorna la query effettiva.
-
-    Heuristic: cerca ultimo marker conosciuto. Se non trova, prende gli ultimi N char.
-    """
+    """Remove few-shot prefixes using the last recognized marker, falling back to the trailing query characters."""
     if not query:
         return query
     last_pos = -1

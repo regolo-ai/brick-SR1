@@ -1,50 +1,30 @@
 #!/usr/bin/env python3
-"""Cascade Routing zero-shot baseline su Dataset A.
+"""Evaluate an adapted quality/cost selector using RouterBench estimators.
 
-Implementazione: il framework eth-sri/cascade-routing richiede QualityComputer +
-CostComputer + fit su training data. Per zero-shot transferring a Dataset A,
-implementiamo la VARIANTE MINIMALE seguendo paper Dekoninck et al.:
-
-1. Embed query con sentence-transformer (all-MiniLM-L6-v2, pretrained).
-2. Per ognuno dei 3 nostri modelli, alleniamo 1 logistic regression
-   query_embedding -> P(correct) usando ROUTERBENCH come training set,
-   mappando i modelli RouterBench ai nostri per tier di costo:
-     qwen3.5-9b   -> mistralai/mistral-7b-chat       (cheapest, ~$0.07/M)
-     ds4-flash    -> gpt-3.5-turbo-1106              (medium, ~$0.50/M)
-     kimi2.6      -> gpt-4-1106-preview              (strongest, ~$1.0/M)
-3. Cascade routing decision: per ogni query Dataset A,
-     predict P(correct|model) per i 3 modelli,
-     pick model massimizzando E[utility] = P(correct) - lambda * cost,
-     con lambda calibrato su RouterBench medium-budget setpoint.
-
-Output JSONL append-only.
-
-NOTA paper friction: questa implementazione manualmente bypassa cascade-routing
-framework. Lo paper richiederebbe custom QualityComputer/CostComputer + fit chiamato
-attraverso il loro Router.fit() API. Documentiamo questo come "deployment friction"
-weakness vs RouteLLM/Brick che sono drop-in.
+Fit logistic regressions on pretrained MiniLM query embeddings from
+RouterBench. Transfer model tiers to qwen/ds4/kimi and select the highest
+P(correct) minus lambda times cost. No fitting occurs on Dataset A.
+This script does not use the upstream cascade-routing framework and does
+not reproduce its full cascade algorithm. Set BRICK_ROUTERBENCH_CSV to the
+external RouterBench CSV. Existing cached estimators must be trusted files.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import pickle
-import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from datasets import load_dataset
 from sklearn.linear_model import LogisticRegression
 
-if Path("/root/.hf_token_regolo").exists():
-    os.environ["HF_TOKEN"] = Path("/root/.hf_token_regolo").read_text().strip()
-
 REPO = "massaindustries/dataset-A-routing"
-OUT = Path("/root/forkGO/external_comparison/predictions/cascade_routing.jsonl")
+OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / Path("cascade_routing.jsonl")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
-ROUTERBENCH_PATH = "/root/forkGO/external_comparison/cascade-routing/data/routerbench_0shot.csv"
+ROUTERBENCH_PATH = os.environ["BRICK_ROUTERBENCH_CSV"]
 
 MODEL_MAPPING = {
     "qwen": "mistralai/mistral-7b-chat",
@@ -52,15 +32,16 @@ MODEL_MAPPING = {
     "kimi": "gpt-4-1106-preview",
 }
 COST_USD_PER_QUERY = {
-    "qwen": 0.07e-6,    # $0.07/1M input
+    "qwen": 0.07e-6,  # $0.07/1M input
     "ds4": 0.50e-6,
     "kimi": 1.00e-6,
 }
-LAMBDA = 0.5  # weight cost vs quality; calibrato medio su RouterBench
+LAMBDA = 0.5  # weight cost vs quality; fixed RouterBench comparison setting
 
 
 def embed_queries(texts, batch=128):
     from sentence_transformers import SentenceTransformer
+
     model = SentenceTransformer("all-MiniLM-L6-v2")
     embs = model.encode(texts, batch_size=batch, show_progress_bar=True, convert_to_numpy=True)
     return embs
@@ -103,7 +84,7 @@ def main():
                     pass
         print(f"[resume] {len(done_qids)} rows already in {OUT}")
 
-    cache = Path("/root/forkGO/external_comparison/predictions/_cascade_estimators.pkl")
+    cache = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / Path("_cascade_estimators.pkl")
     estimators = fit_quality_estimators(cache)
 
     ds = load_dataset(REPO, "results", split="train")
@@ -120,10 +101,12 @@ def main():
 
     # Load sentence-transformer ONCE (model load is amortized, not part of per-query latency)
     from sentence_transformers import SentenceTransformer
-    print(f"[init] loading sentence-transformer encoder")
+
+    print("[init] loading sentence-transformer encoder")
     encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
     import time as _time
+
     t0 = _time.time()
     with OUT.open("a") as fout:
         for k, idx in enumerate(pending_idx):
@@ -149,7 +132,7 @@ def main():
             if (k + 1) % 500 == 0:
                 fout.flush()
                 rate = (k + 1) / (_time.time() - t0)
-                print(f"[{k+1}/{len(pending_idx)}] rate={rate:.2f}/s")
+                print(f"[{k + 1}/{len(pending_idx)}] rate={rate:.2f}/s")
 
     print(f"[done] {len(pending_idx)} rows in {(_time.time() - t0):.1f}s")
 

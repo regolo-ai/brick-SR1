@@ -11,7 +11,7 @@ import (
 // against the rest of the proxy.
 
 var (
-	// BrickCCRequests counts Claude /v1/messages and Codex /v1/chat/completions
+	// BrickCCRequests counts Claude /v1/messages and Codex /v1/responses
 	// requests, labelled by classifier verdict and the selected model.
 	BrickCCRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -28,7 +28,7 @@ var (
 	BrickCCEffort = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "brick_cc_effort_total",
-			Help: "Total Brick-routed /v1/messages requests labelled by selected model and autonomous reasoning effort.",
+			Help: "Total Brick-routed Claude/Codex requests labelled by selected model and autonomous reasoning effort.",
 		},
 		[]string{"model", "effort"},
 	)
@@ -40,7 +40,7 @@ var (
 	BrickCCRouting = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "brick_cc_routing_total",
-			Help: "Brick-routed /v1/messages requests labelled by complexity verdict, autonomous effort, and selected model.",
+			Help: "Brick-routed Claude/Codex requests labelled by complexity verdict, autonomous effort, and selected model.",
 		},
 		[]string{"difficulty", "effort", "model"},
 	)

@@ -144,13 +144,15 @@ def main():
                     answer = ans
                     break
                 else:
-                    print(f"  [{i+1}/{len(selected)}] attempt {attempt+1} failed verifier ({first_id})")
+                    print(f"  [{i + 1}/{len(selected)}] attempt {attempt + 1} failed verifier ({first_id})")
             except Exception as e:
-                print(f"  [{i+1}/{len(selected)}] attempt {attempt+1} api error: {type(e).__name__}: {str(e)[:120]}")
+                print(
+                    f"  [{i + 1}/{len(selected)}] attempt {attempt + 1} api error: {type(e).__name__}: {str(e)[:120]}"
+                )
         if not answer:
             answer = ans  # best effort
 
-        print(f"  [{i+1}/{len(selected)}] {first_id} → answer ok={verify_constraint(first_id, kwargs, answer)}")
+        print(f"  [{i + 1}/{len(selected)}] {first_id} → answer ok={verify_constraint(first_id, kwargs, answer)}")
         examples.append(
             {
                 "question": prompt,

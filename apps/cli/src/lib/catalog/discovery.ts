@@ -24,6 +24,7 @@ export function normalizeModelsResponse(payload: unknown, provider?: string): Mo
     const rawId = typeof item === 'string' ? item : item?.id;
     const id = typeof rawId === 'string' ? rawId.trim() : '';
     if (!id || seen.has(id)) continue;
+    seen.add(id);
     out.push({
       id,
       ...(typeof item?.owned_by === 'string' ? { owned_by: item.owned_by } : {}),

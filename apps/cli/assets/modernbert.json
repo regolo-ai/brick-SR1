@@ -1,0 +1,34 @@
+{
+  "repository": "regolo/modernbert-capability-classifier",
+  "revision": "117a42479a0dd8c126cfb0d02eec0719468e4027",
+  "labels": [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis"
+  ],
+  "files": {
+    "config.json": {
+      "sha256": "c581b2eb958618b5543783a56212e31707f91efc28891ca36a153fee98788edd",
+      "bytes": 2491
+    },
+    "model.safetensors": {
+      "sha256": "8d94439d1ee1ad4370c1dc3ba905b5ef71720e1ab85d5e9ee335db3ffa44cced",
+      "bytes": 791693180
+    },
+    "tokenizer.json": {
+      "sha256": "6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30",
+      "bytes": 3583228
+    },
+    "tokenizer_config.json": {
+      "sha256": "5926e6ec4294f80294bd98d9176defa9fbae7f140525d06a1da987488e74a973",
+      "bytes": 379
+    },
+    "README.md": {
+      "sha256": "5c926ae603f078042a9024fd57850aa1d01207ede901aa7829a293c815f01f2c",
+      "bytes": 3542
+    }
+  }
+}

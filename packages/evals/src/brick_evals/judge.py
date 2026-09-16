@@ -1,7 +1,4 @@
-"""LLM-as-judge helper: rubric scoring, majority vote, position-swap, retry/backoff.
-
-Backend: RegoloClient (qwen3.5-122b out-of-pool, no contamination con qwen3.5-9b/deepseek-v4-flash/kimi2.6).
-"""
+"""Regolo-backed judge helper for rubric scoring, majority voting, position swaps and retries. External judging remains separate from target-model inference."""
 
 from __future__ import annotations
 

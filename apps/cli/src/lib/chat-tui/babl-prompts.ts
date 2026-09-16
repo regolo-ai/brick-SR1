@@ -22,7 +22,7 @@ export function buildAgentPrompt(args: BuildAgentPromptArgs): ChatMessage[] {
   }
 
   const othersBlock = others
-    .map(([m, r]) => `--- Modello ${m} ---\n${r.trim()}`)
+    .map(([m, r]) => `--- Model ${m} ---\n${r.trim()}`)
     .join('\n\n');
 
   const myPrev = previousResponses.get(selfModel);
@@ -30,15 +30,15 @@ export function buildAgentPrompt(args: BuildAgentPromptArgs): ChatMessage[] {
   const systemAddendum: ChatMessage = {
     role: 'system',
     content:
-      `Sei il modello "${selfModel}" in una discussione multi-modello (modalità BABL/Babele).\n` +
-      `Stai partecipando al turno ${turn}. Al turno precedente, gli altri modelli hanno risposto alla query dell'utente.\n\n` +
-      `RISPOSTE DEGLI ALTRI MODELLI AL TURNO ${turn - 1}:\n\n${othersBlock}\n\n` +
-      (myPrev ? `LA TUA RISPOSTA PRECEDENTE:\n${myPrev.trim()}\n\n` : '') +
-      `ORA produci una risposta migliorata che:\n` +
-      `1. Integri i punti validi delle altre risposte\n` +
-      `2. Critichi/corregga eventuali errori che noti\n` +
-      `3. Aggiunga prospettive mancanti\n` +
-      `Non ripetere semplicemente la tua risposta precedente. Sii conciso e diretto.`,
+      `You are model "${selfModel}" in a multi-model discussion (BABL/Babele mode).\n` +
+      `You are participating in turn ${turn}. In the previous turn, the other models answered the user query.\n\n` +
+      `OTHER MODELS’ RESPONSES IN TURN ${turn - 1}:\n\n${othersBlock}\n\n` +
+      (myPrev ? `YOUR PREVIOUS RESPONSE:\n${myPrev.trim()}\n\n` : '') +
+      `Now produce an improved response that:\n` +
+      `1. Integrates valid points from the other responses\n` +
+      `2. Critiques or corrects any errors you notice\n` +
+      `3. Adds missing perspectives\n` +
+      `Do not simply repeat your previous response. Be concise and direct.`,
   };
 
   return [...history, systemAddendum, { role: 'user', content: query }];
@@ -46,22 +46,22 @@ export function buildAgentPrompt(args: BuildAgentPromptArgs): ChatMessage[] {
 
 export function buildModeratorPrompt(query: string, finalResponses: Map<string, string>): ChatMessage[] {
   const responsesBlock = Array.from(finalResponses.entries())
-    .map(([m, r]) => `--- Modello ${m} ---\n${r.trim()}`)
+    .map(([m, r]) => `--- Model ${m} ---\n${r.trim()}`)
     .join('\n\n');
 
   return [
     {
       role: 'system',
       content:
-        `Sei un moderatore esperto. Hai ricevuto ${finalResponses.size} risposte da modelli LLM diversi alla stessa query dell'utente.\n` +
-        `Il tuo compito è sintetizzare in una risposta unica, coerente, accurata e di alta qualità.\n` +
-        `Risolvi contraddizioni, combina i punti di forza, ignora errori evidenti.\n` +
-        `NON menzionare i singoli modelli o il fatto che ci siano più risposte: produci una risposta finita come se fosse tua.`,
+        `You are an expert moderator. You received ${finalResponses.size} responses from different models to the same user query.\n` +
+        `Synthesize a single coherent, accurate, high-quality response.\n` +
+        `Resolve contradictions, combine strengths and ignore obvious errors.\n` +
+        `Do not mention individual models or multiple responses: produce a complete response as your own.`,
     },
     {
       role: 'user',
       content:
-        `Query originale dell'utente:\n"${query}"\n\nRisposte dei modelli:\n\n${responsesBlock}\n\nProduci ora la sintesi finale.`,
+        `Original user query:\n"${query}"\n\nModel responses:\n\n${responsesBlock}\n\nProduce the final synthesis now.`,
     },
   ];
 }

@@ -1,22 +1,4 @@
-"""BFCL grader wrapper sopra `bfcl_eval.eval_checker.ast_eval.ast_checker`.
-
-Implementa `evaluation_protocol_id == "tool_call_match"` (Dim 6 planning_agentic).
-
-Strategia:
-1. Inietta `external/bfcl/berkeley-function-call-leaderboard/` in `sys.path`.
-2. Bypassa `bfcl_eval.constants.model_config` con uno stub per evitare la catena
-   di import dei vari SDK provider (anthropic/cohere/mistralai/...) che non ci
-   servono: del MODEL_CONFIG_MAPPING usiamo solo l'attributo `underscore_to_dot`
-   in `convert_func_name`.
-3. Estrae la chiamata Python-style dal `response` del modello (code block, tag
-   <TOOLCALL>, JSON OpenAI-style, o testo nudo) e la converte nel formato AST
-   atteso da BFCL: `list[dict]` di `{"fn_name": {"arg": value, ...}}`.
-4. Per la categoria `irrelevance` (no tool da chiamare) accetta come corretto
-   solo l'output vuoto.
-5. Per `simple/multiple/parallel/parallel_multiple` delega ad `ast_checker`.
-
-Output: `(correct: bool|None, meta: dict)`.
-"""
+"""Adapt model outputs to the official BFCL AST checker. A minimal model-config stub avoids unrelated provider SDK imports and preserves dotted function names. Parse Python calls, code fences, tool tags and OpenAI JSON. Irrelevance tasks require no calls; other categories use the official checker. Return (correct, metadata), with None for unavailable graders or invalid payloads."""
 
 from __future__ import annotations
 
@@ -39,13 +21,7 @@ if _BFCL_PATH.exists() and str(_BFCL_PATH) not in sys.path:
 
 
 def _install_model_config_stub() -> None:
-    """Stub `bfcl_eval.constants.model_config` BEFORE ast_checker imports it.
-
-    `ast_checker.convert_func_name` legge `MODEL_CONFIG_MAPPING[m].underscore_to_dot`.
-    Forziamo `underscore_to_dot=False` per ogni modello: i nomi funzione contenenti
-    "." restano intatti, che è quello che BFCL fa per i modelli non-OAI (e per
-    gli output `ast_parse`-d non c'è alcun bisogno di conversione).
-    """
+    """Install a minimal BFCL model-config mapping before importing the checker. Preserve dotted function names by setting underscore_to_dot=False."""
     mod_name = "bfcl_eval.constants.model_config"
     if mod_name in sys.modules:
         return
@@ -104,7 +80,7 @@ def _resolve_value(value: ast.AST) -> Any:
     if isinstance(value, ast.Dict):
         return {_resolve_value(k): _resolve_value(v) for k, v in zip(value.keys, value.values, strict=False)}
     if isinstance(value, ast.Name):
-        # variabile non risolvibile: la trattiamo come stringa con il suo id
+        # Treat an unresolved variable as a string containing its identifier.
         return value.id
     if isinstance(value, ast.Attribute):
         parts: list[str] = [value.attr]
@@ -135,16 +111,13 @@ def _resolve_call(elem: ast.Call) -> dict[str, Any]:
     args: dict[str, Any] = {}
     for kw in elem.keywords:
         if kw.arg is None:
-            continue  # **kwargs non supportato in BFCL
+            continue  # BFCL does not support expanded keyword arguments.
         args[kw.arg] = _resolve_value(kw.value)
     return {fn_name: args}
 
 
 def _ast_parse_python(text: str) -> list[dict[str, Any]]:
-    """Parse `fn(a=1)` o `[fn1(a=1), fn2(b=2)]` in lista di dict BFCL.
-
-    Raise `ValueError` se non parsabile.
-    """
+    """Parse a Python function call or list of calls into BFCL dictionaries. Raise ValueError for invalid syntax."""
     cleaned = text.strip().strip("'").strip('"').strip()
     parsed = ast.parse(cleaned, mode="eval")
     body = parsed.body
@@ -196,13 +169,7 @@ def _from_openai_tool_calls(obj: Any) -> list[dict[str, Any]] | None:
 
 
 def extract_calls(response: str) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
-    """Estrai chiamate dal `response` del modello provando più strategie.
-
-    Returns:
-        (calls, meta). `calls = None` se nessuna strategia funziona (oppure se
-        il response è vuoto/esplicitamente "no call"). `meta["strategy"]` indica
-        quale parser ha funzionato.
-    """
+    """Try supported model-output call formats. Return calls and parser metadata, or None when no usable calls are found."""
     meta: dict[str, Any] = {"strategy": None}
     if not isinstance(response, str):
         return None, {"strategy": None, "reason": "non-string response"}
@@ -210,7 +177,7 @@ def extract_calls(response: str) -> tuple[list[dict[str, Any]] | None, dict[str,
     if not txt:
         return None, {"strategy": None, "reason": "empty response"}
 
-    # 1) <TOOLCALL>...</TOOLCALL> tag (formato BFCL ufficiale per molti modelli)
+    # 1) <TOOLCALL>...</TOOLCALL> tag (official BFCL format for many models)
     m = _TOOLCALL_TAG_RE.search(txt)
     if m:
         inner = m.group(1).strip()
@@ -229,11 +196,11 @@ def extract_calls(response: str) -> tuple[list[dict[str, Any]] | None, dict[str,
         except Exception:
             pass
 
-    # 2) Python code block ```python ... ``` con call(s)
+    # Parse calls inside a Python code fence.
     py_blocks = _CODE_BLOCK_PY_RE.findall(txt)
-    for blk in reversed(py_blocks):  # ultimo blocco prima
+    for blk in reversed(py_blocks):  # Try the last block first.
         candidate = blk.strip()
-        # rimuovi eventuali assegnamenti tipo "result = fn(...)"
+        # Remove assignments such as result = fn(...).
         candidate = re.sub(r"^\s*\w+\s*=\s*", "", candidate, flags=re.MULTILINE)
         try:
             calls = _ast_parse_python(candidate)
@@ -274,7 +241,7 @@ def extract_calls(response: str) -> tuple[list[dict[str, Any]] | None, dict[str,
     except Exception:
         pass
 
-    # 6) Solo l'ultima riga sembra una chiamata?
+    # Try parsing a call on the last line alone.
     last_line = txt.splitlines()[-1].strip()
     if "(" in last_line and last_line.endswith(")"):
         try:
@@ -289,10 +256,7 @@ def extract_calls(response: str) -> tuple[list[dict[str, Any]] | None, dict[str,
 
 # --- Public grader ---------------------------------------------------------
 
-# Default model name per `convert_func_name` (con stub `underscore_to_dot=False`
-# il valore non incide sul matching; usiamo un nome neutro). Espone l'env var
-# per override esplicito se in futuro vorremo aderire a regole specifiche di
-# uno dei tre modelli pool.
+# With underscore_to_dot=False, the model label does not change function matching. Allow an explicit environment override of the neutral default.
 DEFAULT_MODEL_NAME = "brick-evals-generic"
 
 
@@ -301,23 +265,7 @@ def grade_bfcl(
     payload: dict[str, Any],
     model_name: str = DEFAULT_MODEL_NAME,
 ) -> tuple[bool | None, dict[str, Any]]:
-    """Grading singolo per BFCL single-turn.
-
-    Args:
-        response: testo grezzo del modello target.
-        payload: contenuto di `expected_answer.payload`. Chiavi attese:
-            - `ground_truth_calls`: list di `{fn_name: {arg: [accepted_values]}}`
-            - `function_specs`: list di JSON-schema funzioni disponibili
-            - `category`: una di {simple, multiple, parallel, parallel_multiple, irrelevance}
-            - `id`: identificatore BFCL (opzionale, per meta)
-        model_name: chiave passata a `ast_checker` (ininfluente con lo stub).
-
-    Returns:
-        (correct, meta):
-          - correct=True iff `ast_checker(...)["valid"]`
-          - correct=False se parsing fallisce o checker rifiuta
-          - correct=None se grader non disponibile / payload non valido
-    """
+    """Grade a single-turn BFCL response against accepted calls and function schemas. Return correctness and metadata; unavailable grading or invalid payloads yields None."""
     if not AVAILABLE:
         return None, {"reason": f"BFCL not available: {_IMPORT_ERR}"}
 
@@ -331,7 +279,7 @@ def grade_bfcl(
 
     decoded, parse_meta = extract_calls(response)
 
-    # Caso irrelevance: il modello NON deve chiamare alcuna funzione.
+    # Irrelevance tasks must not call any function.
     if category == "irrelevance":
         # Nessuna chiamata parsabile -> corretto. Qualunque chiamata -> errato.
         correct = decoded is None or len(decoded) == 0
@@ -342,7 +290,7 @@ def grade_bfcl(
             "decoded_n": 0 if decoded is None else len(decoded),
         }
 
-    # Altri categorie: serve almeno una chiamata.
+    # Other categories require at least one call.
     if decoded is None:
         return False, {
             "category": category,

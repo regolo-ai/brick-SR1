@@ -1,6 +1,6 @@
 {
   "name": "@regoloai/brick",
-  "version": "2.3.11",
+  "version": "3.0.1",
   "description": "Brick — CLI to host the Brick multimodal LLM routing gateway locally (companion to regolo-ai/brick-SR1)",
   "type": "module",
   "license": "Apache-2.0",
@@ -24,13 +24,17 @@
   "bin": {
     "brick": "bin/run.js"
   },
-  "main": "dist/index.js",
   "files": [
-    "/bin",
+    "/bin/run.js",
     "/dist",
-    "/templates",
+    "/templates/*.config.yaml",
+    "/assets/modernbert.json",
     "/oclif.manifest.json",
-    "/scripts"
+    "/scripts/runtime-install.cjs",
+    "/assets/config-schema.json",
+    "/assets/pricing.yaml",
+    "/NOTICE",
+    "/THIRD_PARTY_NOTICES.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -40,32 +44,6 @@
     "dirname": "brick",
     "commands": "./dist/commands",
     "topicSeparator": " ",
-    "topics": {
-      "add": {
-        "description": "Add a provider, model, decision, or plugin"
-      },
-      "remove": {
-        "description": "Remove a provider, model, decision, or plugin"
-      },
-      "config": {
-        "description": "Show or edit the current configuration"
-      },
-      "claude": {
-        "description": "Inspect Brick ↔ Claude Code wiring (status, routing stats)"
-      },
-      "claude settings": {
-        "description": "Configure Brick Claude: context-awareness and classifier compute"
-      },
-      "claude stats": {
-        "description": "Routing observability: per-mode event aggregates and promotion-gate signals"
-      },
-      "codex": {
-        "description": "Inspect Brick ↔ OpenAI Codex wiring (status, routing stats)"
-      },
-      "codex settings": {
-        "description": "Configure Brick Codex: context-awareness, classifier compute, model routing, and thinking routing"
-      }
-    },
     "hooks": {
       "init": "./dist/hooks/init.js"
     },
@@ -79,26 +57,26 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "node scripts/clean-dist.cjs && tsc -b --force",
     "dev": "node --loader ts-node/esm bin/dev.js",
-    "test": "vitest run",
-    "test:random": "node --loader ts-node/esm test/random.ts",
+    "test": "vitest run && node --test test/runtime-install.cjs",
     "lint": "tsc --noEmit",
-    "preinstall": "node scripts/install-guard.cjs",
-    "prepack": "npm run build && oclif manifest"
+    "prepack": "npm run build && oclif manifest",
+    "postinstall": "node scripts/runtime-install.cjs"
   },
   "dependencies": {
+    "@clack/core": "0.4.2",
     "@clack/prompts": "^0.10.0",
     "@oclif/core": "^4.0.0",
     "@oclif/plugin-warn-if-update-available": "^3.1.68",
     "chalk": "^5.3.0",
-    "cli-table3": "^0.6.5",
+    "enquirer": "^2.4.1",
     "execa": "^9.0.0",
-    "handlebars": "^4.7.8",
     "ink": "^6.8.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.3.2",
+    "picocolors": "^1.1.1",
     "react": "^19.2.5",
     "zod": "^3.23.0"
   },
@@ -112,9 +90,15 @@
     "tsx": "^4.21.0",
     "typescript": "^5.6.0",
     "vite": "^6.4.3",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": "20 || >=22"
+  },
+  "optionalDependencies": {
+    "@regoloai/brick-runtime-darwin-arm64": "3.0.1",
+    "@regoloai/brick-runtime-darwin-x64": "3.0.1",
+    "@regoloai/brick-runtime-linux-arm64": "3.0.1",
+    "@regoloai/brick-runtime-linux-x64": "3.0.1"
   }
 }

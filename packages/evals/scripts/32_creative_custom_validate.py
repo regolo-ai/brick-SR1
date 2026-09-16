@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""32 - Creative custom validate: LLM-as-judge pre-filter via Regolo qwen3.5-122b.
-
-Rubric esplicita:
-- genre_tag balance (auto)
-- length 200-2000 chars (auto)
-- novel/non-templated (LLM)
-- no toxic content (LLM)
-- specific/judgeable (LLM)
-
-Voto auto del judge {accept, reject, ambiguous}. Solo gli 'ambiguous' vanno a human review.
-
-Input: data/creative_custom/generated.jsonl
-Output: data/creative_custom/validated.jsonl (max cap iniziale 100)
-       data/creative_custom/review.csv (per gli 'ambiguous')
-"""
+"""Filter generated creative tasks by genre balance, length, novelty, safety and specificity. Automated length checks precede external judging. Write validated JSONL and ambiguous cases for human review, up to the initial cap of 100."""
 
 from __future__ import annotations
 
@@ -61,7 +47,7 @@ def judge_one(client: RegoloClient, prompt: str, genre: str) -> str:
 
 
 def auto_check(row: dict) -> str | None:
-    """Auto check (no LLM): length range. Ritorna 'reject' se fail."""
+    """Reject tasks outside the allowed length range without invoking a model."""
     p = row.get("prompt", "")
     n = len(p)
     if n < 30 or n > 800:

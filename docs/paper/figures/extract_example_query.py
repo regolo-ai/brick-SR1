@@ -1,6 +1,6 @@
 """Pick one example query (full walkthrough) + three cherry-picked queries.
 
-Source: /root/forkGO/external_comparison/predictions/brick_debug_gpu.jsonl
+Source: BRICK_RESEARCH_INPUT/predictions/brick_debug_gpu.jsonl
 
 The chosen "main" example shows a non-trivial routing decision (NOT a query where
 all three models would have agreed). The three cherry-picked queries cover one
@@ -11,18 +11,20 @@ Outputs `figures/example_query.tex` ready to be \\input{} into paper.tex.
 
 from __future__ import annotations
 
+import os
 import json
 import math
 from pathlib import Path
 
-DBG = Path("/root/forkGO/external_comparison/predictions/brick_debug_gpu.jsonl")
+ROOT = Path(os.environ["BRICK_RESEARCH_INPUT"])
+DBG = ROOT / "external_comparison/predictions/brick_debug_gpu.jsonl"
 QUERIES_DIRS = [
-    Path("/root/forkGO/scientificv1/data/inference/deepseek-v4-flash"),
-    Path("/root/forkGO/scientificv1/data/inference/kimi2.6"),
-    Path("/root/forkGO/scientificv1/data/inference/qwen3.5-9b"),
+    (ROOT / "scientificv1/data/inference/deepseek-v4-flash"),
+    (ROOT / "scientificv1/data/inference/kimi2.6"),
+    (ROOT / "scientificv1/data/inference/qwen3.5-9b"),
 ]
-EVAL_PARAMS = Path("/root/forkGO/scientificv1/data/final/evaluation_parameters_full.jsonl")
-OUT = Path("/root/forkGO/scientificv1/docs/figures/example_query.tex")
+EVAL_PARAMS = (ROOT / "scientificv1/data/final/evaluation_parameters_full.jsonl")
+OUT = (Path(__file__).resolve().parent / "example_query.tex")
 
 CAP_ORDER = ["coding", "creative_synthesis", "instruction_following",
              "math_reasoning", "planning_agentic", "world_knowledge"]

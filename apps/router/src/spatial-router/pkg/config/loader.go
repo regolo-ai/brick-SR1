@@ -5,45 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	config     *RouterConfig
-	configOnce sync.Once
-	configErr  error
-	configMu   sync.RWMutex
-
-	// Config change notification channel
-	configUpdateCh chan *RouterConfig
-	configUpdateMu sync.Mutex
-)
-
-// Load loads the configuration from the specified YAML file once and caches it globally.
-func Load(configPath string) (*RouterConfig, error) {
-	configOnce.Do(func() {
-		cfg, err := Parse(configPath)
-		if err != nil {
-			configErr = err
-			return
-		}
-		configMu.Lock()
-		config = cfg
-		configMu.Unlock()
-	})
-	if configErr != nil {
-		return nil, configErr
-	}
-	configMu.RLock()
-	defer configMu.RUnlock()
-	return config, nil
-}
-
-// Parse parses the YAML config file without touching the global cache.
+// Parse parses the YAML config file for one runtime instance.
 func Parse(configPath string) (*RouterConfig, error) {
-	// Resolve symlinks to handle Kubernetes ConfigMap mounts
+	// Resolve profile configuration symlinks before reading.
 	resolved, _ := filepath.EvalSymlinks(configPath)
 	if resolved == "" {
 		resolved = configPath
@@ -54,15 +22,20 @@ func Parse(configPath string) (*RouterConfig, error) {
 	}
 
 	cfg := &RouterConfig{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
+		// Type errors can quote scalar values, including pasted credentials.
+		// Preserve precise unknown-field diagnostics but never echo YAML values.
+		if typed, ok := err.(*yaml.TypeError); ok {
+			for _, detail := range typed.Errors {
+				if strings.Contains(detail, "field ") && strings.Contains(detail, " not found in type ") {
+					return nil, fmt.Errorf("failed to parse config file: %s", detail)
+				}
+			}
+		}
+		return nil, fmt.Errorf("failed to parse config file: invalid YAML or field type")
 	}
 
-	// Override the complexity classifier endpoint from BRICK_CLASSIFIER_URL when
-	// set. In production every component runs inside the compose network and the
-	// "http://classifier:8094" DNS name resolves fine; for local dev (router run
-	// on the host, classifier in docker) this env var points at an exposed port
-	// or SSH tunnel without editing the prod config YAML.
+	// Optional explicit override for the classifier API endpoint.
 	if envURL := strings.TrimSpace(os.Getenv("BRICK_CLASSIFIER_URL")); envURL != "" {
 		if cfg.ComplexityService == nil {
 			cfg.ComplexityService = &ComplexityServiceConfig{Enabled: true}
@@ -70,54 +43,22 @@ func Parse(configPath string) (*RouterConfig, error) {
 		cfg.ComplexityService.BaseURL = envURL
 	}
 
-	// Apply default model registry if not specified in config
-	// If user specifies mom_registry in config.yaml, it completely replaces the defaults
-	if len(cfg.MoMRegistry) == 0 {
-		cfg.MoMRegistry = ToLegacyRegistry()
-	}
-
 	// Validation after parsing
 	if err := validateConfigStructure(cfg); err != nil {
 		return nil, err
 	}
 
+	if err := validateCredentials(cfg); err != nil {
+		return nil, err
+	}
+
+	if cfg.SkillRouter.Enabled && strings.TrimSpace(cfg.SkillRouter.ComplexityModel.BaseURL) == "" &&
+		(cfg.ComplexityService == nil || strings.TrimSpace(cfg.ComplexityService.BaseURL) == "") {
+		return nil, fmt.Errorf("skill_router requires a classifier API base_url; the local complexity server was retired")
+	}
+	if cfg.ComplexityService != nil && cfg.ComplexityService.Enabled && strings.TrimSpace(cfg.ComplexityService.BaseURL) == "" {
+		return nil, fmt.Errorf("complexity_service.base_url is required; configure the classifier API")
+	}
+
 	return cfg, nil
-}
-
-// Replace replaces the globally cached config. It is safe for concurrent readers.
-func Replace(newCfg *RouterConfig) {
-	configMu.Lock()
-	config = newCfg
-	configErr = nil
-	configMu.Unlock()
-
-	// Notify listeners of config change
-	configUpdateMu.Lock()
-	if configUpdateCh != nil {
-		select {
-		case configUpdateCh <- newCfg:
-		default:
-			// Channel full or no listener, skip
-		}
-	}
-	configUpdateMu.Unlock()
-}
-
-// Get returns the current configuration
-func Get() *RouterConfig {
-	configMu.RLock()
-	defer configMu.RUnlock()
-	return config
-}
-
-// WatchConfigUpdates returns a channel that receives config updates
-// Only one watcher is supported at a time
-func WatchConfigUpdates() <-chan *RouterConfig {
-	configUpdateMu.Lock()
-	defer configUpdateMu.Unlock()
-
-	if configUpdateCh == nil {
-		configUpdateCh = make(chan *RouterConfig, 1)
-	}
-	return configUpdateCh
 }

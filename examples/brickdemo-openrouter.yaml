@@ -1,0 +1,104 @@
+# Example native profile using independent REGOLO_API_KEY and OPENROUTER_API_KEY
+# credentials in the profile .env. Model skill vectors below are illustrative.
+# Review the model pool with `brick profile edit brickdemo`, then run
+# `brick start brickdemo`. Classifier and model requests may incur API charges.
+default_model: openai/gpt-4o-mini
+auto_model_name: brick
+server_port: 8000
+brick:
+  enabled: true
+complexity_service:
+  enabled: true
+  base_url: https://api.regolo.ai
+  protocol: openai
+  model_name: brick-complexity-pro
+  bearer_token: ${REGOLO_API_KEY}
+  timeout_seconds: 8
+skill_router:
+  enabled: true
+  capabilities:
+  - coding
+  - creative_synthesis
+  - instruction_following
+  - math_reasoning
+  - planning_agentic
+  - world_knowledge
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    labels:
+    - instruction_following
+    - coding
+    - math_reasoning
+    - world_knowledge
+    - planning_agentic
+    - creative_synthesis
+  complexity_model:
+    base_url: https://api.regolo.ai
+    protocol: openai
+    model_name: brick-complexity-pro
+    bearer_token: ${REGOLO_API_KEY}
+    timeout_seconds: 8
+  math:
+    tau:
+      easy: 0.55
+      medium: 0.72
+      hard: 0.88
+    complexity_mu: 1.07
+    complexity_bias: 0.15
+    cost_penalty_beta: 0.63
+    over_penalty_lambda: 0.35
+    preference_power: 1.56
+    max_mu_multiplier: 3.24
+    max_bias_shift: 1.05
+    max_cost_relief: 13.4
+    max_over_relief: 896
+    min_mu_multiplier: 0.377
+    min_bias_shift: -5.87
+    min_cost_boost: 13
+    min_over_boost: 11.9
+    tie_epsilon: 0.03
+    clip_min: 0.02
+    clip_max: 0.98
+  models:
+  - model: anthropic/claude-3.5-sonnet
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.92
+    - 0.85
+    - 0.9
+    - 0.88
+    - 0.83
+    - 0.91
+    custom_params:
+      max_tokens: 4096
+  - model: deepseek/deepseek-chat
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.86
+    - 0.72
+    - 0.81
+    - 0.84
+    - 0.79
+    - 0.8
+  - model: openai/gpt-4o-mini
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.8
+    - 0.95
+    - 0.82
+    - 0.65
+    - 0.74
+    - 0.85
+    custom_params:
+      max_tokens: 2048
+config_version: 1
+model_config:
+  anthropic/claude-3.5-sonnet:
+    access_key_env: OPENROUTER_API_KEY
+  deepseek/deepseek-chat:
+    access_key_env: OPENROUTER_API_KEY
+  openai/gpt-4o-mini:
+    access_key_env: OPENROUTER_API_KEY

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { chatCompletionStream, type ChatMessage, type ThinkingMode } from '../client/openai.js';
-import type { Message, AssistantMessage, UserMessage, SystemMessage } from './types.js';
+import { useCallback,useEffect,useRef,useState } from 'react';
+import { chatCompletionStream,type ChatMessage,type ThinkingMode } from '../client/openai.js';
+import type { AssistantMessage,Message,SystemMessage,UserMessage } from './types.js';
 
 let nextId = 1;
 
@@ -30,18 +30,6 @@ export function useChat(opts: UseChatOpts) {
   showThinkingRef.current = showThinking;
 
   const sysHistory = useRef<string[]>([]);
-
-  // Builds the chat history to forward to the model
-  const buildHistory = useCallback((extra: ChatMessage[]): ChatMessage[] => {
-    const out: ChatMessage[] = [];
-    if (opts.systemPrompt) out.push({ role: 'system', content: opts.systemPrompt });
-    for (const m of messages) {
-      if (m.role === 'user') out.push({ role: 'user', content: m.content });
-      else if (m.role === 'assistant' && m.status === 'done' && m.content) out.push({ role: 'assistant', content: m.content });
-    }
-    out.push(...extra);
-    return out;
-  }, [messages, opts.systemPrompt]);
 
   const sendNow = useCallback(async (text: string) => {
     setBusy(true);

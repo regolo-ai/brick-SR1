@@ -14,7 +14,7 @@
 //
 // Neither type talks to the HTTP proxy layer directly; callers (in
 // pkg/proxy and elsewhere) are responsible for parsing upstream usage data
-// and invoking Store.RecordUsage, and for wiring PricingTable into routing
+// and invoking Store.RecordCachedUsage, and for wiring PricingTable into routing
 // decisions.
 package economics
 
@@ -29,14 +29,13 @@ import (
 
 // PriceEntry is one row loaded from pricing.yaml.
 type PriceEntry struct {
-	Provider    string  `yaml:"provider"`
-	Model       string  `yaml:"model"`
-	InputPrice  float64 `yaml:"input_price"`
-	OutputPrice float64 `yaml:"output_price"`
-	Currency    string  `yaml:"currency"`
-	SourceURL   string  `yaml:"source_url"`
-	Source      string  `yaml:"source"`
-	FetchedAt   string  `yaml:"fetched_at"`
+	Model      string  `yaml:"model"`
+	InputPrice float64 `yaml:"input_price"`
+	// CachedInputPrice is the provider's cache-read price per 1M tokens. A
+	// zero value means the legacy provider multiplier (0.1x InputPrice) is used.
+	CachedInputPrice float64 `yaml:"cached_input_price"`
+	OutputPrice      float64 `yaml:"output_price"`
+	Currency         string  `yaml:"currency"`
 }
 
 // PricingTable holds all loaded price entries, indexed by model name.
