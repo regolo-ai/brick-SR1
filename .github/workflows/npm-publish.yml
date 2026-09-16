@@ -43,7 +43,7 @@ jobs:
       - name: Publish verified runtime packages, then CLI
         run: |
           for bundle in release/*-runtime-*.tgz; do
-            npm publish "$bundle" --access public --provenance
+            npm publish "./$bundle" --access public --provenance
           done
           version=$(node -p "require('./apps/cli/package.json').version")
-          npm publish "release/regoloai-brick-${version}.tgz" --access public --provenance
+          npm publish "./release/regoloai-brick-${version}.tgz" --access public --provenance
