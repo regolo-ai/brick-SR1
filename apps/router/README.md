@@ -25,3 +25,15 @@ runs during startup.
 
 See [local lifecycle](../../docs/quickstart/serve.md) for installation and
 profile management. The separate deployment service is outside this refactoring.
+
+## Checkpoint label compatibility
+
+The pinned checkpoint emits instruction following, coding, math reasoning,
+world knowledge, agentic planning and creative synthesis, in that order.
+Routing skill vectors can use a different configured order; the router maps
+between the two explicitly. Earlier templates incorrectly declared alphabetical
+checkpoint labels. The CLI repairs that known declaration with a backup while
+preserving skill-vector order and values. Unknown label declarations are rejected.
+This separate compatibility correction can change model choices for affected
+profiles. The checkpoint, six raw probabilities and historical softmax algorithm
+are unchanged and remain covered by the pre-refactoring numerical corpus.

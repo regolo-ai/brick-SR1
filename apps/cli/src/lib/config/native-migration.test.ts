@@ -60,3 +60,17 @@ describe('native profile migration', () => {
     } finally { await rm(home, { recursive: true, force: true }); }
   });
 });
+
+it('migrates the known template label error without reordering model skills', () => {
+  const alphabetical = ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'];
+  const physical = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'];
+  const input = { config_version: 1, skill_router: { capabilities: alphabetical, capability_model: { labels: alphabetical }, models: [{ model: 'test', skill_vector: [.1, .2, .3, .4, .5, .6] }] } };
+  const result = nativeConfig(input);
+  expect(result.skill_router.capability_model.labels).toEqual(physical);
+  expect(result.skill_router.capabilities).toEqual(alphabetical);
+  expect(result.skill_router.models).toEqual(input.skill_router.models);
+  expect(input.skill_router.capability_model.labels).toEqual(alphabetical);
+  expect(nativeConfig(result)).toEqual(result);
+  expect(nativeConfig({ skill_router: { capability_model: { labels: [] } } }).skill_router.capability_model.labels).toEqual(physical);
+  expect(() => nativeConfig({ skill_router: { capability_model: { labels: ['unknown'] } } })).toThrow('files were not changed');
+});

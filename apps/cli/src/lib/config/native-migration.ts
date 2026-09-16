@@ -29,11 +29,25 @@ function validateFields(value: any, schema: any, path = 'config'): void {
 const retired = ['model', 'config_source', 'mom_registry', 'external_models', 'semantic_cache', 'memory', 'vector_store', 'response_api', 'router_replay', 'looper', 'api', 'clear_route_cache', 'authz', 'ratelimit', 'embedding_models', 'bert_model', 'classifier', 'prompt_guard', 'hallucination_mitigation', 'feedback_detector', 'modality_detector', 'decisions', 'strategy', 'model_selection', 'keyword_rules', 'embedding_rules', 'categories', 'fact_check_rules', 'user_feedback_rules', 'preference_rules', 'language_rules', 'context_rules', 'modality_rules', 'role_bindings', 'tools', 'plugins', 'image_gen_backends', 'modality_routes', 'text_routes'];
 const spawnFields = ['auto_spawn', 'script_path', 'device', 'base_model_id'];
 
+// Physical output order of the pinned checkpoint, distinct from routing-vector order.
+const checkpointLabels = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'];
+function migrateCapabilityLabels(obj: any): void {
+  const model = obj.skill_router?.capability_model;
+  if (!model) return;
+  const declared = model.labels;
+  if (declared !== undefined && !(Array.isArray(declared) && declared.length === 0) && JSON.stringify(declared) !== JSON.stringify(checkpointLabels) &&
+      JSON.stringify(declared) !== JSON.stringify([...checkpointLabels].sort())) {
+    throw new Error('Capability labels do not match the pinned checkpoint or the known legacy template order; files were not changed.');
+  }
+  model.labels = [...checkpointLabels];
+}
+
 /** Pure, deterministic migration. Inspect every incompatible value before writing. */
 export function nativeConfig(input: any): any {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Profile must contain a YAML object.');
   if (input.config_version !== undefined && input.config_version !== 1) throw new Error(`Unsupported profile config_version: ${input.config_version}`);
   const obj = structuredClone(input);
+  migrateCapabilityLabels(obj);
   if (input.config_version === 1) {
     validateFields(obj, fieldSchema);
     return obj;

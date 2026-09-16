@@ -60,7 +60,7 @@ complexity_service:
   base_url: https://api.regolo.ai
   protocol: openai
   model_name: brick-complexity-pro
-  bearer_token_file: /root/.regolo_api_key
+  bearer_token: '${REGOLO_API_KEY}'
   timeout_seconds: 8
   use_client_key: true
 anthropic_passthrough:
@@ -90,19 +90,13 @@ skill_router:
   - world_knowledge
   capability_model:
     model_id: models/modernbert-capability-classifier
-    labels:
-    - coding
-    - creative_synthesis
-    - instruction_following
-    - math_reasoning
-    - planning_agentic
-    - world_knowledge
+    labels: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
   complexity_model:
     model_id: regolo/brick-complexity-pro
     base_url: https://api.regolo.ai
     protocol: openai
     model_name: brick-complexity-pro
-    bearer_token_file: /root/.regolo_api_key
+    bearer_token: '${REGOLO_API_KEY}'
     timeout_seconds: 8
     use_client_key: true
   math:

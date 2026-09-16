@@ -155,6 +155,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci --ignore-scripts
       - run: python3 scripts/build_runtime.py
+      - name: Validate public native configuration examples
+        env:
+          OPENROUTER_API_KEY: config-validation-only
+          REGOLO_API_KEY: config-validation-only
+        run: |
+          for config in config.yaml apps/router/config/config.yaml examples/*.yaml; do
+            dist/runtime-linux-x64/bin/brick-runtime --config "$config" --validate-config
+          done
       - name: Pack and install actual artifacts
         run: |
           mkdir -p dist/tarballs dist/installed
@@ -175,6 +183,7 @@ jobs:
         run: |
           models=$(node -e "process.stdout.write(require('./dist/installed/node_modules/@regoloai/brick/scripts/runtime-install.cjs').installedRuntime().models)")
           python3 scripts/test_native_model.py dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/libcandle_spatial_router.so "$models"
+          python3 scripts/test_native_labels.py dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/brick-runtime "$models"
       - name: Verify runtime native dependencies and exports
         run: |
           ldd dist/runtime-linux-x64/bin/brick-runtime

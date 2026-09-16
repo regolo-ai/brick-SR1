@@ -34,7 +34,7 @@ const (
 
 	// Locked production math configuration (paper Table 7). These are the
 	// calibrated base parameters and preference-knob anchors; the same values
-	// are written by `brick init` (apps/cli wizard) so an absent field in the
+	// are written by the CLI profile editor so an absent field in the
 	// yaml resolves to identical behavior.
 	defaultComplexityMu      = 0.345170
 	defaultComplexityBias    = 0.822235
@@ -400,9 +400,6 @@ func applyDefaults(cfg *config.SkillRouterConfig) {
 	if len(cfg.Capabilities) == 0 {
 		cfg.Capabilities = append([]string(nil), defaultCapabilities...)
 	}
-	if len(cfg.CapabilityModel.Labels) == 0 {
-		cfg.CapabilityModel.Labels = append([]string(nil), cfg.Capabilities...)
-	}
 	if cfg.CapabilityModel.ModelID == "" && cfg.CapabilityModel.LocalPath == "" {
 		cfg.CapabilityModel.ModelID = defaultCapabilityModelID
 	}
@@ -540,9 +537,16 @@ func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabi
 	if modelPath == "" {
 		modelPath = defaultCapabilityModelID
 	}
-	labels := cfg.Labels
-	if len(labels) == 0 {
-		labels = capabilities
+	labels := []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"}
+	if len(cfg.Labels) > 0 {
+		if len(cfg.Labels) != len(labels) {
+			return nil, fmt.Errorf("capability labels differ from the pinned checkpoint")
+		}
+		for i, label := range labels {
+			if cfg.Labels[i] != label {
+				return nil, fmt.Errorf("capability labels differ from the pinned checkpoint; migrate the profile with the CLI")
+			}
+		}
 	}
 	order, err := capabilityLabelOrder(labels, capabilities)
 	if err != nil {

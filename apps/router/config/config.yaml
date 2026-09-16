@@ -87,13 +87,7 @@ skill_router:
   - world_knowledge
   capability_model:
     model_id: models/modernbert-capability-classifier
-    labels:
-    - coding
-    - creative_synthesis
-    - instruction_following
-    - math_reasoning
-    - planning_agentic
-    - world_knowledge
+    labels: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
   complexity_model:
     model_id: regolo/brick-complexity-pro
     base_url: https://api.regolo.ai
