@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import { stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { SquareAutocomplete, SquareMultiAutocomplete } from '../config/editor.js';
 
@@ -7,6 +8,9 @@ const choices = [
   { name: 'beta', message: 'Beta model' },
   { name: 'gamma', message: 'Gamma model' },
 ];
+
+const indicators = (prompt: any): string[] =>
+  prompt.choices.map((choice: any) => stripVTControlCharacters(prompt.indicator(choice)));
 
 async function makePrompt(PromptClass: any, options: Record<string, unknown>): Promise<any> {
   const prompt = new PromptClass({
@@ -25,11 +29,11 @@ async function makePrompt(PromptClass: any, options: Record<string, unknown>): P
 describe('searchable square menus', () => {
   it('makes the single-select filled square follow focus and submits on Enter', async () => {
     const prompt = await makePrompt(SquareAutocomplete, { multiple: false, initial: 1 });
-    expect(prompt.choices.map((choice: any) => prompt.indicator(choice))).toEqual(['□', '■', '□']);
+    expect(indicators(prompt)).toEqual(['□', '■', '□']);
 
     await prompt.down();
     expect(prompt.focused.name).toBe('gamma');
-    expect(prompt.choices.map((choice: any) => prompt.indicator(choice))).toEqual(['□', '□', '■']);
+    expect(indicators(prompt)).toEqual(['□', '□', '■']);
     expect(await prompt.renderChoice(prompt.focused, prompt.index)).toContain('│');
 
     const enabledBeforeSpace = prompt.choices.map((choice: any) => choice.enabled);
@@ -60,7 +64,7 @@ describe('searchable square menus', () => {
       multiple: true,
       initial: ['alpha', 'gamma'],
     });
-    expect(prompt.choices.map((choice: any) => prompt.indicator(choice))).toEqual(['■', '□', '■']);
+    expect(indicators(prompt)).toEqual(['■', '□', '■']);
     expect(await prompt.renderChoice(prompt.focused, prompt.index)).toContain('│');
 
     await prompt.down();
