@@ -87,6 +87,9 @@
     },
     "brick": {
       "fields": {
+        "codex_responses_base_url": {
+          "scalar": true
+        },
         "context_window": {
           "fields": {
             "enabled": {
