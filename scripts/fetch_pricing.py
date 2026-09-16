@@ -42,12 +42,10 @@ import yaml
 
 # LiteLLM community price map: canonical per-token USD costs for Anthropic
 # (and most other providers), continuously updated with day-0 coverage.
-LITELLM_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
-    "model_prices_and_context_window.json"
-)
+LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 ANTHROPIC_PRICING_URL = "https://platform.claude.com/docs/en/about-claude/pricing"
 REGOLO_PRICING_URL = "https://regolo.ai/pricing/"
+OPENAI_PRICING_URL = "https://developers.openai.com/api/docs/models/compare"
 
 # ---------------------------------------------------------------------------
 # Anthropic models.
@@ -68,6 +66,16 @@ ANTHROPIC_MODELS: list[tuple[str, str, float, float]] = [
     ("claude-haiku", "claude-haiku-4-5", 1.0, 5.0),
     ("claude-sonnet", "claude-sonnet-5", 3.0, 15.0),
     ("claude-opus", "claude-opus-4-8", 5.0, 25.0),
+]
+
+# Official OpenAI standard API prices in USD per 1M tokens. These rows are
+# deliberately curated from OpenAI's own comparison table and must never be
+# populated from LiteLLM or another third-party feed.
+# Tuple: (model, fresh_input, cached_input, output)
+OPENAI_MODELS: list[tuple[str, float, float, float]] = [
+    ("gpt-5.6-sol", 5.0, 0.50, 30.0),
+    ("gpt-5.6-terra", 2.50, 0.25, 15.0),
+    ("gpt-5.6-luna", 1.0, 0.10, 6.0),
 ]
 
 # ---------------------------------------------------------------------------
@@ -160,8 +168,7 @@ def build_pricing_records(price_map: dict | None, fetched_at: str) -> list[dict]
             source = f"litellm:{litellm_key}"
         else:
             print(
-                f"WARNING: could not read LiteLLM price for {litellm_key}; "
-                "using static fallback price",
+                f"WARNING: could not read LiteLLM price for {litellm_key}; using static fallback price",
                 file=sys.stderr,
             )
             input_price, output_price = fallback_in, fallback_out
@@ -176,6 +183,21 @@ def build_pricing_records(price_map: dict | None, fetched_at: str) -> list[dict]
                 "currency": "USD",
                 "source_url": ANTHROPIC_PRICING_URL,
                 "source": source,
+                "fetched_at": fetched_at,
+            }
+        )
+
+    for model, input_price, cached_input_price, output_price in OPENAI_MODELS:
+        records.append(
+            {
+                "provider": "openai",
+                "model": model,
+                "input_price": input_price,
+                "cached_input_price": cached_input_price,
+                "output_price": output_price,
+                "currency": "USD",
+                "source_url": OPENAI_PRICING_URL,
+                "source": "openai_official_curated",
                 "fetched_at": fetched_at,
             }
         )
@@ -216,7 +238,7 @@ def main(output_path: Path = PRICING_YAML_PATH) -> None:
     print(
         f"Wrote {len(records)} pricing records to {output_path} "
         f"({litellm_count} litellm, {fallback_count} fallback_static, "
-        f"{curated_count} static_curated)"
+        f"{curated_count} static_curated, {len(OPENAI_MODELS)} openai_official_curated)"
     )
 
 

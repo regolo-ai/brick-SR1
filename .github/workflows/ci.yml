@@ -1,10 +1,11 @@
 name: CI
 
 on:
+  workflow_call:
   push:
-    branches: [main, brick2]
+    branches: [main, dev]
   pull_request:
-    branches: [main, brick2]
+    branches: [main, dev]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -19,9 +20,41 @@ jobs:
       - uses: actions/setup-python@v6
         with: { python-version: "3.11" }
       - run: pip install pre-commit
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: pip install yamllint
+      - run: npm install --global markdownlint-cli@0.44.0
+      - run: npm ci --ignore-scripts
+      - run: cargo build --manifest-path apps/router/candle-binding/Cargo.toml --locked --release --no-default-features
       - run: pre-commit run --all-files --show-diff-on-failure
         env:
-          SKIP: "golang-lint,cargo-check,cargo-fmt,js-ts-lint"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/router/candle-binding/target/release"
+
+  repo-hygiene:
+    name: repo hygiene (no internal plans)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: no internal plans tracked
+        run: |
+          if git ls-files | grep -E '(^|/)plan_ab_suite/|(^|/)plans/|(^|/)[^/]*_plan[^/]*\.md$|(^|/)\.brick-internal/' ; then
+            echo "::error::internal plans are tracked in git (see AGENTS.md section 1)"
+            exit 1
+          fi
+          if git ls-files | grep -E '^brick_push_rules\.md$'; then
+            echo "::error::brick_push_rules.md was removed (superseded by AGENTS.md)"
+            exit 1
+          fi
+      - name: run guard script on full tree
+        run: scripts/check_no_internal_files.sh $(git ls-files)
 
   go-test:
     name: go test (router)
@@ -35,26 +68,21 @@ jobs:
           cache-dependency-path: apps/router/src/spatial-router/go.sum
       - name: Install Rust (for CGO bindings build artifacts)
         uses: dtolnay/rust-toolchain@stable
-      - name: Build Rust bindings (shared libs needed by CGO link)
+      - name: Build CPU inference from source
+        working-directory: apps/router/candle-binding
+        run: cargo build --locked --release --no-default-features
+      - name: Verify CLI schema matches the runtime
+        working-directory: apps/router/src/spatial-router
         run: |
-          cd candle-binding && cargo build --release --no-default-features
-          cd ../ml-binding              && cargo build --release
-          cd ../nlp-binding             && cargo build --release
-          cd ..
-          mkdir -p /tmp/libs
-          cp candle-binding/target/release/libcandle_spatial_router.so /tmp/libs/
-          cp ml-binding/target/release/libml_spatial_router.so         /tmp/libs/
-          cp nlp-binding/target/release/libnlp_binding.so               /tmp/libs/
-        working-directory: apps/router
+          go run ../../../../scripts/generate_config_schema.go > "$RUNNER_TEMP/config-schema.json"
+          cmp "$RUNNER_TEMP/config-schema.json" ../../../cli/assets/config-schema.json
       - name: go vet
         working-directory: apps/router/src/spatial-router
         run: go vet ./...
       - name: go test
         working-directory: apps/router/src/spatial-router
         env:
-          CGO_CFLAGS: "-I${{ github.workspace }}/apps/router/candle-binding -I${{ github.workspace }}/apps/router/ml-binding -I${{ github.workspace }}/apps/router/nlp-binding"
-          CGO_LDFLAGS: "-L/tmp/libs -lcandle_spatial_router -lml_spatial_router -lnlp_binding"
-          LD_LIBRARY_PATH: "/tmp/libs"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/router/candle-binding/target/release"
         run: go test ./... -short
 
   rust-test:
@@ -63,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [candle-binding, ml-binding, nlp-binding]
+        crate: [candle-binding]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -72,10 +100,10 @@ jobs:
           workspaces: apps/router/${{ matrix.crate }} -> target
       - name: cargo check
         working-directory: apps/router/${{ matrix.crate }}
-        run: cargo check --no-default-features
+        run: cargo check --locked --no-default-features
       - name: cargo test
         working-directory: apps/router/${{ matrix.crate }}
-        run: cargo test --no-default-features
+        run: cargo test --locked --no-default-features
 
   python-test:
     name: pytest (packages/evals)
@@ -86,10 +114,13 @@ jobs:
         with: { python-version: "3.11" }
       - uses: astral-sh/setup-uv@v7
       - name: uv sync
-        run: uv sync --frozen 2>/dev/null || uv sync
-      - name: pytest (smoke + unit, no network)
-        run: uv run pytest packages/evals/tests -q -k "not network and not integration" -x --maxfail=3
-        continue-on-error: true   # graders need API keys; allow soft-fail until secrets wired
+        run: uv sync --frozen
+      - name: Fetch pinned evaluation source
+        run: python scripts/bootstrap_eval_sources.py
+      - name: State external-data test scope
+        run: echo "Generated dataset/report checks are separate; run make test-python-data after the evaluation pipeline."
+      - name: pytest (required offline unit tests)
+        run: uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py -q -rs
 
   node-test:
     name: npm test (apps/cli)
@@ -102,11 +133,54 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
       - name: npm ci
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: npm run build
         run: npm run build -w apps/cli
       - name: npm run lint
         run: npm run lint -w apps/cli
       - name: npm test
         run: npm test -w apps/cli
-        continue-on-error: true   # vitest harness may need TTY for some tests; smoke covered by build+lint
+
+  linux-package:
+    name: Linux x64 installed package and real inference
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts
+      - run: python3 scripts/build_runtime.py
+      - name: Pack and install actual artifacts
+        run: |
+          mkdir -p dist/tarballs dist/installed
+          npm pack ./dist/runtime-linux-x64 --pack-destination dist/tarballs
+          npm pack ./apps/cli --pack-destination dist/tarballs
+          npm install --prefix dist/installed --foreground-scripts --no-audit --no-fund dist/tarballs/*.tgz
+      - name: Check published package contents
+        run: python3 scripts/check_npm_package.py dist/tarballs/*.tgz
+      - name: Install and execute without developer tools on PATH
+        run: python3 scripts/install_linux_acceptance.py dist/tarballs/*.tgz
+      - name: Verify process lifecycle with installed assets
+        run: node scripts/test_native_runtime.mjs dist/installed/node_modules/@regoloai/brick
+      - name: Verify unavailable inference preserves direct forwarding
+        run: node scripts/test_native_unavailable.mjs dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/brick-runtime
+      - name: Verify update failure and explicit rollback
+        run: node scripts/test_native_update.mjs dist/installed/node_modules/@regoloai/brick
+      - name: Verify real inference corpus and C ABI
+        run: |
+          models=$(node -e "process.stdout.write(require('./dist/installed/node_modules/@regoloai/brick/scripts/runtime-install.cjs').installedRuntime().models)")
+          python3 scripts/test_native_model.py dist/installed/node_modules/@regoloai/brick-runtime-linux-x64/bin/libcandle_spatial_router.so "$models"
+      - name: Verify runtime native dependencies and exports
+        run: |
+          ldd dist/runtime-linux-x64/bin/brick-runtime
+          ldd dist/runtime-linux-x64/bin/libcandle_spatial_router.so
+          nm -D --defined-only dist/runtime-linux-x64/bin/libcandle_spatial_router.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-npm
+          path: dist/tarballs/*.tgz

@@ -1,135 +1,79 @@
-# Quickstart B. Install and use the `brick` CLI
+# Run Brick locally
 
-Goal: install `@regolo-ai/brick` from npm, run a guided init, start the gateway, chat with it. Total time: ~5 minutes.
-
-## Prerequisites
-
-- Node.js 20 or ≥ 22 (`node --version`).
-- Docker running (the CLI orchestrates Docker compose under the hood).
-- A `REGOLO_API_KEY` (or set up your own providers during `brick init`).
-
-## Install
-
-Install from npm:
+The native npm bundle contains the CPU runtime. It requires Node.js 20 or 22+;
+users do not need Docker, Python, Go, Rust, or a compiler. Linux x64 is the
+current verification target: Ubuntu 24.04, glibc 2.39 or newer. The Linux
+Candle library requires glibc 2.39; musl/Alpine and older glibc distributions
+are not supported by this artifact. The installer checks that the executable
+loads before downloading weights. Other platform packages require execution
+testing before publication.
 
 ```bash
-npm install -g @regoloai/brick
-brick --version
+npm install --global ./regoloai-brick-runtime-linux-x64-3.0.0.tgz \
+  ./regoloai-brick-3.0.0.tgz
+brick profile create work
+brick profile edit work
+brick start work
+brick status work
+brick logs work
+brick restart work
+brick stop work
 ```
 
-For development from source:
+Installation downloads the pinned ModernBERT assets, verifies SHA-256 checksums,
+and checks real inference before completing. Installation requires network
+access and approximately 0.8 GB for model assets. The assets belong to the npm
+installation and are shared across profiles. An installation made with lifecycle
+scripts disabled is incomplete: reinstall with scripts enabled. Starting Brick
+never downloads model weights.
 
-```bash
-git clone https://github.com/regolo-ai/brick-SR1 && cd brick-SR1
-cd apps/cli && npm install && npm run build
-npm link
-```
+`start` launches a detached process on loopback and waits for routing readiness
+before connecting an official harness. Nothing starts automatically after a
+computer reboot. `restart` validates the candidate configuration before stopping
+the current process; a failed replacement attempts to restore the previous
+bundle and configuration. Use `brick logs <profile>` for startup diagnostics.
 
-## Init a profile
+A reachable `/health` endpoint does not imply that classification is ready.
+Its `routing_ready` field reports model initialization. Classification-dependent
+requests return HTTP 503 if initialization fails; direct Codex forwarding
+remains
+available.
 
-```bash
-brick init
-```
+Profiles live in `~/.brick/profiles/<name>` (or `BRICK_HOME/profiles/<name>`):
 
-The wizard prompts for:
-- Profile name (e.g. `dev`, `prod`).
-- API keys (stored in `~/.brick/profiles/<name>/.env`, mode 0600).
-- Provider selection (Regolo, OpenAI, OpenRouter, local).
-- Backend models to expose in the pool.
-- Routing knobs (capability/complexity classifiers, cost penalty β, etc.).
+- `config.yaml` and `.env`: routing settings and credentials.
+- `backups/`: exact configuration and credential backups from migrations.
+- History, economics snapshots and pricing: persistent profile data.
+- `runtime/`: process identity, immutable configuration snapshots and logs.
 
-Result on disk:
+`brick clear <profile>` stops the runtime and clears its operational state.
+Configuration, credentials and persistent history remain. `brick stop codex`
+detaches future Codex launches but keeps the runtime for open sessions;
+`brick clear codex` also stops that runtime.
 
-```
-~/.brick/
-├── state.json                          # active/running profile
-└── profiles/
-    └── dev/
-        ├── config.yaml                 # router config
-        ├── docker-compose.yml          # rendered template (mounts config + env)
-        ├── .env                        # API keys (chmod 600)
-        └── models/                     # optional volume for downloaded models
-```
+The complexity classifier and final models use configured APIs. Classifier,
+local harness and provider credentials are separate. `use_client_key: true`
+selects the current request credential explicitly and never falls back to a
+server key. Endpoint domains do not select an authentication mode.
 
-## Start the gateway
+Legacy profiles receive a versioned migration with backups. Profiles that need
+the retired local complexity server must first be configured with an API
+endpoint
+and credential. Unknown fields produce an error before the configuration is
+modified. Existing legacy containers are not managed by the native runtime.
 
-```bash
-brick serve
-```
+## Update and restore
 
-This pulls `docker.io/regolo/brick:latest` if missing, then runs `docker compose up -d`. The CLI waits up to 90s for `GET /health` on `localhost:18000` (default port from your profile).
+`brick update --to <version>` saves the installed CLI, runtime and model assets
+under `~/.brick/bundles/` before installing the new version. Active profiles are
+restarted only after installation succeeds. Installation failure restores the
+previous files; startup failure attempts to launch the saved runtime. A direct
+`npm install --global` does not restart profiles or alter harness wiring.
 
-Check state:
+Keep the reported backup directory until the new version has been verified.
+It contains the previous `cli/`, `runtime/`, and `restore.json` paths. Do not
+remove assets referenced by an active profile's `runtime/process.json`.
 
-```bash
-brick status            # active profile + running profile + container state
-brick logs              # tail container logs
-```
-
-## Use it
-
-```bash
-# Interactive TUI chat (bottom input, scrolling history, Claude Code-style)
-brick chat
-
-# One-shot completion
-brick generate "What's the capital of Lombardy?"
-
-# Routing decision only (no generation)
-brick route "compute eigenvalues of [[2,1],[1,3]]" --no-generate --json
-
-# Repeated routing to compare latency
-brick route "hello" --repeat 5
-```
-
-Useful flags:
-- `--profile <name>`: pin a non-active profile for one command.
-- `--thinking off|low|med|high|auto`: request reasoning effort (`X-Brick-Thinking` header).
-- `--json`: machine-readable output.
-
-## Manage profiles and configuration
-
-```bash
-brick config list             # all profiles
-brick config use <name>       # switch active
-brick config edit             # $EDITOR on config.yaml of active profile
-brick config new <name>       # create a fresh profile
-brick config remove <name>    # delete
-
-brick add provider <name>     # interactive add to current profile
-brick add model <id>
-brick remove model <id>
-```
-
-## Stop / clean up
-
-```bash
-brick stop                    # docker compose stop (container kept)
-brick down                    # docker compose down (container removed)
-```
-
-## Use a custom Docker image
-
-Set `BRICK_IMAGE` env var to override the default:
-
-```bash
-export BRICK_IMAGE=docker.io/regolo/brick:2.3.0
-brick serve
-```
-
-## Anthropic passthrough (optional, for Claude Code integration)
-
-The router exposes an Anthropic-compatible `/v1/messages` endpoint that proxies to the Brick virtual model. Useful for tools that expect Anthropic API (e.g. Claude Code):
-
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:18000
-export ANTHROPIC_API_KEY=$REGOLO_API_KEY
-claude   # Claude Code now talks to Brick
-brick claude status   # show wiring + recent routing stats
-```
-
-## Next
-
-- Reproduce the paper: [eval.md](eval.md).
-- Quickest path without install: [quick.md](quick.md).
-- Router architecture details: [apps/router/README.md](../../apps/router/README.md).
+To restore the complete saved installation, run
+`brick update --rollback /absolute/path/to/bundle`, then explicitly restart
+the desired profiles. The rollback command leaves running profiles untouched.

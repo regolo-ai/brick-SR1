@@ -222,7 +222,7 @@ wandb/
 **/.pytest_cache/
 **/.ruff_cache/
 **/.mypy_cache/
-uv.lock
+# Commit the Python workspace lockfile for reproducible installs.
 packages/*/dist/
 packages/*/build/
 
@@ -258,6 +258,27 @@ docs/paper/build/
 # Generated test reports
 apps/cli/test/random-session-report.md
 
-# plan_ab_suite: output e working copy della fixture
-plan_ab_suite/out/
-plan_ab_suite/.work/
+# Internal plans / dev notes — NEVER publish (see AGENTS.md)
+plan_ab_suite/
+**/plan_ab_suite/
+plans/
+**/plans/
+**/*_plan*.md
+.brick-internal/
+
+# Evaluation dependencies fetched at pinned revisions by bootstrap_eval_sources.py
+/packages/evals/external/
+
+# CLI copies generated from root release assets
+/apps/cli/assets/pricing.yaml
+/apps/cli/NOTICE
+/apps/cli/THIRD_PARTY_NOTICES.md
+
+# Outputs from maintained router comparisons
+/baseline-output/
+
+# Reviewed instruction graders required by the evaluation pipeline.
+!/packages/evals/vendor/
+
+# Temporary CLI entrypoint test packages
+apps/cli/.entrypoint-test-*/

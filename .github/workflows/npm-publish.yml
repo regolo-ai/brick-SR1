@@ -1,77 +1,49 @@
-name: npm publish (@regoloai/brick)
-
+name: npm publish verified bundles
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. 2.0.0, 2.0.1-rc.1)"
-        required: true
-
 concurrency:
-  group: npm-publish-${{ github.ref }}
+  group: npm-publish
   cancel-in-progress: false
-
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   publish:
-    name: publish to npm
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # for npm provenance (Sigstore)
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Enforce main-only publishing
-        shell: bash
+      - name: Require main
         run: |
-          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
           git fetch --no-tags origin main
-          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" != "main" ]]; then
-            echo "npm publishing is allowed only from main (current branch: $GITHUB_REF_NAME)." >&2
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "npm publishing is allowed only for commits contained in main." >&2
-            exit 1
-          fi
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@v6
         with:
-          # npm Trusted Publishing (OIDC) requires npm >=11.5.1, which is
-          # bundled with Node 22.14+; use the current LTS line explicitly.
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
-
-      # Install from the repo-root lockfile (npm workspaces). apps/cli has no
-      # standalone lockfile; the root package-lock.json already pins the CLI
-      # workspace, so a single `npm ci` at the root is reproducible and covers
-      # apps/cli via the workspace graph.
-      - name: npm ci
-        run: npm ci
-
-      - name: Build
-        run: npm run build:cli
-
-      - name: Verify package contents
-        working-directory: apps/cli
-        run: npm pack --dry-run
-
-      - name: Publish (idempotent)
-        working-directory: apps/cli
-        shell: bash
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-npm'
+          path: release
+          merge-multiple: true
+      - name: Require every advertised runtime to have passed execution
         run: |
-          set -euo pipefail
-          version=$(node -p "require('./package.json').version")
-          published=$(npm view "@regoloai/brick@${version}" version 2>/dev/null || true)
-          if [[ "$published" == "$version" ]]; then
-            echo "@regoloai/brick@${version} is already published; skipping duplicate transparency-log submission."
-          else
-            npm publish --access public
-          fi
+          version=$(node -p "require('./apps/cli/package.json').version")
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            test -f "release/regoloai-brick-runtime-${target}-${version}.tgz" || {
+              echo "Missing verified $target artifact; publication is blocked."
+              exit 1
+            }
+          done
+      - name: Publish verified runtime packages, then CLI
+        run: |
+          for bundle in release/*-runtime-*.tgz; do
+            npm publish "$bundle" --access public --provenance
+          done
+          version=$(node -p "require('./apps/cli/package.json').version")
+          npm publish "release/regoloai-brick-${version}.tgz" --access public --provenance

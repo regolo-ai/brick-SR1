@@ -11,6 +11,7 @@ Usage:
     GITHUB_TOKEN=... python scripts/gen_star_history.py \
         --repo regolo-ai/brick-SR1 --out docs/assets/star-history
 """
+
 from __future__ import annotations
 
 import argparse
@@ -86,14 +87,28 @@ def nice_ticks(vmax: int, target: int = 4) -> list[int]:
 
 THEMES = {
     "light": dict(
-        bg="transparent", axis="#57606a", grid="#d0d7de", text="#57606a",
-        line="#e3b341", fill_top="#e3b341", fill_bot="#e3b341",
-        fill_top_op="0.35", fill_bot_op="0.02", dot="#d4a017",
+        bg="transparent",
+        axis="#57606a",
+        grid="#d0d7de",
+        text="#57606a",
+        line="#e3b341",
+        fill_top="#e3b341",
+        fill_bot="#e3b341",
+        fill_top_op="0.35",
+        fill_bot_op="0.02",
+        dot="#d4a017",
     ),
     "dark": dict(
-        bg="transparent", axis="#8b949e", grid="#30363d", text="#8b949e",
-        line="#e3b341", fill_top="#e3b341", fill_bot="#e3b341",
-        fill_top_op="0.30", fill_bot_op="0.02", dot="#f0c419",
+        bg="transparent",
+        axis="#8b949e",
+        grid="#30363d",
+        text="#8b949e",
+        line="#e3b341",
+        fill_top="#e3b341",
+        fill_bot="#e3b341",
+        fill_top_op="0.30",
+        fill_bot_op="0.02",
+        dot="#f0c419",
     ),
 }
 
@@ -122,7 +137,7 @@ def render_svg(series: list[tuple[datetime, int]], theme: str, repo: str) -> str
     # step line (star history uses a stepped curve: value jumps at each star)
     line_cmds = [f"M {pts[0][0]:.1f} {pts[0][1]:.1f}"]
     for i in range(1, len(pts)):
-        line_cmds.append(f"L {pts[i][0]:.1f} {pts[i-1][1]:.1f}")
+        line_cmds.append(f"L {pts[i][0]:.1f} {pts[i - 1][1]:.1f}")
         line_cmds.append(f"L {pts[i][0]:.1f} {pts[i][1]:.1f}")
     line_path = " ".join(line_cmds)
     base_y = mt + ph
@@ -139,42 +154,39 @@ def render_svg(series: list[tuple[datetime, int]], theme: str, repo: str) -> str
     for tk in ticks:
         y = py(tk)
         grid_lines.append(
-            f'<line x1="{ml}" y1="{y:.1f}" x2="{ml+pw}" y2="{y:.1f}" '
+            f'<line x1="{ml}" y1="{y:.1f}" x2="{ml + pw}" y2="{y:.1f}" '
             f'stroke="{c["grid"]}" stroke-width="1" stroke-dasharray="3 3"/>'
         )
         y_labels.append(
-            f'<text x="{ml-10}" y="{y+4:.1f}" text-anchor="end" '
-            f'font-size="12" fill="{c["text"]}">{tk}</text>'
+            f'<text x="{ml - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="12" fill="{c["text"]}">{tk}</text>'
         )
     x_labels = []
     for x, lbl in xticks:
         x_labels.append(
-            f'<text x="{x:.1f}" y="{mt+ph+22}" text-anchor="middle" '
-            f'font-size="12" fill="{c["text"]}">{lbl}</text>'
+            f'<text x="{x:.1f}" y="{mt + ph + 22}" text-anchor="middle" font-size="12" fill="{c["text"]}">{lbl}</text>'
         )
 
     lx, ly = pts[-1]
     grad = f"grad-{theme}"
-    font = ("-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,"
-            "sans-serif")
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="{font}" role="img" aria-label="Star history chart for {repo}">
+    font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="{font}" role="img" aria-label="Star history chart for {repo}">
   <defs>
     <linearGradient id="{grad}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="{c['fill_top']}" stop-opacity="{c['fill_top_op']}"/>
-      <stop offset="100%" stop-color="{c['fill_bot']}" stop-opacity="{c['fill_bot_op']}"/>
+      <stop offset="0%" stop-color="{c["fill_top"]}" stop-opacity="{c["fill_top_op"]}"/>
+      <stop offset="100%" stop-color="{c["fill_bot"]}" stop-opacity="{c["fill_bot_op"]}"/>
     </linearGradient>
   </defs>
-  <text x="{ml}" y="26" font-size="15" font-weight="600" fill="{c['text']}">{repo} · star history</text>
-  <line x1="{ml}" y1="{mt+ph}" x2="{ml+pw}" y2="{mt+ph}" stroke="{c['axis']}" stroke-width="1.2"/>
-  <line x1="{ml}" y1="{mt}" x2="{ml}" y2="{mt+ph}" stroke="{c['axis']}" stroke-width="1.2"/>
-  {''.join(grid_lines)}
+  <text x="{ml}" y="26" font-size="15" font-weight="600" fill="{c["text"]}">{repo} · star history</text>
+  <line x1="{ml}" y1="{mt + ph}" x2="{ml + pw}" y2="{mt + ph}" stroke="{c["axis"]}" stroke-width="1.2"/>
+  <line x1="{ml}" y1="{mt}" x2="{ml}" y2="{mt + ph}" stroke="{c["axis"]}" stroke-width="1.2"/>
+  {"".join(grid_lines)}
   <path d="{area_path}" fill="url(#{grad})"/>
-  <path d="{line_path}" fill="none" stroke="{c['line']}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="{lx:.1f}" cy="{ly:.1f}" r="4.5" fill="{c['dot']}"/>
-  {''.join(y_labels)}
-  {''.join(x_labels)}
+  <path d="{line_path}" fill="none" stroke="{c["line"]}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="{lx:.1f}" cy="{ly:.1f}" r="4.5" fill="{c["dot"]}"/>
+  {"".join(y_labels)}
+  {"".join(x_labels)}
 </svg>
-'''
+"""
 
 
 def main() -> int:
@@ -186,10 +198,7 @@ def main() -> int:
 
     if args.mock:
         with open(args.mock) as f:
-            times = sorted(
-                datetime.fromisoformat(s.replace("Z", "+00:00"))
-                for s in json.load(f)
-            )
+            times = sorted(datetime.fromisoformat(s.replace("Z", "+00:00")) for s in json.load(f))
     else:
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         if not token:
@@ -198,8 +207,7 @@ def main() -> int:
         try:
             times = fetch_stargazers(args.repo, token)
         except urllib.error.HTTPError as e:
-            print(f"ERROR: GitHub API {e.code}: {e.read().decode()[:200]}",
-                  file=sys.stderr)
+            print(f"ERROR: GitHub API {e.code}: {e.read().decode()[:200]}", file=sys.stderr)
             return 1
 
     series = build_series(times)

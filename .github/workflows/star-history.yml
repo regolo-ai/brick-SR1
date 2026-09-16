@@ -42,5 +42,5 @@ jobs:
             exit 0
           fi
           git add docs/assets/star-history
-          git commit -m "chore: refresh star history chart [skip ci]"
+          git commit -m "chore: refresh star history chart"
           git push
