@@ -11,15 +11,15 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_RESULTS = Path("./data/dataset_a/results/train.jsonl.gz")
-DEFAULT_OUT = Path("external_comparison/predictions/brick_debug.jsonl")
+DEFAULT_OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_debug.jsonl"
 DEFAULT_URL = "http://localhost:18000/v1/chat/completions"
 MODEL_MAP = {
     "qwen/qwen3.5-9b": "qwen",
@@ -117,8 +117,12 @@ def call_brick(
         "brick_selected_raw": selected_raw,
         "brick_route_reason": route_reason,
         "brick_tau_query": parse_float_header(response_headers, "X-Brick-Tau-Query") if response_headers else None,
-        "brick_effective_tau_query": parse_float_header(response_headers, "X-Brick-Effective-Tau-Query") if response_headers else None,
-        "brick_routing_preference": parse_float_header(response_headers, "X-Brick-Routing-Preference") if response_headers else None,
+        "brick_effective_tau_query": parse_float_header(response_headers, "X-Brick-Effective-Tau-Query")
+        if response_headers
+        else None,
+        "brick_routing_preference": parse_float_header(response_headers, "X-Brick-Routing-Preference")
+        if response_headers
+        else None,
         "brick_debug": debug,
     }
     return out, status, latency_ms, err

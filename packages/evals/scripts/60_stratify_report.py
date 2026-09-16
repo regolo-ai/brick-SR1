@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""60 - Stratify report: markdown + JSON con distribuzioni per dimension/source/etc.
-
-Asserzioni hard: count corretti, no duplicate query_id, schema valido.
-"""
+"""Write Markdown and JSON reports of dimension, source and metadata distributions."""
 
 from __future__ import annotations
 
@@ -47,7 +44,7 @@ def main():
     # Asserzioni
     qids = [r["query_id"] for r in rows]
     dup_qids = [k for k, v in Counter(qids).items() if v > 1]
-    queries = [r["query"][:200] for r in rows]  # tronca per dedup duplicate detection
+    queries = [r["query"][:200] for r in rows]  # Truncate for duplicate-prefix detection
     dup_queries = [k for k, v in Counter(queries).items() if v > 1]
 
     by_dim = Counter(r["dimension"] for r in rows)
@@ -134,7 +131,7 @@ def main():
         print(f"[FAIL] duplicate query_id: {len(dup_qids)}")
         fail = True
     if dup_queries:
-        print(f"[WARN] duplicate queries (200-prefix): {len(dup_queries)} (può essere normale per IF templates)")
+        print(f"[WARN] duplicate queries (200-prefix): {len(dup_queries)} (can be expected for instruction templates)")
     if schema_errors:
         print(f"[FAIL] schema errors: {len(schema_errors)}")
         fail = True

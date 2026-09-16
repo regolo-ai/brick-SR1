@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """00 - Load Dataset A (results + verbose) from HF and inspect schema."""
+
 from __future__ import annotations
 
 import os
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-TOKEN_PATH = Path("/root/.hf_token_regolo")
+TOKEN_PATH = Path.home() / ".hf_token_regolo"
 if TOKEN_PATH.exists():
     os.environ["HF_TOKEN"] = TOKEN_PATH.read_text().strip()
 
@@ -30,7 +31,7 @@ def main():
         s = str(v)
         print(f"  [{k}] = {s[:160]}{'...' if len(s) > 160 else ''}")
 
-    print(f"\n=== response coverage in verbose ===")
+    print("\n=== response coverage in verbose ===")
     for m in ("qwen", "ds4", "kimi"):
         col = f"{m}_response"
         if col in ds_verbose.column_names:

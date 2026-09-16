@@ -1,47 +1,36 @@
 #!/usr/bin/env python3
-"""FrugalGPT zero-shot run su Dataset A.
+"""Evaluate the pretrained HEADLINES scorer on cached Dataset A responses.
 
-Strategy:
-- Carica DistilBERT scorer pretrained dal repo FrugalGPT (HEADLINES_Model2024).
-- Cascade qwen -> ds4 -> kimi usando cached responses dal subset verbose.
-- Per ogni query: scorer.predict(query+response_i); se score > 1 - threshold_i, accetta modello i.
-- Output: modello scelto + #call cascade.
-
-NOTA: scorer pretrained su (HEADLINES_questions, gpt-3.5_responses). Su nostro setup
-(Dataset A queries, qwen/ds4/kimi responses) è transfer learning charity-mode.
-Risultato è weak baseline che documenta come FrugalGPT non sia plug-and-play.
-
-Threshold da cascade_strategy.json del paper (HEADLINES setup). Vedi STRATEGY_PATH.
+Cascade order: qwen, ds4, kimi. Accept a response when its score exceeds
+one minus the corresponding threshold from cascade_strategy.json.
+The scorer is transferred across tasks and model families without fitting
+on Dataset A. This is an adapted comparison, not an upstream reproduction.
+Set BRICK_FRUGAL_STRATEGY to the downloaded HEADLINES_Model2024 directory.
 """
+
 from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, DistilBertTokenizerFast
 
-os.environ.setdefault("HF_TOKEN", Path("/root/.hf_token_regolo").read_text().strip()
-                     if Path("/root/.hf_token_regolo").exists() else "")
-
-from datasets import load_dataset
-
 REPO = "massaindustries/dataset-A-routing"
-OUT = Path("/root/forkGO/external_comparison/predictions/frugalgpt.jsonl")
+OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / Path("frugalgpt.jsonl")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
-STRATEGY_PATH = Path("/root/forkGO/external_comparison/FrugalGPT/strategy/HEADLINES_Model2024")
-SCORER_PATH = STRATEGY_PATH / "openaichat/gpt-4o-mini"  # charity: 1 scorer per tutti (cheapest, most generic)
+STRATEGY_PATH = Path(os.environ["BRICK_FRUGAL_STRATEGY"])
+SCORER_PATH = STRATEGY_PATH / "openaichat/gpt-4o-mini"  # one transferred scorer shared across all three models
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TOKENIZER = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
 
 CASCADE = ["qwen", "ds4", "kimi"]
-# Budget point dal cascade_strategy.json del paper. Charity: usiamo budget medio
-# che mappa a thres ~[0.32, 0.86, 1.0] => promuove cascade utilizzo bilanciato.
+# Fixed medium-budget point from the supplied cascade_strategy.json.
 BUDGET_KEY = "0.00022263157894736844"
 
 
@@ -51,7 +40,7 @@ def scorer_text(query: str, response: str) -> str:
 
 
 def load_scorer():
-    """Carica DistilBERT pretrained dal modello di reference (gpt-4o-mini)."""
+    """Load the reference gpt-4o-mini DistilBERT scorer."""
     print(f"[scorer] loading from {SCORER_PATH}")
     model = AutoModelForSequenceClassification.from_pretrained(str(SCORER_PATH))
     model = model.to(DEVICE).eval()
@@ -70,8 +59,7 @@ def predict_score(model, query: str, response: str) -> float:
 
 
 def load_cascade_thresholds() -> dict[str, float]:
-    """Estrae thresholds dal cascade_strategy.json budget point BUDGET_KEY.
-    Mappa thres_list paper (gpt-4o-mini, llama70b, gpt-4-turbo) -> nostri (qwen, ds4, kimi)."""
+    """Extract thresholds from cascade_strategy.json at the selected budget point."""
     strat_file = STRATEGY_PATH / "cascade_strategy.json"
     data = json.loads(strat_file.read_text())
     budget = data["budget"][BUDGET_KEY]
@@ -104,7 +92,7 @@ def main():
     t0 = time.time()
     n_new = 0
     with OUT.open("a") as fout:
-        for i, row in enumerate(ds):
+        for _i, row in enumerate(ds):
             qid = row["query_id"]
             if qid in done_qids:
                 continue
@@ -163,7 +151,7 @@ def main():
                 elapsed = time.time() - t0
                 rate = n_new / max(elapsed, 1e-9)
                 eta = (len(ds) - len(done_qids) - n_new) / max(rate, 1e-9)
-                print(f"[{n_new}] rate={rate:.2f}/s, eta={eta/60:.1f}min")
+                print(f"[{n_new}] rate={rate:.2f}/s, eta={eta / 60:.1f}min")
 
     print(f"[done] processed {n_new} rows in {(time.time() - t0) / 60:.1f} min")
 

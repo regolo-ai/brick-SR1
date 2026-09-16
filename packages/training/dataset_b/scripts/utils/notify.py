@@ -1,9 +1,10 @@
-"""Gmail SMTP notifier with throttle. Single recipient: francescomassa06@gmail.com."""
+"""Opt-in SMTP progress notifications with throttling."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import smtplib
 import ssl
 import sys
@@ -11,14 +12,15 @@ import time
 from email.message import EmailMessage
 from pathlib import Path
 
-PASSWORD_FILE = Path("/root/.gmail_app_password")
-ADDR = "francescomassa06@gmail.com"
+PASSWORD_FILE = Path(os.environ.get("BRICK_SMTP_PASSWORD_FILE", str(Path.home() / ".gmail_app_password")))
+FROM = os.environ.get("BRICK_NOTIFY_FROM", "")
+TO = os.environ.get("BRICK_NOTIFY_TO", "")
 THROTTLE_FILE = Path(__file__).resolve().parent.parent.parent / "data" / ".last_email_ts"
 MIN_INTERVAL_SEC = 15 * 60
 
 
 def _load_password() -> str:
-    return PASSWORD_FILE.read_text().strip().replace(" ", "")
+    return os.environ.get("BRICK_SMTP_PASSWORD") or PASSWORD_FILE.read_text().strip().replace(" ", "")
 
 
 def _last_send_ts() -> float:
@@ -37,17 +39,19 @@ def _record_send(ts: float) -> None:
 
 def send(subject: str, body: str, *, force: bool = False) -> bool:
     """Send email. Returns True if sent, False if throttled."""
+    if not FROM or not TO:
+        return False
     now = time.time()
     if not force and (now - _last_send_ts()) < MIN_INTERVAL_SEC:
         return False
     msg = EmailMessage()
     msg["Subject"] = f"[Dataset B] {subject}"
-    msg["From"] = ADDR
-    msg["To"] = ADDR
+    msg["From"] = FROM
+    msg["To"] = TO
     msg.set_content(body)
     with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
         s.starttls(context=ssl.create_default_context())
-        s.login(ADDR, _load_password())
+        s.login(FROM, _load_password())
         s.send_message(msg)
     _record_send(now)
     return True
@@ -63,9 +67,7 @@ def main() -> int:
     if args.test:
         ok = send(
             "Pipeline orchestrator online",
-            "Notify utility verified. Cluster qwen-bench (4xL40S). "
-            "Ralph orchestrator about to bootstrap. "
-            "Next email at first major milestone.",
+            "Training progress notifications are configured.",
             force=True,
         )
     else:

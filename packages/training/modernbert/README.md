@@ -1,44 +1,45 @@
-# ModernBERT capability classifier: Training pipeline
+# ModernBERT capability training
 
-Fine-tune ModernBERT-{base,large} on `massaindustries/dataset-B-modernbert-train` as a 6-output sigmoid multi-label classifier for the Brick router.
+This pipeline trains a six-output sigmoid classifier on
+`massaindustries/dataset-B-modernbert-train`. Training does not change the npm
+release checkpoint. See the [workspace guide](../README.md) for locked dependency
+installation, credentials, Dataset B generation and the release boundary.
 
-## Pipeline (10 step)
+## Local smoke and sweeps
 
-1. **Preconditions**: `sky status` shows qwen-bench UP; HF dataset accessible.
-2. **Manual annotation**: `python scripts/manual_annotate_200.py` → Claude-judged `sample_200_filled.csv`. Then `python ../scripts/07_compute_kappa.py` → target κ ≥ 0.6.
-3. **Cluster setup**: `sky launch sky/train.yaml -c qwen-bench --no-setup` (already UP, just sync). Installs deps + auth.
-4. **Smoke train**:
-   ```bash
-   sky exec qwen-bench "cd training && python scripts/train_modernbert.py --smoke --model-size base"
-   ```
-5. **W&B Sweep**:
-   ```bash
-   SWEEP=$(wandb sweep --project dataset-b-modernbert configs/sweep.yaml | tail -1 | awk '{print $NF}')
-   for i in 0 1 2 3; do
-       sky exec qwen-bench "CUDA_VISIBLE_DEVICES=$i wandb agent $SWEEP" &
-   done
-   ```
-6. **Top-3 select**: `python scripts/select_top3.py --project dataset-b-modernbert --sweep $SWEEP`
-7. **Eval on human_eval (200 Claude)**: `for r in rank1 rank2 rank3; do python scripts/eval_human.py --ckpt outputs/top3/$r/best --output outputs/top3/$r/eval_human.json; done`
-8. **Sanity check winner**: `python scripts/sanity_check.py --ckpt outputs/top3/rank1/best`
-9. **Export Candle-ready**: `python scripts/export_for_candle.py --ckpt outputs/top3/rank1/best --output outputs/modernbert-winner/best`
-10. **Push HF + bench**: `python scripts/push_winner.py --ckpt outputs/modernbert-winner/best --repo massaindustries/modernbert-capability-classifier && python scripts/bench_latency.py --ckpt outputs/modernbert-winner/best`
+From the repository root, with GPU capacity and dataset access:
 
-## Pass criteria
+```bash
+uv sync --frozen --package brick-training
+uv run --frozen --package brick-training python packages/training/modernbert/scripts/train_modernbert.py --smoke --model_size base --no_wandb
+```
 
-| Step | Threshold |
-|---|---|
-| Manual annotation κ | macro ≥ 0.6 |
-| Sweep best run val | pearson_macro ≥ 0.55 |
-| Winner human_eval | pearson_macro ≥ 0.60, mae_macro ≤ 0.15, no dim < 0.30 |
-| Sanity semantic | 6/6 match |
-| Latency base | p50 < 5ms, p99 < 25ms |
+For sweeps, run `wandb sweep configs/sweep.yaml` and the resulting agent through
+`uv run --frozen --package brick-training` from this directory. The scheduler
+must assign GPUs to each agent. `sky/train.yaml` is only for provisioning new
+external capacity and runs a single-GPU smoke job.
 
-## Hyperparams fixed (sweep variables in `configs/sweep.yaml`)
+## Checkpoint selection and export
 
-- Adam β1=0.9, β2=0.98, ε=1e-6 (AnswerDotAI recipe)
-- bf16 + FlashAttention-2 (no fp16: issue #35988)
-- `lr_scheduler_type=linear`, `optim=adamw_torch_fused`
-- max_seq_length=512, max_grad_norm=1.0, seed=42
-- per_device_bs: 32 (base), 16 (large, gradacc=2) → effective 128
-- EarlyStoppingCallback(patience=2) on pearson_macro
+Run these tools through the same locked environment from this directory:
+
+```bash
+python scripts/select_top3.py --project ENTITY/PROJECT --sweep SWEEP_ID
+python scripts/eval_human.py --ckpt outputs/top3/rank1/best --output outputs/top3/rank1/eval_human.json
+python scripts/sanity_check.py --ckpt outputs/top3/rank1/best
+python scripts/export_for_candle.py --ckpt outputs/top3/rank1/best --output outputs/modernbert-winner/best
+python scripts/bench_latency.py --ckpt outputs/modernbert-winner/best
+```
+
+Human evaluation requires an annotated CSV, accepted via `--human-eval-csv`.
+`manual_annotate_200.py` prepares annotation with an external judge.
+`push_winner.py --ckpt PATH --repo OWNER/REPOSITORY` explicitly publishes a
+checkpoint; it is never run during install, build or CI.
+
+## Training settings
+
+The script uses PyTorch SDPA, bf16 on CUDA, seed 42, a maximum sequence length of
+512 and early stopping on `pearson_macro`. The sweep varies model size, learning
+rate, weight decay, warmup and epoch count. CPU execution disables bf16.
+Measured model quality and latency must come from a completed experiment;
+o historical target or sweep setting is a release acceptance result.

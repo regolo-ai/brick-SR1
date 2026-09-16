@@ -38,7 +38,7 @@ def mask_gated_rows(rows: list[dict]) -> list[dict]:
 
 
 def serialize_for_arrow(rows: list[dict]) -> list[dict]:
-    """Serializza expected_answer + few_shot_examples come JSON string (pyarrow uniform schema)."""
+    """Serialize nested answers and few-shot examples as JSON strings for a uniform Arrow schema."""
     out = []
     for r in rows:
         r2 = dict(r)
@@ -76,9 +76,9 @@ def make_dataset_card(rows: list[dict]) -> str:
     lines.append("")
     lines.append(f"**Total rows:** {len(rows)} | **Gated (masked) rows:** {n_gated}")
     lines.append("")
-    lines.append("Dataset stratificato per valutare 3 modelli LLM e 3 sistemi di routing su 6 capability.")
+    lines.append("Stratified dataset evaluating three models and three routing systems across six capabilities.")
     lines.append("")
-    lines.append("## Pool modelli (per metadata tokens)")
+    lines.append("## Model pool (token metadata)")
     lines.append("")
     lines.append("| Alias | Tokenizer HF | Note |")
     lines.append("|---|---|---|")
@@ -128,7 +128,7 @@ def make_dataset_card(rows: list[dict]) -> str:
                     "payload": "typed per type (JSON-encoded for Arrow uniform schema)",
                 },
                 "few_shot_examples": "list[dict] (JSON-encoded for Arrow uniform schema)",
-                "evaluation_protocol_id": "string (vedi protocols.yaml)",
+                "evaluation_protocol_id": "string (see protocols.yaml)",
                 "gated": "bool (true = query='<masked>' for GAIA/GPQA license compliance)",
                 "license": "per-source",
                 "length_band": "short|med|long",
@@ -142,19 +142,19 @@ def make_dataset_card(rows: list[dict]) -> str:
     lines.append("## Reproducibility caveats")
     lines.append("")
     lines.append(
-        "- Tokens: Qwen tokenizer ufficiale (esatto). DeepSeek + Kimi sono proxy via V3 / K2.5 → mismatch ±2-5%."
+        "- Tokens: exact Qwen tokenizer; DeepSeek and Kimi counts use V3/K2.5 proxy tokenizers and can differ."
     )
     lines.append(
-        "- Creative custom (`Custom-Validated`): generato via Regolo `qwen3.5-122b` (fuori-pool). Anthropic API non supporta seed; il file `generated.jsonl` è input statico (SHA256 in lockfile)."
+        "- Creative custom (`Custom-Validated`): generated through an external Regolo judge model. The generated.jsonl file is frozen input with its SHA256 recorded in the lockfile."
     )
     lines.append(
-        "- Gated datasets (`GAIA-L1L2`, `GPQA-Diamond`): query mascherate (`query='<masked>'`) per compliance license. Per ripopolare con i prompt originali, accept terms on HF UI per i source dataset, poi run `99_unmask_gated.py` localmente."
+        "- Gated datasets (`GAIA-L1L2`, `GPQA-Diamond`): queries are masked. Accept the source dataset access terms on Hugging Face, then run `99_unmask_gated.py` locally to restore authorized prompts."
     )
     lines.append("")
 
     lines.append("## Citation")
     lines.append("")
-    lines.append("Cita ogni source originale (vedi `lockfile.yaml`).")
+    lines.append("Cite each original source listed in lockfile.yaml.")
     return "\n".join(lines)
 
 

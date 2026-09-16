@@ -1,61 +1,53 @@
 #!/usr/bin/env python3
-"""Download Brick HuggingFace models needed by the router (capability + complexity classifiers).
+"""Download and verify the pinned capability model for source development.
 
-Models:
-  - regolo/brick-modernbert-capability-classifier  (ModernBERT-base, 6-label sigmoid)
-  - regolo/brick-complexity-2-eco                  (Qwen3.5-0.8B + LoRA, 3-class easy/medium/hard)
-
-These are loaded by the router at startup. Place them under a single root and
-point the router config at the resulting paths (config.yaml: capability_model,
-complexity_model).
+End users receive these same assets through npm postinstall. Complexity and
+provider inference use APIs; this command installs no Python runtime server.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import pathlib
-import sys
-
-try:
-    from huggingface_hub import snapshot_download
-except ImportError:
-    sys.exit("ERROR: missing dependency. Install with `uv pip install huggingface_hub`")
+import hashlib
+import json
+import tempfile
+import urllib.request
+from pathlib import Path
 
 
-MODELS = [
-    ("regolo/brick-modernbert-capability-classifier", "capability-classifier"),
-    ("regolo/brick-complexity-2-eco", "complexity-classifier"),
-]
+def verify(directory: Path, files: dict) -> None:
+    for name, expected in files.items():
+        path = directory / name
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if path.stat().st_size != expected["bytes"] or digest.hexdigest() != expected["sha256"]:
+            raise ValueError(f"Incomplete or corrupt model asset: {name}")
 
 
-def main() -> int:
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--out",
-        type=pathlib.Path,
-        default=pathlib.Path("./models"),
-        help="Root directory (each model goes under <out>/<short-name>/, default: ./models)",
-    )
-    parser.add_argument("--revision", default="main")
-    parser.add_argument("--token", default=os.environ.get("HF_TOKEN"))
+    parser.add_argument("--out", type=Path, default=Path("./models"))
     args = parser.parse_args()
-
-    args.out.mkdir(parents=True, exist_ok=True)
-    for repo_id, short in MODELS:
-        target = args.out / short
-        target.mkdir(parents=True, exist_ok=True)
-        print(f"\n→ {repo_id}@{args.revision}  ⇢  {target}")
-        snapshot_download(
-            repo_id=repo_id,
-            repo_type="model",
-            local_dir=str(target),
-            revision=args.revision,
-            token=args.token,
-        )
-    print(f"\nDone. Models under: {args.out}")
-    return 0
+    root = Path(__file__).resolve().parents[3]
+    manifest = json.loads((root / "apps/cli/assets/modernbert.json").read_text())
+    target = args.out.resolve() / "modernbert-capability-classifier"
+    if target.exists():
+        verify(target, manifest["files"])
+    else:
+        args.out.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".download-", dir=args.out) as temp:
+            directory = Path(temp)
+            for name in manifest["files"]:
+                url = f"https://huggingface.co/{manifest['repository']}/resolve/{manifest['revision']}/{name}"
+                with urllib.request.urlopen(url, timeout=60) as response, (directory / name).open("wb") as out:
+                    while chunk := response.read(1024 * 1024):
+                        out.write(chunk)
+            verify(directory, manifest["files"])
+            directory.rename(target)
+    print(target)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

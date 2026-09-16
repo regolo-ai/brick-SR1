@@ -20,23 +20,28 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sweep_brick_v2_wandb import (  # type: ignore
-    BASE_CAPABILITIES, MODELS, COST, RANK,
-    rows_from_debug, calibrate_skills, split_rows,
-    logit, effective_params, DEBUG_INPUT, COMPARISON_INPUT, SKILL_VECTORS_6,
+    BASE_CAPABILITIES,
+    COMPARISON_INPUT,
+    COST,
+    DEBUG_INPUT,
+    MODELS,
+    RANK,
+    calibrate_skills,
+    effective_params,
+    logit,
+    rows_from_debug,
+    split_rows,
 )
 
 
 def prepare_arrays(rows, skill_vectors):
     probabilities = np.asarray([row["probabilities"] for row in rows], dtype=np.float64)
-    tau = np.asarray([
-        np.nan if row.get("tau_query") is None else float(row["tau_query"])
-        for row in rows
-    ], dtype=np.float64)
+    tau = np.asarray(
+        [np.nan if row.get("tau_query") is None else float(row["tau_query"]) for row in rows], dtype=np.float64
+    )
     gt = np.asarray([RANK[row["ground_truth"]] for row in rows], dtype=np.int64)
     dims = np.asarray([row["dimension"] for row in rows], dtype=object)
-    model_logits = np.asarray(
-        [[logit(s) for s in skill_vectors[m]] for m in MODELS], dtype=np.float64
-    )
+    model_logits = np.asarray([[logit(s) for s in skill_vectors[m]] for m in MODELS], dtype=np.float64)
     model_values = probabilities[None, :, :] * model_logits[:, None, :]
     return {
         "probabilities": probabilities,
@@ -86,7 +91,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", type=Path, default=DEBUG_INPUT)
     p.add_argument("--comparison", type=Path, default=COMPARISON_INPUT)
-    p.add_argument("--out", type=Path, default=Path("external_comparison/predictions/brick_v3_percap.jsonl"))
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=(Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_v3_percap.jsonl"),
+    )
     p.add_argument("--trials", type=int, default=20000)
     p.add_argument("--seed", default="brick-v3-percap")
     p.add_argument("--dev-fraction", type=float, default=0.70)
@@ -106,13 +115,16 @@ def main():
     if args.wandb_mode != "disabled":
         os.environ["WANDB_MODE"] = args.wandb_mode
         if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
-            kp = Path("/root/.wandb_key")
+            kp = Path.home() / ".wandb_key"
             if kp.exists():
                 os.environ["WANDB_API_KEY"] = kp.read_text().strip()
         import wandb
+
         run = wandb.init(
-            entity=args.entity, project=args.project,
-            name=args.run_name, job_type="risk_sweep_v3_percap",
+            entity=args.entity,
+            project=args.project,
+            name=args.run_name,
+            job_type="risk_sweep_v3_percap",
             tags=["v3", "per_cap_mu", "calibrated"],
             config={"trials": args.trials, "seed": args.seed},
         )
@@ -130,11 +142,11 @@ def main():
         # Warmstart distribution: V2 best params
         params = {
             "routing_preference": max(-1.0, min(1.0, -0.5 + rnd.gauss(0, 0.3))),
-            "complexity_mu":      max(0.05, 0.25 + rnd.gauss(0, 0.30)),
-            "complexity_bias":    0.30 + rnd.gauss(0, 0.40),
-            "cost_penalty_beta":  max(0.0, 0.02 + abs(rnd.gauss(0, 0.10))),
-            "over_penalty_lambda":max(0.0, 0.20 + abs(rnd.gauss(0, 0.30))),
-            "tau_base":           max(0.30, min(0.97, 0.50 + rnd.gauss(0, 0.15))),
+            "complexity_mu": max(0.05, 0.25 + rnd.gauss(0, 0.30)),
+            "complexity_bias": 0.30 + rnd.gauss(0, 0.40),
+            "cost_penalty_beta": max(0.0, 0.02 + abs(rnd.gauss(0, 0.10))),
+            "over_penalty_lambda": max(0.0, 0.20 + abs(rnd.gauss(0, 0.30))),
+            "tau_base": max(0.30, min(0.97, 0.50 + rnd.gauss(0, 0.15))),
         }
         # per-cap multipliers: log-uniform around 1.0 each
         mu_per_cap = np.array([math.exp(rnd.gauss(0, 0.5)) for _ in BASE_CAPABILITIES])
@@ -152,27 +164,38 @@ def main():
         results.append(row)
 
         if hold_m["accuracy"] > best["holdout_accuracy"]:
-            best = {"holdout_accuracy": hold_m["accuracy"], "params": params,
-                    "mu_per_cap": mu_per_cap.tolist(), "bias_per_cap": bias_per_cap.tolist(),
-                    "metrics": hold_m}
+            best = {
+                "holdout_accuracy": hold_m["accuracy"],
+                "params": params,
+                "mu_per_cap": mu_per_cap.tolist(),
+                "bias_per_cap": bias_per_cap.tolist(),
+                "metrics": hold_m,
+            }
             if wandb is not None:
-                wandb.log({
-                    "i": i, "best_holdout_accuracy": hold_m["accuracy"],
-                    "best_holdout_avg_cost": hold_m["avg_cost"],
-                    "best_holdout_qwen_pct": hold_m["model_qwen_pct"],
-                    "best_holdout_ds4_pct": hold_m["model_ds4_pct"],
-                    "best_holdout_kimi_pct": hold_m["model_kimi_pct"],
-                })
+                wandb.log(
+                    {
+                        "i": i,
+                        "best_holdout_accuracy": hold_m["accuracy"],
+                        "best_holdout_avg_cost": hold_m["avg_cost"],
+                        "best_holdout_qwen_pct": hold_m["model_qwen_pct"],
+                        "best_holdout_ds4_pct": hold_m["model_ds4_pct"],
+                        "best_holdout_kimi_pct": hold_m["model_kimi_pct"],
+                    }
+                )
 
         if wandb is not None and i % log_every == 0:
-            wandb.log({
-                "i": i,
-                "trial_holdout_accuracy": hold_m["accuracy"],
-                "trial_holdout_avg_cost": hold_m["avg_cost"],
-            })
+            wandb.log(
+                {
+                    "i": i,
+                    "trial_holdout_accuracy": hold_m["accuracy"],
+                    "trial_holdout_avg_cost": hold_m["avg_cost"],
+                }
+            )
 
         if (i + 1) % (args.trials // 10 + 1) == 0:
-            print(f"[{i+1}/{args.trials}] best_holdout={best['holdout_accuracy']:.4f} elapsed={time.time()-t0:.1f}s")
+            print(
+                f"[{i + 1}/{args.trials}] best_holdout={best['holdout_accuracy']:.4f} elapsed={time.time() - t0:.1f}s"
+            )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     results.sort(key=lambda r: r["holdout_accuracy"], reverse=True)
@@ -183,7 +206,9 @@ def main():
     print(f"  global params: {best['params']}")
     print(f"  mu_per_cap   : {[f'{x:.3f}' for x in best['mu_per_cap']]}")
     print(f"  bias_per_cap : {[f'{x:.3f}' for x in best['bias_per_cap']]}")
-    print(f"  distribution : qwen={best['metrics']['model_qwen_pct']:.3f} ds4={best['metrics']['model_ds4_pct']:.3f} kimi={best['metrics']['model_kimi_pct']:.3f}")
+    print(
+        f"  distribution : qwen={best['metrics']['model_qwen_pct']:.3f} ds4={best['metrics']['model_ds4_pct']:.3f} kimi={best['metrics']['model_kimi_pct']:.3f}"
+    )
 
     if wandb is not None:
         run.summary["best_holdout_accuracy"] = best["holdout_accuracy"]

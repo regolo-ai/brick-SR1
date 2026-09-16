@@ -260,7 +260,7 @@ bfcl_v4_multi_turn:
     quotes: {base: 50, miss_func: 40, miss_param: 40, long_context: 35}
   expected_protocol: tool_call_match
   source_label: BFCL-v4-MT
-  materialized_path: data/raw/bfcl_v4_multi_turn.jsonl  # già materializzato da scripts/10c_clone_bfcl_multi_turn.py
+  materialized_path: data/raw/bfcl_v4_multi_turn.jsonl  # materialized by scripts/10c_clone_bfcl_multi_turn.py
 
 gaia:
   dimension: planning_agentic

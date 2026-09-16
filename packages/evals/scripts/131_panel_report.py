@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""Aggrega i risultati del panel-3-judge per agentic planning (rubric_judge).
-
-Per ognuno dei 3 modelli pool legge:
-  - `planning_full_graded.jsonl`            → judge A: openai/gpt-5.4-mini (canonical)
-  - `planning_full_graded__mistral.jsonl`   → judge B: mistralai/mistral-small-2603
-  - `planning_full_graded__glm.jsonl`       → judge C: z-ai/glm-5-turbo
-  - `planning_full_graded__panel.jsonl`     → aggregato majority-vote 2/3 (da 115)
-
-Calcola per ogni judge individuale + panel:
-  - T / F / None (abstention)
-  - accuracy conditional = T / (T+F)
-  - accuracy overall     = T / 335
-
-Per il panel calcola anche la distribuzione `panel_vote` (3-0/2-1/1-2/0-3/1-1).
-
-Output: `data/reports/panel_results.{csv,md}`.
-
-Uso:
-  python scripts/131_panel_report.py
-"""
+"""Aggregate the three-judge planning panel results, individual decisions and costs into a report."""
 
 from __future__ import annotations
 
@@ -29,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-N_PC = 335  # numero totale di righe rubric_judge:planning attese
+N_PC = 335  # Expected total number of planning rubric-judge rows.
 
 MODELS = ["qwen3.5-9b", "deepseek-v4-flash", "kimi2.6"]
 
@@ -43,7 +24,7 @@ JUDGE_FILES: list[tuple[str, str]] = [
 
 
 def count_pc(path: Path) -> tuple[int, int, int, float, Counter]:
-    """Ritorna (T, F, None, cost, vote_counter) per le righe rubric_judge in path."""
+    """Return true/false/None counts, cost and vote counts for rubric-judge rows."""
     t = f = n = 0
     cost = 0.0
     votes: Counter = Counter()
@@ -134,8 +115,8 @@ def main() -> int:
         for r in rows:
             fmd.write(
                 f"| {r['model']} | {r['judge']} | {r['true']} | {r['false']} | "
-                f"{r['abstention']} | {r['acc_conditional']*100:.1f}% | "
-                f"{r['acc_overall']*100:.1f}% | ${r['cost_usd']:.4f} |\n"
+                f"{r['abstention']} | {r['acc_conditional'] * 100:.1f}% | "
+                f"{r['acc_overall'] * 100:.1f}% | ${r['cost_usd']:.4f} |\n"
             )
         fmd.write("\n## Panel vote distribution (T-F counts on the 3 judges)\n\n")
         fmd.write(
@@ -153,7 +134,7 @@ def main() -> int:
             "\nPanel cost totale: ${:.4f}\n".format(sum(r["cost_usd"] for r in rows if r["judge"] == "panel-2of3"))
         )
     print(f"[write] {md_path}")
-    print(f"[done] {len(rows)} righe ({len(MODELS)} modelli × {len(JUDGE_FILES)} giudici)")
+    print(f"[done] {len(rows)} rows ({len(MODELS)} models × {len(JUDGE_FILES)} judges)")
     return 0
 
 

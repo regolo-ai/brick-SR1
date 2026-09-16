@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-
-IN_JSONL = Path("external_comparison/predictions/brick_risk_sweep.jsonl")
-OUT_JSON = Path("external_comparison/predictions/brick_risk_profiles.json")
-OUT_YAML = Path("external_comparison/predictions/brick_risk_profiles.yaml")
+IN_JSONL = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_risk_sweep.jsonl"
+OUT_JSON = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_risk_profiles.json"
+OUT_YAML = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_risk_profiles.yaml"
 PARAM_KEYS = (
     "routing_preference",
     "complexity_mu",
@@ -94,7 +94,10 @@ def main() -> int:
     eco = min(eco_candidates, key=lambda row: (row["holdout_avg_cost"], -row["holdout_accuracy"]))
     balanced = max(
         frontier,
-        key=lambda row: (row["holdout_accuracy"] - args.balanced_alpha * row["holdout_avg_cost"], row["holdout_accuracy"]),
+        key=lambda row: (
+            row["holdout_accuracy"] - args.balanced_alpha * row["holdout_avg_cost"],
+            row["holdout_accuracy"],
+        ),
     )
     pro = max(frontier, key=lambda row: (row["holdout_accuracy"], -row["holdout_avg_cost"]))
 

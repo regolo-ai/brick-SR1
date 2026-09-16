@@ -1,7 +1,7 @@
 [project]
 name = "brick-datasets"
 version = "2.0.0"
-description = "Brick: HuggingFace download recipes for Dataset A, Dataset B, capability+complexity classifier models"
+description = "Brick: HuggingFace download recipes for Dataset A, Dataset B, pinned capability classifier"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"

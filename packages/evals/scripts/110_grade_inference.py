@@ -1,23 +1,4 @@
-"""Grader Dataset A: legge inference output JSONL + dataset eval_params, computa `correct`.
-
-Protocolli supportati:
-- gsm8k_final_answer       (programmatic)
-- mcq_letter               (programmatic)
-- math_equiv               (programmatic + sympy)
-- ifeval_constraint_check  (programmatic, via brick_evals.graders.ifeval_grader)
-- lcb_unit_test            (code-exec via brick_evals.graders.lcb_grader, LCB official runner)
-- tool_call_match          (BFCL AST checker via brick_evals.graders.bfcl_grader)
-- rubric_judge             (LLM judge via brick_evals.graders.rubric_judge_grader; opt-in via --enable-judge)
-- llm_judge_factual        (LLM judge: non implementato, stub)
-
-Policy: righe con `finish_reason == "length"` e `model_raw_response` vuoto
-vengono marcate come `correct=None` (truncation senza risposta = skip, non fail).
-
-Usage:
-  python scripts/110_grade_inference.py \\
-      --inference data/inference/deepseek-v4-flash/dataset_a_smoke.jsonl \\
-      --output data/inference/deepseek-v4-flash/graded_smoke.jsonl
-"""
+"""Grade Dataset A inference JSONL using the protocol-specific graders. Only final response text is graded; internal reasoning is excluded. Empty responses truncated at the token limit receive correct=None. External LLM judges require explicit --enable-judge. See --help for input/output options."""
 
 from __future__ import annotations
 
@@ -71,7 +52,7 @@ def grade_gsm8k(response: str, payload: dict) -> tuple[bool | None, dict]:
     if m:
         candidate = m[-1].replace(",", "")
     else:
-        # Fallback più conservativo: cerca \boxed{} o "answer is N" prima
+        # Prefer explicit boxed or answer-is markers before broader fallbacks.
         boxed = re.findall(r"\\boxed\{\s*(-?\d[\d,]*\.?\d*)\s*\}", response)
         if boxed:
             candidate = boxed[-1].replace(",", "")
@@ -87,12 +68,11 @@ def grade_gsm8k(response: str, payload: dict) -> tuple[bool | None, dict]:
 
 # ---------- mcq_letter ----------
 
-# MCQ regex: NO IGNORECASE: expected letter è SEMPRE uppercase A-J.
-# Pattern in ordine di priorità (più specifico → meno specifico).
+# MCQ letters are uppercase A-J; do not use IGNORECASE. Match patterns from most to least specific.
 _MCQ_PATTERNS = [
     re.compile(r"\\boxed\{\s*([A-J])\s*\}"),
     re.compile(r"\*\*\s*([A-J])\s*\*\*"),
-    # "Answer is X": accetta : ; , . ) ] spazio o fine stringa come delimitatore
+    # Accept punctuation, whitespace or end of string after an explicit answer letter.
     re.compile(r"(?:[Aa]nswer|[Rr]isposta)\s+is\s+[\(\[]?([A-J])(?:[\)\]\.\,\:\;\s]|$)"),
     re.compile(r"(?:[Aa]nswer|[Rr]isposta)\s*[:=]\s*[\(\[]?([A-J])(?:[\)\]\.\,\:\;\s]|$)"),
     # "correct answer is X"
@@ -101,8 +81,7 @@ _MCQ_PATTERNS = [
     re.compile(r"\(([A-J])\)"),
 ]
 
-# Tail-fallback: rimuove iniziali di nomi propri ("X. " seguito da maiuscola) prima di
-# applicare il pattern "standalone capital letter".
+# Remove name initials followed by uppercase text before matching standalone answer letters.
 _NAME_INITIAL_RE = re.compile(r"\b([A-J])\.\s+(?=[A-Z])")
 _STANDALONE_LETTER_RE = re.compile(r"(?<![A-Za-z])([A-J])(?![A-Za-z])")
 
@@ -118,7 +97,7 @@ def grade_mcq(response: str, payload: dict) -> tuple[bool | None, dict]:
             candidate = matches[-1].upper()
             break
     if candidate is None:
-        # tail-only standalone fallback, dopo aver rimosso iniziali di nomi propri
+        # Apply the standalone-letter fallback only to the tail after removing name initials.
         tail = response[-200:]
         cleaned = _NAME_INITIAL_RE.sub("", tail)
         m = _STANDALONE_LETTER_RE.findall(cleaned)
@@ -139,8 +118,7 @@ def _extract_boxed(text: str) -> str | None:
     if not m:
         return None
     candidate = m[-1].strip()
-    # Unwrap nested \boxed{ \boxed{X} }: alcuni modelli (Qwen3.5) wrappano twice.
-    # Continua finché c'è ancora un \boxed{} a livello esterno.
+    # Repeatedly unwrap nested boxed expressions emitted by some models.
     for _ in range(5):
         inner_match = _BOXED_RE.findall(candidate)
         if not inner_match:
@@ -156,10 +134,7 @@ def _normalize_math(s: str) -> str:
     s = s.strip().rstrip(".")
     s = s.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac")
     s = s.replace("$", "").replace("\\,", "").replace("\\!", "")
-    # 1) Unit suffix: \text{ X}/\mbox{ X} con LEADING space dentro graffe + opt ^N exponent.
-    #    Es: "5.4 \text{ cents}" → "5.4"
-    #        "864 \mbox{ inches}^2" → "864"
-    #        "15\mbox{ cm}^2" → "15"
+    # Strip unit suffixes in text/mbox with leading whitespace and optional exponents: 5.4 cents becomes 5.4; 864 square inches becomes 864.
     s = re.sub(
         r"\s*\\(?:text|textbf|mbox|mathrm)\{\s+[^}]*\}\s*(?:\^\{?-?\d+\}?)?",
         "",
@@ -176,7 +151,7 @@ def _normalize_math(s: str) -> str:
     m = re.match(r"^\(([^()]+)\)$", s)
     if m:
         s = m.group(1).strip()
-    # 6) Case-insensitive: rimuovi spazi + lowercase finale
+    # Remove spaces and normalize case for the final comparison.
     s = s.replace(" ", "").lower()
     return s
 
@@ -187,7 +162,7 @@ def grade_math_equiv(response: str, payload: dict) -> tuple[bool | None, dict]:
         return None, {"reason": "no expected final_answer"}
     candidate = _extract_boxed(response)
     if candidate is None:
-        # Cerca pattern espliciti finali; NO fallback "ultimo numero" (rischio falso-neg).
+        # Require explicit final-answer markers; a last-number fallback risks incorrect grading.
         m = re.search(
             r"(?:final\s+answer|answer\s+is)\s*[:=]?\s*\$?([^\s$\\]+)",
             response,
@@ -264,22 +239,7 @@ def grade_rubric(response: str, payload: dict, query: str) -> tuple[bool | None,
     return _grade_rubric_impl(response, payload, query=query)
 
 
-# ---------- dispatcher ----------
-#
-# Architectural decision (post Phase A.6 audit + Phase A.7 fix):
-# Il grader OPERA SOLO sul campo `model_raw_response` (committed answer).
-# Il campo `model_raw_thinking_output` (chain-of-thought interno) NON viene mai parsato:
-# è esploratorio, contiene ipotesi intermedie, false starts, contraddizioni.
-# Final answer estratto da trace = false positive/negative non controllato.
-#
-# Riferimenti SOTA che validano questa scelta:
-#  - DeepSeek-R1 (arxiv 2501.12948): final answer extraction only from content
-#  - Kimi K2-Thinking docs: reasoning_content e content sono separati per design
-#  - OpenAI o3 reasoning best-practices: "attempting to extract raw reasoning is not supported"
-#  - EMNLP 2025 "Reasoning Under Strict Token Constraints": skip-on-truncation > extract-from-trace
-#
-# Truncation senza response (finish_reason=length + response="") è gestita
-# nel main loop come `correct=None` (skip, non fail).
+# Grade only model_raw_response. Internal reasoning contains tentative answers and contradictions and must never supply the final answer. Empty responses truncated at the token limit receive correct=None in the main loop.
 
 
 async def grade_row(
@@ -296,10 +256,7 @@ async def grade_row(
     judge_model: str = "openai/gpt-5.4-mini",
     judge_temperature: float = 0.0,
 ) -> tuple[bool | None, dict]:
-    """Grade single row applicando il grader solo a `response`.
-    Il parametro `thinking` è accettato ma non usato (architectural choice).
-    Async per LLM-judge; programmatic graders restano sync (no await needed).
-    """
+    """Grade final response text only. The thinking argument is deliberately ignored. External judge protocols are asynchronous; deterministic graders run synchronously."""
     payload = expected.get("payload", {}) if isinstance(expected, dict) else {}
 
     if protocol == "gsm8k_final_answer":
@@ -449,7 +406,7 @@ async def _amain() -> None:
         f"[grader] enable_lcb={enable_lcb}  enable_judge={args.enable_judge}  judge_model={args.judge_model}  conc={args.judge_concurrency}"
     )
 
-    # Slim eval_index: solo query + expected_answer per ridurre RAM
+    # Keep only query and expected_answer in the index to reduce memory usage.
     eval_index: dict[str, dict] = {}
     for row in load_jsonl(args.dataset):
         eval_index[row["query_id"]] = {
@@ -538,7 +495,7 @@ async def _amain() -> None:
                     break
 
     async def _worker(queue: asyncio.Queue, judge_client, fout, worker_id: int):
-        """Consume rows from queue. Sentinel None = exit."""
+        """Execute run_test in an isolated process because reliability_guard changes global state."""
         while True:
             row = await queue.get()
             if row is None:
@@ -584,12 +541,12 @@ async def _amain() -> None:
                 workers = [
                     asyncio.create_task(_worker(queue, judge_client, fout, i)) for i in range(args.judge_concurrency)
                 ]
-                # Producer: stream rows (stop feeding se budget abort)
+                # Stream producer rows until a budget cancellation occurs.
                 async for row in _row_stream():
                     if stats.get("aborted"):
                         break
                     await queue.put(row)
-                # Sentinels per terminare workers
+                # Sentinels terminate workers
                 for _ in workers:
                     await queue.put(None)
                 await asyncio.gather(*workers)
@@ -618,7 +575,7 @@ async def _amain() -> None:
         graded = [v for v in values if v is not None]
         if not graded:
             return f"N/A (n_graded=0/{len(values)})"
-        return f"{sum(graded)}/{len(graded)} ({sum(graded)/len(graded)*100:.1f}%) [skipped={len(values)-len(graded)}/{len(values)}]"
+        return f"{sum(graded)}/{len(graded)} ({sum(graded) / len(graded) * 100:.1f}%) [skipped={len(values) - len(graded)}/{len(values)}]"
 
     total = sum(len(v) for v in stats["by_proto_correct"].values())
     print()

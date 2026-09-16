@@ -5,17 +5,16 @@ Test minimi per le 5 categorie BFCL + parsing response.
 
 from __future__ import annotations
 
-import pytest
 from brick_evals.graders.bfcl_grader import (
     AVAILABLE,
     extract_calls,
     grade_bfcl,
 )
 
-pytestmark = pytest.mark.skipif(not AVAILABLE, reason="BFCL ast_checker not importable")
+assert AVAILABLE, "BFCL source unavailable; run scripts/bootstrap_eval_sources.py"
 
 
-# --- Helpers per costruire payload BFCL minimali --------------------------
+# Helpers for minimal BFCL payloads.
 
 
 def _func_spec_simple() -> dict:
@@ -70,7 +69,7 @@ def test_extract_calls_raw_python():
 
 
 def test_extract_calls_python_code_block():
-    txt = "Sure, here's the call:\n" "```python\n" "calculate_cell_density(optical_density=0.6, dilution=5)\n" "```\n"
+    txt = "Sure, here's the call:\n```python\ncalculate_cell_density(optical_density=0.6, dilution=5)\n```\n"
     calls, meta = extract_calls(txt)
     assert calls == [{"calculate_cell_density": {"optical_density": 0.6, "dilution": 5}}]
     assert meta["strategy"] == "py_block"
@@ -84,9 +83,7 @@ def test_extract_calls_toolcall_tag():
 
 
 def test_extract_calls_openai_json_block():
-    txt = (
-        "```json\n" '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n' "```"
-    )
+    txt = '```json\n[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n```'
     calls, meta = extract_calls(txt)
     assert calls == [{"calculate_cell_density": {"optical_density": 0.6, "dilution": 5}}]
     assert meta["strategy"] == "json_block_openai"
@@ -119,7 +116,7 @@ def test_grade_simple_wrong_value():
 
 
 def test_grade_simple_with_optional_param():
-    # calibration_factor accetta "" o 1e9 -> ometterlo è ok perché "" è nella lista
+    # An omitted calibration_factor is accepted because the allowed values include the empty string.
     response = "calculate_cell_density(optical_density=0.6, dilution=5)"
     correct, _ = grade_bfcl(response, _payload_simple())
     assert correct is True
@@ -147,7 +144,7 @@ def test_grade_simple_no_response():
 
 def test_grade_simple_openai_format():
     response = (
-        "```json\n" '[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n' "```"
+        '```json\n[{"name": "calculate_cell_density", "arguments": {"optical_density": 0.6, "dilution": 5}}]\n```'
     )
     correct, _ = grade_bfcl(response, _payload_simple())
     assert correct is True

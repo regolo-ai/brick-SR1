@@ -1,11 +1,4 @@
-"""Async OpenRouter client per LLM-as-judge grading.
-
-Pattern simile a `regolo_client.py` (sync) ma async via httpx.AsyncClient per
-`asyncio.gather` concurrent in `110_grade_inference.py`.
-
-Default model: openai/gpt-5.4-mini ($0.75/$4.50 per M token, 400K ctx).
-Auth: OPENROUTER_API_KEY o OPENROUTER_KEY env var.
-"""
+"""Asynchronous OpenRouter judge client for concurrent evaluation. Read credentials from OPENROUTER_API_KEY or OPENROUTER_KEY and use the configured judge model."""
 
 from __future__ import annotations
 
@@ -85,10 +78,7 @@ class OpenRouterJudgeClient:
         top_p: float = 1.0,
         model: str | None = None,
     ) -> dict:
-        """Chat completion. Retry su 429/5xx con backoff esponenziale.
-
-        Returns OpenAI-format dict: {"choices": [{"message": {"content": "..."}}], "usage": {...}}
-        """
+        """Request a chat completion with exponential backoff for 429/5xx errors."""
         if self._client is None:
             raise RuntimeError("client non in context: usa 'async with OpenRouterJudgeClient() as c'")
         body = {

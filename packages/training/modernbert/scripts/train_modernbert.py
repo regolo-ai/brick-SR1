@@ -5,11 +5,11 @@ from CLI args (and/or wandb.config). Supports --smoke for fast sanity check.
 
 Usage:
     # Smoke test (10 samples, 1 step)
-    python train_modernbert.py --smoke --model-size base
+    python train_modernbert.py --smoke --model_size base
 
     # Single training run (no sweep)
-    python train_modernbert.py --model-size base --learning-rate 5e-5 \
-        --weight-decay 1e-5 --warmup-ratio 0.06 --num-train-epochs 4
+    python train_modernbert.py --model_size base --learning_rate 5e-5 \
+        --weight_decay 1e-5 --warmup_ratio 0.06 --num_train_epochs 4
 
     # Under W&B Sweep agent: hyperparams arrive via CLI flags injected by agent
 """

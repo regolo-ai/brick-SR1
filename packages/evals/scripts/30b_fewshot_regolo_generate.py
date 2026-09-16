@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""30b - Few-shot Regolo generate: 5 esempi CoT per ogni source senza pool valido.
-
-Source target (shots=5 senza fewshot_pool funzionante):
-- math500, aime_2025, livecodebench_v6, ifeval, gpqa_diamond, eqbench_creative_v3
-
-Strategia: prompt-meta source-specific a Regolo qwen3.5-122b → 5 esempi
-(question, reasoning, final_answer) realistici. Output statico:
-    data/fewshot_pools/<source_id>.json
-+ SHA256 in lockfile.
-"""
+"""Generate five reasoning examples for each source without a suitable few-shot pool. Store question, reasoning and final_answer in data/fewshot_pools/<source_id>.json and record SHA256 provenance."""
 
 from __future__ import annotations
 
@@ -23,71 +14,54 @@ from brick_evals.regolo_client import RegoloClient
 
 K = 5
 
-# Schema target uniforme
-META_PROMPT = """Sei un curatore di esempi few-shot CoT (Chain-of-Thought) per benchmark LLM.
-
-Genera ESATTAMENTE 5 esempi distinti per la fonte specificata. Ogni esempio è un JSON object con questi campi:
-{spec}
-
-Vincoli:
-- 5 esempi diversi tra loro per topic, difficoltà, struttura
-- Realistici e plausibili (non templated)
-- Stile coerente con la fonte
-- Output: SOLO un JSON array di 5 oggetti. NO markdown fences, NO commenti, NO testo extra.
-
-Fonte target: {source}
-Descrizione: {description}
-
-{extra_constraints}
-
-Output JSON array:
-"""
+# Uniform target schema
+META_PROMPT = "You curate few-shot reasoning examples for LLM benchmarks.\nGenerate EXACTLY five distinct examples for the specified source. Each JSON object has these fields:\n{spec}\nRequirements:\n- Vary topics, difficulty and structure.\n- Use realistic examples rather than artificial templates.\n- Match the source style.\n- Return ONLY a JSON array of five objects, without Markdown fences, comments or extra text.\nTarget source: {source}\nDescription: {description}\n{extra_constraints}\nJSON array:"
 
 
-SOURCE_SPECS: dict[str, dict] = {
+SOURCE_SPECS = {
     "math500": {
-        "description": "MATH-500 by Hendrycks: problemi competition-style (algebra, geometry, number theory, calculus, combinatorics, intermediate algebra, prealgebra, precalculus). Risposta finale tipicamente in formato latex con \\boxed{}.",
-        "spec": '{"question": "<problema in latex>", "reasoning": "<soluzione step-by-step in latex con passaggi numerici>", "final_answer": "<risposta in latex, e.g. \\\\boxed{42} o \\\\frac{3}{4}>"}',
-        "extra": "I problemi devono coprire diverse aree (almeno 3 categorie tra le 7 sopra).",
+        "description": "MATH-500: competition mathematics across algebra, geometry, number theory, calculus, combinatorics, intermediate algebra, prealgebra and precalculus. Final answers typically use LaTeX boxed notation.",
+        "spec": '{"question": "<problem in LaTeX>", "reasoning": "<step-by-step LaTeX solution with numerical calculations>", "final_answer": "<LaTeX answer such as \\\\boxed{42} or \\\\frac{3}{4}>"}',
+        "extra": "Cover at least three distinct subject areas.",
     },
     "aime_2025": {
-        "description": "AIME 2025 (American Invitational Mathematics Exam): problemi competition matematica con risposta numerica intera 0-999.",
-        "spec": '{"question": "<problema testuale, lunghezza ~100-300 chars>", "reasoning": "<soluzione step-by-step con calcoli espliciti>", "final_answer": "<intero 0-999 come stringa, e.g. \\"125\\">"}',
-        "extra": "Problemi medio-difficili (AIME è hard). final_answer DEVE essere intero 0-999 stringa.",
+        "description": "AIME 2025 competition mathematics with integer answers from 0 to 999.",
+        "spec": '{"question": "<problem text, roughly 100-300 characters>", "reasoning": "<step-by-step solution with explicit calculations>", "final_answer": "<integer 0-999 as a string>"}',
+        "extra": "Use medium-to-hard problems. final_answer must contain only the integer string.",
     },
     "livecodebench_v6": {
-        "description": "LiveCodeBench v6: problemi competitive programming MISTI. Due testtype: 'functional' (LeetCode-style con `class Solution: def methodName(...)` e args parsati) e 'stdin' (AtCoder/Codeforces-style con input da sys.stdin, output via print). Pool DEVE coprire ENTRAMBI per generalizzare.",
-        "spec": '{"question": "<problema in inglese, con input/output spec, esempi, constraint. Per testtype=functional termina con starter code `class Solution: def methodName(...) -> Type:`. Per testtype=stdin descrive input format righe e termina SENZA starter code (modello legge stdin).>", "reasoning": "<approccio algoritmico, identifica tecnica esplicita: hashmap / sliding-window-variabile / two-pointer / DP / greedy / math / etc.>", "final_answer": "<codice Python eseguibile. Per functional: DENTRO `class Solution` con method camelCase. Per stdin: top-level script che legge `input()` o `sys.stdin.readline()` e usa `print(...)`.>"}',
-        "extra": "VINCOLI CRITICI MIXED POOL:\n1. ESATTAMENTE 5 esempi cosi' distribuiti:\n   - 3 esempi LeetCode-style functional con `class Solution: def methodName(...)` (camelCase). final_answer dentro classe.\n   - 2 esempi AtCoder/Codeforces-style stdin. Input dato come righe (es. 'N\\nA1 A2 ... AN'). final_answer e' script top-level con `import sys; input = sys.stdin.readline` e `print(result)`. NO class Solution per gli stdin.\n2. Per i 3 functional: tecniche {hashmap, sliding-window-variabile con while shrink, DP top-down}. Naming camelCase (twoSum, minSubArrayLen, etc.).\n3. Per i 2 stdin: tecniche {greedy/sort, math/number-theory}. Esempi tipici: 'somma minima con vincolo', 'numero di coppie con proprieta'. Input format esplicito nella question.\n4. Ogni question functional DEVE terminare con starter code `class Solution:\\n    def methodName(self, ...) -> Type:\\n        `. Ogni question stdin NON ha starter code, ma descrive 'Input is given from Standard Input in the following format:\\n<format>'.\n5. reasoning cita tecnica esplicitamente (es. 'Use variable-size sliding window').\n6. NO commenti verbose nel codice. NO chain-of-thought lungo.\n7. Esempio stdin-style atteso (per riferimento, NON copiare):\n   question termina con 'Input format:\\nN\\nA_1 A_2 ... A_N\\n\\nOutput: print the answer.'\n   final_answer: 'import sys\\ninput = sys.stdin.readline\\nN = int(input())\\nA = list(map(int, input().split()))\\nprint(sum(A))'",
+        "description": "LiveCodeBench v6 mixed competitive programming: functional LeetCode problems and standard-input AtCoder/Codeforces problems. Cover both types.",
+        "spec": '{"question": "<English problem with constraints, examples and explicit input/output specification. Functional questions end with class Solution starter code; stdin questions describe input lines without starter code.>", "reasoning": "<Identify the algorithm: hash map, variable-size sliding window, two pointers, DP, greedy or mathematics.>", "final_answer": "<Executable Python: camelCase method inside class Solution for functional problems, or a top-level input/print script for stdin problems.>"}',
+        "extra": "Exactly three functional examples using hash maps, a variable-size window with a shrinking while loop, and top-down DP; exactly two stdin examples using greedy/sorting and mathematics/number theory. Functional questions end with class Solution and a typed method signature. Stdin questions state the Standard Input format and have no class Solution. Explicitly name the technique in reasoning. Avoid verbose code comments and lengthy reasoning. Example stdin structure (do not copy): read N, read A_1 ... A_N, then print the answer.",
     },
     "ifbench": {
-        "description": "IFBench (AllenAI): instruction-following con constraint verificabili (count: unique words, ratio: sentence/word, words: palindrome/repeats, format constraints, etc.). Ogni instruction ha 1-2 constraint espliciti che la risposta DEVE soddisfare.",
-        "spec": '{"question": "<istruzione completa con 1-2 constraint espliciti verificabili (es. \'Use at least 128 unique words\', \'Each sentence must have N/M ratio\', \'Include 10 palindromes >=5 chars\')>", "reasoning": "", "final_answer": "<RISPOSTA REALE che soddisfa effettivamente TUTTI i constraint specificati. NON un placeholder. Lunghezza adeguata al constraint (es. se 128 unique words, scrivi testo con >=128 parole uniche).>"}',
-        "extra": "VINCOLI CRITICI:\n1. final_answer DEVE essere RISPOSTA CONCRETA che soddisfa il constraint, NON placeholder come '[risposta di esempio]' o '[fill in]'. Genera testo reale.\n2. 5 esempi con constraint diversificati: 1× count:unique_words (>=N parole uniche), 1× ratio:sentence_words (rapporto), 1× words:palindrome (N palindromi), 1× words:repeats (parola ripetuta N volte), 1× format (es. all caps + word count).\n3. Verifica mentalmente che il final_answer rispetti il constraint prima di emetterlo.\n4. reasoning vuoto (instruction-following non richiede CoT).\n5. Realismo: le istruzioni devono sembrare query utente reali, non template artificiali.\n6. Se constraint richiede testo lungo (es. 128 unique words), genera testo lungo e ricco lessicalmente.",
+        "description": "IFBench instruction following with one or two explicit, verifiable constraints.",
+        "spec": '{"question": "<Complete instruction with explicit constraints, such as a unique-word count, sentence/word ratio or palindrome count>", "reasoning": "", "final_answer": "<Actual complete response satisfying every constraint, never a placeholder>"}',
+        "extra": "Five diverse examples: unique words, sentence/word ratio, palindromes, repeated words and formatting such as all caps with a word count. Verify each answer against all constraints. Keep reasoning empty and instructions realistic. Generate sufficient text for long constraints such as at least 128 unique words.",
     },
     "ifeval": {
-        "description": "IFEval (Google): instruction following con constraint verificabili (numero parole, format, language, contains keyword, etc.). Una sola istruzione con constraint chiari.",
-        "spec": '{"question": "<istruzione con 1-3 constraint espliciti>", "reasoning": "", "final_answer": "<risposta che soddisfa esattamente i constraint>"}',
-        "extra": "5 esempi con constraint diversi (e.g., word count, all caps, JSON format, no commas, specific language). reasoning può essere vuoto (instruction following non richiede CoT).",
+        "description": "Google IFEval instruction following with clear verifiable constraints on word count, format, language or keywords.",
+        "spec": '{"question": "<Instruction with one to three explicit constraints>", "reasoning": "", "final_answer": "<Response satisfying all constraints exactly>"}',
+        "extra": "Use five distinct constraint types such as word count, all caps, JSON format, no commas or a specified language. Reasoning can be empty.",
     },
     "gpqa_diamond": {
-        "description": "GPQA Diamond: graduate-level multiple choice in physics, chemistry, biology. 4 opzioni A/B/C/D, una corretta.",
-        "spec": '{"question": "<domanda graduate-level>", "options_formatted": "A. <opt1>\\nB. <opt2>\\nC. <opt3>\\nD. <opt4>", "reasoning": "<ragionamento scientifico step-by-step>", "final_answer": "<lettera A/B/C/D>"}',
-        "extra": "Coverage: physics, chem, bio (mix). Distractors plausibili. final_answer SOLO una lettera A/B/C/D.",
+        "description": "Graduate-level physics, chemistry and biology multiple choice with four options and one correct answer.",
+        "spec": '{"question": "<Graduate-level question>", "options_formatted": "A. <option1>\\nB. <option2>\\nC. <option3>\\nD. <option4>", "reasoning": "<Step-by-step scientific explanation>", "final_answer": "<One letter A/B/C/D>"}',
+        "extra": "Mix physics, chemistry and biology. Use plausible distractors and exactly one answer letter.",
     },
     "eqbench_creative_v3": {
-        "description": "EQ-Bench Creative Writing v3: prompt di scrittura creativa con constraint stilistici. Output è una breve storia/scena (200-1000 chars).",
-        "spec": '{"question": "<prompt creativo con constraint stilistico>", "reasoning": "", "final_answer": "<breve testo creativo 200-1000 chars che soddisfa il prompt>"}',
-        "extra": "5 prompt diversi per genere/mood (literary, sci-fi, horror, comedic, dialogue-driven). final_answer è il testo creativo.",
+        "description": "EQ-Bench Creative Writing v3: stylistically constrained prompts with short story or scene responses of 200-1000 characters.",
+        "spec": '{"question": "<Creative prompt with a stylistic constraint>", "reasoning": "", "final_answer": "<Creative response of 200-1000 characters satisfying the prompt>"}',
+        "extra": "Vary the five prompts across literary, science fiction, horror, comedy and dialogue-driven writing. final_answer contains the creative text.",
     },
 }
 
 
 def _parse_json_array(text: str) -> list[dict]:
-    """Estrae JSON array da output LLM (tollerante a code fences)."""
+    """Extract a JSON array from model output, tolerating code fences."""
     text = text.strip()
     if text.startswith("```"):
-        # rimuovi code fence
+        # Remove surrounding code fences.
         lines = text.splitlines()
         if lines[0].startswith("```"):
             lines = lines[1:]
@@ -130,7 +104,7 @@ def main():
     results: dict[str, dict] = {}
     for sid, spec in SOURCE_SPECS.items():
         out_path = out_dir / f"{sid}.json"
-        # Skip se già esiste e non vuoto
+        # Skip an existing nonempty output.
         if out_path.exists():
             try:
                 existing = json.loads(out_path.read_text())

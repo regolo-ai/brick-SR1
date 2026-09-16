@@ -1,13 +1,4 @@
-"""Async OpenRouter client per inferenza Dataset A.
-
-- Chat completions endpoint OpenAI-compatible
-- Retry esponenziale su 429 / 5xx con jitter
-- Estrae `message.content` + `message.reasoning` (thinking)
-- Cattura `usage` incluso `cost` (richiede `usage.include=true` nel body)
-- Concurrency-safe: una sola istanza condivide AsyncClient pool
-
-Docs: https://openrouter.ai/docs/api-reference/chat-completion
-"""
+"""Asynchronous OpenRouter inference client with exponential backoff on 429/5xx, reasoning capture and usage/cost accounting. A shared AsyncClient pool supports concurrent calls."""
 
 from __future__ import annotations
 
@@ -23,13 +14,13 @@ import httpx
 from .io_utils import openrouter_key
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_TIMEOUT = 1200.0  # 20 min: math/coding con thinking lungo
+DEFAULT_TIMEOUT = 1200.0  # Twenty minutes accommodates long math/code reasoning.
 DEFAULT_MAX_RETRIES = 4
 
 
 @dataclass
 class InferenceResult:
-    """Output normalizzato di una singola call."""
+    """Normalized output from one inference call."""
 
     content: str
     reasoning: str | None
@@ -95,7 +86,7 @@ class OpenRouterClient:
         reasoning: bool = True,
         extra_body: dict | None = None,
     ) -> InferenceResult:
-        """Single chat completion. Restituisce InferenceResult normalizzato."""
+        """Request a chat completion with exponential backoff for 429/5xx errors."""
         if self._client is None:
             raise RuntimeError("OpenRouterClient must be used as async context manager")
 

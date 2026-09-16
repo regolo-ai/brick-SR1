@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Run inside tmux on cluster.
-# Args: full python command appended to "$HOME/venv/bin/python"
-set -e
-LOG="$HOME/client.log"
-echo "[client] $(date) cmd: $@" | tee -a "$LOG"
-cd "$HOME/dataset_b"
-exec "$HOME/venv/bin/python" "$@" 2>&1 | tee -a "$LOG"
+# Run a Dataset B script with the repository lockfile from any working directory.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run --frozen --package brick-training python "$@"

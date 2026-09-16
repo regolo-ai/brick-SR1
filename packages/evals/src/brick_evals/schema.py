@@ -1,4 +1,4 @@
-"""Schema target `evaluation_parameters` con validation (rev.3 - schema clean)."""
+"""Define and validate the evaluation_parameters schema."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ ALLOWED_EXPECTED_TYPES = {
 
 
 def validate_row(row: dict, *, allow_unmasked_token_count: bool = True) -> list[str]:
-    """Ritorna lista di errori di validazione (vuota se OK)."""
+    """Return validation errors, or an empty list for a valid row."""
     errors = []
     missing = REQUIRED_FIELDS - row.keys()
     if missing:

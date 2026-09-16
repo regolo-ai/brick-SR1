@@ -1,4 +1,4 @@
-"""Test deterministic_hash stabilità cross-run."""
+"""Verify deterministic hashes across separate runs."""
 
 import sys
 from pathlib import Path

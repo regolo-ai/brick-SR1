@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""00 - Setup check: HF token, gated dataset access, tokenizer mapping, BFCL/LiveCodeBench enumeration.
-
-Esegue check non-distruttivi e segnala blocking issues prima di lanciare la pipeline.
-"""
+"""Check credentials, gated dataset access, tokenizer mappings and BFCL/LiveCodeBench availability without modifying datasets."""
 
 from __future__ import annotations
 
@@ -73,7 +70,7 @@ def check_tokenizer(alias: str, hf_id: str) -> bool:
 
 
 def check_bfcl_repo() -> bool:
-    """BFCL non e' load_dataset-able. Verifica via list_repo_files."""
+    """Check BFCL access through list_repo_files rather than load_dataset."""
     from huggingface_hub import HfApi
 
     api = HfApi(token=hf_token())
@@ -88,7 +85,7 @@ def check_bfcl_repo() -> bool:
 
 
 def check_taubench_github() -> bool:
-    """Verifica che il repo GitHub tau-bench sia raggiungibile (HEAD request)."""
+    """Check tau-bench repository reachability with a HEAD request."""
     import requests
 
     try:
@@ -168,7 +165,7 @@ def main() -> int:
             failures.append(f"repo:{sid}")
     print()
 
-    print("[3] Tokenizers (3 modelli pool)")
+    print("[3] Tokenizers (three pool models)")
     models = load_yaml(configs_dir() / "models.yaml")
     for _key, cfg in models.items():
         if not isinstance(cfg, dict) or cfg.get("provider") == "regolo":
