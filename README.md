@@ -5,11 +5,17 @@ capability, complexity, cost, and reasoning behavior.
 
 ## Install
 
-This branch prepares Brick 3.0; it is not a published npm release. Linux x64
-is the current verification target. macOS and arm64 require execution tests
-before the advertised multi-platform release can be published.
+Brick 3.0.1 is distributed as a small JavaScript CLI plus a native runtime for
+each supported platform. The installer selects the matching runtime package;
+users do not need Docker, Python, Go, Rust, or a compiler.
 
-Build and pack on a Linux x64 development machine:
+Install the current release:
+
+```bash
+npm install --global @regoloai/brick@3.0.1
+```
+
+For local release verification on Linux x64:
 
 ```bash
 npm ci --ignore-scripts
@@ -22,12 +28,12 @@ npm pack ./apps/cli --pack-destination dist/tarballs
 Copy the two tarballs to the user machine and install them together:
 
 ```bash
-npm install --global ./regoloai-brick-runtime-linux-x64-3.0.0.tgz \
-  ./regoloai-brick-3.0.0.tgz
+npm install --global ./regoloai-brick-runtime-linux-x64-3.0.1.tgz \
+  ./regoloai-brick-3.0.1.tgz
 ```
 
 Installation downloads and verifies the pinned ModernBERT assets. Node.js 20
-or 22+ is required; the user machine needs no Docker, Python or compiler.
+or 22+ is required.
 
 ## Brick 3.0 workflow
 

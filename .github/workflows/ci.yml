@@ -193,3 +193,41 @@ jobs:
         with:
           name: linux-x64-npm
           path: dist/tarballs/*.tgz
+
+  portable-package:
+    name: ${{ matrix.target }} installed runtime
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: darwin-arm64
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts
+      - run: python3 scripts/build_runtime.py
+      - name: Execute and package the native runtime
+        run: |
+          runtime="dist/runtime-${{ matrix.target }}"
+          version=$(node -p "require('./apps/cli/package.json').version")
+          test "$($runtime/bin/brick-runtime --version)" = "$version"
+          $runtime/bin/brick-runtime --help
+          mkdir -p dist/tarballs
+          npm pack "./$runtime" --pack-destination dist/tarballs
+          python3 scripts/check_npm_package.py dist/tarballs/*.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-npm
+          path: dist/tarballs/*.tgz

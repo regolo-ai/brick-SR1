@@ -3,8 +3,7 @@
 The Brick 3.0 command-line client manages explicit router profiles.
 
 ```bash
-npm install --global ./regoloai-brick-runtime-linux-x64-3.0.0.tgz \
-  ./regoloai-brick-3.0.0.tgz
+npm install --global @regoloai/brick@3.0.1
 
 brick profile create work
 brick profile edit work
@@ -12,8 +11,7 @@ brick start work
 brick stop work
 ```
 
-This branch is an unpublished release candidate; see the root README for
-building these two tarballs.
+The installer selects the verified native runtime for the current platform.
 
 ## Commands
 
@@ -37,6 +35,7 @@ per-model JSON cards or provide local measurement or publishing commands.
 
 Requires Node.js 20 or 22+. The npm installer downloads and verifies the pinned
 ModernBERT assets and CPU runtime; no compiler, Docker or Python is required on
-the user machine. Linux x64 is the current execution-tested target.
+the user machine. Linux x64, Linux arm64, macOS x64, and macOS arm64 artifacts
+are execution-tested before publication.
 
 See [installation and recovery](../../docs/quickstart/serve.md).
