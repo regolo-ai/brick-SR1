@@ -11,7 +11,7 @@ brick start work
 brick stop work
 ```
 
-The installer selects the verified native runtime for the current platform.
+The installer selects the verified bundled runtime for the current platform.
 
 ## Commands
 

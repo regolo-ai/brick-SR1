@@ -40,10 +40,16 @@ jobs:
               exit 1
             }
           done
-      - name: Publish verified runtime packages, then CLI
+      - name: Assemble and publish the verified universal package
         run: |
-          for bundle in release/*-runtime-*.tgz; do
-            npm publish "./$bundle" --access public --provenance
-          done
           version=$(node -p "require('./apps/cli/package.json').version")
+          mkdir -p apps/cli/runtimes
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            mkdir "apps/cli/runtimes/$target"
+            tar -xzf "release/regoloai-brick-runtime-${target}-${version}.tgz" \
+              --strip-components=1 -C "apps/cli/runtimes/$target"
+          done
+          npm ci --ignore-scripts
+          npm pack ./apps/cli --pack-destination release
+          python3 scripts/check_npm_package.py "release/regoloai-brick-${version}.tgz"
           npm publish "./release/regoloai-brick-${version}.tgz" --access public --provenance
