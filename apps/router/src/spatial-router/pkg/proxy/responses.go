@@ -1,6 +1,7 @@
 package proxy
 
-// OpenAI Responses API (POST /v1/responses) adapter.
+// OpenAI Responses API entry point. Codex profiles use the native transport in
+// codex_responses.go. The adapter below is retained only for legacy deployments.
 //
 // Codex CLI 0.134+ dropped support for wire_api = "chat" and now speaks only the
 // Responses protocol: it POSTs {input, instructions, model, stream, reasoning}
@@ -58,7 +59,6 @@ type responsesRequest struct {
 // responsesInputItem is one element of an `input` array (Responses format).
 // Content may be a plain string or an array of typed parts ({type, text}).
 type responsesInputItem struct {
-	Type    string          `json:"type"`
 	Role    string          `json:"role"`
 	Content json.RawMessage `json:"content"`
 }
@@ -71,6 +71,10 @@ type chatMessage struct {
 
 // handleResponses adapts POST /v1/responses to the Chat Completions router core.
 func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
+	if s.cfg != nil && s.cfg.CodexRouter.Enabled {
+		s.handleCodexResponses(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -224,7 +228,6 @@ func extractInputItemText(raw json.RawMessage) string {
 		return asString
 	}
 	var parts []struct {
-		Type string `json:"type"`
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal(raw, &parts); err != nil {

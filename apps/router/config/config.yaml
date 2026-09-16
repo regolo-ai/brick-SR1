@@ -1,163 +1,108 @@
-# ─── Brick Configuration (v2 — NVIDIA Complexity) ────────────
-# Virtual multimodal routing model that exposes a single "brick" endpoint.
-# Detects modality (text/audio/image), preprocesses, and routes to 4 models on Regolo API.
-#
-# Routing pipeline: code detection (keyword + domain) + NVIDIA complexity for ALL queries.
-# 5 mutually exclusive decisions, no priority needed.
-
-# Virtual model identity — what clients see when calling /v1/models
-model:
-  name: "brick"
-  description: "Virtual multimodal routing model"
-
-mom_registry:
-  models/modernbert-capability-classifier: "regolo/modernbert-capability-classifier"
-
-# Brick provider (for API key resolution in brick handler)
 providers:
   regoloai:
-    type: openai_compatible
     base_url: https://api.regolo.ai/v1
-
-# Brick multimodal gateway configuration
 brick:
   enabled: true
-  stt_model: "faster-whisper-large-v3"
-  stt_endpoint: "https://api.regolo.ai/v1/audio/transcriptions"
-  ocr_model: "deepseek-ocr-2"
-  ocr_endpoint: "https://api.regolo.ai/v1/chat/completions"
-  vision_model: "qwen3.5-122b"
-  vision_endpoint: "https://api.regolo.ai/v1/chat/completions"
+  stt_model: faster-whisper-large-v3
+  stt_endpoint: https://api.regolo.ai/v1/audio/transcriptions
+  ocr_model: deepseek-ocr-2
+  ocr_endpoint: https://api.regolo.ai/v1/chat/completions
+  vision_model: qwen3.5-122b
+  vision_endpoint: https://api.regolo.ai/v1/chat/completions
   ocr_min_text_length: 10
-
-# Server configuration
 server_port: 8000
-
-# Auto model name — used internally when brick rewrites "brick" for the pipeline
-auto_model_name: "brick"
-
-# ─── Backend Models ─────────────────────────────────────────
-# 4 models, all served by Regolo API via a single provider profile
-
+auto_model_name: brick
 provider_profiles:
   regolo:
     type: openai_compatible
     base_url: https://api.regolo.ai/v1
-
 provider_endpoints:
-  - name: "regolo"
-    provider_profile: "regolo"
-    weight: 1
-
-default_model: "qwen3.5-122b"
-
+- name: regolo
+  provider_profile: regolo
+  weight: 1
+default_model: qwen3.5-122b
 model_config:
   qwen3.5-9b:
-    preferred_endpoints: ["regolo"]
-    param_size: "9b"
+    preferred_endpoints:
+    - regolo
+    use_client_key: true
   deepseek-v4-flash:
-    preferred_endpoints: ["regolo"]
-    param_size: "unknown"
+    preferred_endpoints:
+    - regolo
+    use_client_key: true
   kimi2.6:
-    preferred_endpoints: ["regolo"]
-    param_size: "unknown"
-    reasoning_family: "qwen3"
+    preferred_endpoints:
+    - regolo
+    reasoning_family: qwen3
+    use_client_key: true
   qwen3-coder-next:
-    preferred_endpoints: ["regolo"]
-    param_size: "80b"
+    preferred_endpoints:
+    - regolo
+    use_client_key: true
   qwen3.5-122b:
-    preferred_endpoints: ["regolo"]
-    param_size: "122b"
-    reasoning_family: "qwen3"
+    preferred_endpoints:
+    - regolo
+    reasoning_family: qwen3
+    use_client_key: true
   minimax-m2.5:
-    preferred_endpoints: ["regolo"]
-    param_size: "400b"
-    reasoning_family: "minimax"
-
-# ─── Reasoning Families ──────────────────────────────────────
+    preferred_endpoints:
+    - regolo
+    reasoning_family: minimax
+    use_client_key: true
 reasoning_families:
   qwen3:
-    type: "chat_template_kwargs"
-    parameter: "enable_thinking"
+    parameter: enable_thinking
   minimax:
-    type: "reasoning_effort"
-    parameter: "reasoning_effort"
-
-default_reasoning_effort: "medium"
-
-# ─── Brick2 Complexity Service ───────────────────────────────
-# Complexity classifier: hosted on Regolo's OpenAI-compatible API by default
-# (model brick-complexity-pro), reached over POST /v1/chat/completions. The
-# router expands ${REGOLO_API_KEY}. Switch to a self-hosted local sidecar
-# (custom brick protocol, POST /classify on 127.0.0.1:8094) by setting
-# protocol: brick + base_url + bearer_token_file and auto_spawn: true.
+    parameter: reasoning_effort
+default_reasoning_effort: medium
 complexity_service:
   enabled: true
-  base_url: "https://api.regolo.ai"
+  base_url: https://api.regolo.ai
   protocol: openai
   model_name: brick-complexity-pro
-  bearer_token: "${REGOLO_API_KEY}"
-  timeout_seconds: 8       # hosted classifier <500ms tipico, margine generoso
-  auto_spawn: false        # set true only for a local Python sidecar
-
-# ─── Anthropic Pass-through (Claude Code → Brick → api.anthropic.com) ───
-# Esposto come endpoint POST /v1/messages. Brick classifica difficoltà del
-# prompt e riscrive solo il campo `model` prima di forwardare a Anthropic
-# mantenendo Authorization e tutti gli altri headers del client invariati.
+  bearer_token: ${REGOLO_API_KEY}
+  timeout_seconds: 8
+  use_client_key: true
 anthropic_passthrough:
   enabled: true
-  upstream_url: "https://api.anthropic.com"
-  # extra_usage_enabled: metti true SOLO se il tuo account Anthropic ha il
-  # tier "extra-usage" pagato (necessario per 1M context). Default false →
-  # Brick rimuove l'header context-1m-* e tutto resta su contesto 200K.
+  upstream_url: https://api.anthropic.com
   extra_usage_enabled: false
   context_1m_threshold_bytes: 600000
   model_map:
-    easy: "claude-haiku-4-5"
-    medium: "claude-sonnet-4-6"
-    hard: "claude-opus-4-7"
-  # Mappatura usata SOLO quando 1M attivo (extra_usage_enabled=true e prompt
-  # supera la soglia). Haiku non ha variante 1M → easy passa a Sonnet.
+    easy: claude-haiku-4-5
+    medium: claude-sonnet-4-6
+    hard: claude-opus-4-7
   model_map_1m:
-    easy: "claude-sonnet-4-6"
-    medium: "claude-sonnet-4-6"
-    hard: "claude-opus-4-7"
-
-# ─── Brick2 Skill-Vector Router ──────────────────────────────
+    easy: claude-sonnet-4-6
+    medium: claude-sonnet-4-6
+    hard: claude-opus-4-7
 skill_router:
   enabled: true
   capabilities:
+  - coding
+  - creative_synthesis
+  - instruction_following
+  - math_reasoning
+  - planning_agentic
+  - world_knowledge
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    labels:
     - coding
     - creative_synthesis
     - instruction_following
     - math_reasoning
     - planning_agentic
     - world_knowledge
-
-  capability_model:
-    model_id: "models/modernbert-capability-classifier"
-    repo_id: "regolo/modernbert-capability-classifier"
-    labels:
-      - coding
-      - creative_synthesis
-      - instruction_following
-      - math_reasoning
-      - planning_agentic
-      - world_knowledge
-    use_cpu: true
-
   complexity_model:
-    model_id: "regolo/brick-complexity-pro"
-    base_model_id: "Qwen/Qwen3.5-0.8B"
-    base_url: "https://api.regolo.ai"
+    model_id: regolo/brick-complexity-pro
+    base_url: https://api.regolo.ai
     protocol: openai
     model_name: brick-complexity-pro
-    bearer_token: "${REGOLO_API_KEY}"
+    bearer_token: ${REGOLO_API_KEY}
     timeout_seconds: 8
-    auto_spawn: false
-
+    use_client_key: true
   math:
-    prior_strength: 8
     tau:
       easy: 0.55
       medium: 0.72
@@ -166,54 +111,68 @@ skill_router:
     tie_epsilon: 0.03
     clip_min: 0.02
     clip_max: 0.98
-
   models:
-    - model: "qwen3.5-9b"
-      skill_vector: [0.714788, 0.511538, 0.810109, 0.912146, 0.577072, 0.179876]
-      use_reasoning: false
-      cost_weight: 0.10
-    - model: "deepseek-v4-flash"
-      skill_vector: [0.820939, 0.657845, 0.863112, 0.934963, 0.62055, 0.488518]
-      use_reasoning: false
-      cost_weight: 0.40
-    - model: "kimi2.6"
-      skill_vector: [0.904272, 0.751595, 0.87018, 0.943892, 0.641863, 0.344074]
-      use_reasoning: true
-      reasoning_effort: "medium"
-      cost_weight: 0.60
-
+  - model: qwen3.5-9b
+    skill_vector:
+    - 0.714788
+    - 0.511538
+    - 0.810109
+    - 0.912146
+    - 0.577072
+    - 0.179876
+    use_reasoning: false
+    cost_weight: 0.1
+  - model: deepseek-v4-flash
+    skill_vector:
+    - 0.820939
+    - 0.657845
+    - 0.863112
+    - 0.934963
+    - 0.62055
+    - 0.488518
+    use_reasoning: false
+    cost_weight: 0.4
+  - model: kimi2.6
+    skill_vector:
+    - 0.904272
+    - 0.751595
+    - 0.87018
+    - 0.943892
+    - 0.641863
+    - 0.344074
+    use_reasoning: true
+    reasoning_effort: medium
+    cost_weight: 0.6
   keyword_rules:
-    - name: "force_coder"
-      mode: "override"
-      importance: 10
-      model: "kimi2.6"
-      operator: "OR"
-      keywords:
-        - "debug"
-        - "refactor"
-        - "compile"
-        - "runtime"
-        - "write a function"
-        - "function that"
-        - "class called"
-      case_sensitive: false
-    - name: "coding_bias"
-      mode: "bias"
-      importance: 8
-      capability: "coding"
-      operator: "OR"
-      keywords:
-        - "python"
-        - "javascript"
-        - "typescript"
-        - "golang"
-        - "rust"
-        - "java"
-        - "sql"
-        - "bash"
-        - "async"
-        - "thread"
-      case_sensitive: false
-
-# Legacy legacy decision routing is intentionally disabled in Brick2.
-decisions: []
+  - name: force_coder
+    mode: override
+    importance: 10
+    model: kimi2.6
+    operator: OR
+    keywords:
+    - debug
+    - refactor
+    - compile
+    - runtime
+    - write a function
+    - function that
+    - class called
+    case_sensitive: false
+  - name: coding_bias
+    mode: bias
+    importance: 8
+    capability: coding
+    operator: OR
+    keywords:
+    - python
+    - javascript
+    - typescript
+    - golang
+    - rust
+    - java
+    - sql
+    - bash
+    - async
+    - thread
+    case_sensitive: false
+config_version: 1

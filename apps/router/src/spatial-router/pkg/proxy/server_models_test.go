@@ -27,14 +27,30 @@ func TestHandleModelsListsCodexBrickPool(t *testing.T) {
 	}
 	var got struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID                       string     `json:"id"`
+			Slug                     string     `json:"slug"`
+			DefaultReasoningLevel    string     `json:"default_reasoning_level"`
+			SupportedReasoningLevels []struct{} `json:"supported_reasoning_levels"`
+			ShellType                string     `json:"shell_type"`
 		} `json:"data"`
+		Models []struct {
+			ID string `json:"id"`
+		} `json:"models"`
+	}
+	if len(got.Models) != len(got.Data) {
+		t.Fatalf("Codex compatibility models list has %d entries, data has %d", len(got.Models), len(got.Data))
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	ids := make(map[string]bool, len(got.Data))
 	for _, model := range got.Data {
+		if model.Slug != model.ID {
+			t.Errorf("model %q has slug %q, want matching stable slug", model.ID, model.Slug)
+		}
+		if model.DefaultReasoningLevel == "" || len(model.SupportedReasoningLevels) == 0 || model.ShellType == "" {
+			t.Errorf("model %q has incomplete Codex reasoning metadata", model.ID)
+		}
 		ids[model.ID] = true
 	}
 	for _, want := range []string{"brick", "gpt-5.6-luna", "gpt-5.4-mini"} {

@@ -1,0 +1,24 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+let directory: string | undefined;
+afterEach(async () => { vi.unstubAllEnvs(); vi.resetModules(); if (directory) await rm(directory, { recursive: true, force: true }); });
+it('refreshes an attached Claude port, restores the original URL, and keeps later restarts detached', async () => {
+  directory = await mkdtemp(join(tmpdir(), 'brick-harness-'));
+  vi.stubEnv('BRICK_HOME', join(directory, 'brick'));
+  vi.stubEnv('CLAUDE_CONFIG_DIR', join(directory, 'claude'));
+  await mkdir(join(directory, 'claude'));
+  const file = join(directory, 'claude', 'settings.json');
+  await writeFile(file, JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://original.example' }, custom: true }));
+  vi.resetModules();
+  const harness = await import('./harness.js');
+  await harness.connectOfficialHarness('claude', 18001);
+  await harness.refreshOfficialHarness('claude', 18002);
+  expect(JSON.parse(await readFile(file, 'utf8')).env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:18002');
+  await harness.disconnectOfficialHarness('claude');
+  await harness.refreshOfficialHarness('claude', 18003);
+  const restored = JSON.parse(await readFile(file, 'utf8'));
+  expect(restored.env.ANTHROPIC_BASE_URL).toBe('https://original.example');
+  expect(restored.custom).toBe(true);
+});

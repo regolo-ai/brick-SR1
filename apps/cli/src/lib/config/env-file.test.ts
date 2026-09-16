@@ -114,3 +114,14 @@ describe('readEnvValue', () => {
     }
   });
 });
+
+it('reads quoted exports and replaces all duplicate key forms consistently', async () => {
+  const dir = tmpDir(); const env = join(dir, '.env');
+  try {
+    writeFileSync(env, `export REGOLO_API_KEY="first"\n REGOLO_API_KEY = 'last'\n`);
+    expect(await readEnvValue(env, 'REGOLO_API_KEY')).toBe('last');
+    await upsertEnvValues(env, { REGOLO_API_KEY: 'replacement' });
+    expect(await readEnvValue(env, 'REGOLO_API_KEY')).toBe('replacement');
+    expect(readFileSync(env, 'utf8').match(/REGOLO_API_KEY/g)).toHaveLength(1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

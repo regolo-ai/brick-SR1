@@ -104,6 +104,15 @@ type anthropicStreamEvent struct {
 //     forwards the request verbatim to that model — no skill routing, no effort
 //     override. This preserves the user's explicit model choice.
 func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
+	clientKey, authErr := s.resolveClientAPIKey(r)
+	if authErr != nil {
+		writeError(w, http.StatusUnauthorized, authErr.Error())
+		return
+	}
+	if clientKey == "" {
+		clientKey, _ = config.ValidateCredential(r.Header.Get("x-api-key"))
+	}
+	r = r.WithContext(config.WithClientAPIKey(r.Context(), clientKey))
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -212,7 +221,8 @@ func (s *Server) handleBrickRouted(
 	routedViaSkill := false
 	if apCfg.UseSkillRouter && cfg.SkillRouter.Enabled && prompt != "" {
 		if router, rerr := s.getBrickRouter(cfg); rerr != nil {
-			logging.Warnf("AnthropicPassthrough[brick]: skill router init failed, falling back to model_map: %v", rerr)
+			writeError(w, http.StatusServiceUnavailable, "capability classifier unavailable")
+			return
 		} else if route, rerr := router.RouteWithPreference(r.Context(), prompt, preference); rerr != nil {
 			logging.Warnf("AnthropicPassthrough[brick]: skill router failed, falling back to model_map: %v", rerr)
 		} else {
@@ -318,9 +328,7 @@ func (s *Server) handleBrickRouted(
 		// when thinking routing is disabled, so the client's own effort is forwarded
 		// unchanged.
 		level := autonomousEffortLevel(tauQuery, under, preference)
-		// Enforce per-model allowlist: se il modello ha allowed_thinking_modes,
-		// il livello calcolato viene clampato al valore consentito più vicino.
-		// level == -1 è il sentinel per "off" (reasoning completamente disabilitato).
+		// Clamp to the model allowlist; -1 disables reasoning injection.
 		level = clampEffortLevelToAllowlist(level, selectedModel, cfg)
 		if level >= 0 {
 			rewritten = applyEffortAnthropicLevel(rewritten, level, selectedModel)
@@ -408,6 +416,16 @@ func (s *Server) forwardAnthropicRequest(
 	compacted bool,
 	ev *routingEvent,
 ) {
+	// A skill-card entry with an explicit OpenAI-compatible base URL is a
+	// provider-backed model (for example a Regolo model added to a Claude
+	// profile). Anthropic's Messages payload cannot be forwarded verbatim to
+	// that API, so translate the text request and non-streaming response here.
+	// Native Claude models have no inline base_url and retain the transparent
+	// Anthropic pass-through below.
+	if modelCfg := findSkillRouterModel(s.cfg, selectedModel); modelCfg != nil && modelCfg.BaseURL != "" {
+		s.forwardAnthropicToOpenAI(w, r, modelCfg, body, selectedModel, label, effortStr)
+		return
+	}
 	// start bounds Brick's end-to-end view of this request: upstream request
 	// build, round-trip, and full response stream. Recorded into ev after the
 	// stream completes; used only for observability, never for serving.
@@ -541,6 +559,30 @@ func (s *Server) forwardAnthropicRequest(
 		}
 	}
 	s.recordEconomicsUsage(selectedModel, usage.InputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens, usage.OutputTokens)
+	// Keep the dashboard independent from Prometheus: append one completed
+	// privacy-preserving record only after the upstream body has supplied its
+	// final usage (when available).
+	if s.callHistory != nil {
+		var in, out *int64
+		if usage.InputTokens != 0 || usage.CacheCreationInputTokens != 0 || usage.CacheReadInputTokens != 0 || usage.OutputTokens != 0 {
+			input := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+			output := usage.OutputTokens
+			in, out = &input, &output
+		}
+		status := "completed"
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			status = "failed"
+		}
+		source := "native"
+		if routedViaSkill {
+			source = "routed"
+		}
+		finished := time.Now().UTC()
+		latency := finished.Sub(start.UTC()).Milliseconds()
+		if err := s.callHistory.append(callRecord{CallID: newBrickCallID(), StartedAt: start.UTC(), FinishedAt: finished, Model: selectedModel, ReasoningMode: effortStr, RoutingMode: apCfg.EffectiveRoutingMode(), RoutingSource: source, Status: status, InputTokens: in, OutputTokens: out, ProviderLatencyMS: &latency, OverallLatencyMS: &latency}); err != nil {
+			logging.Warnf("Call history: append failed: %v", err)
+		}
+	}
 
 	// Sticky routing bookkeeping: record the model actually served for this
 	// conversation, keyed by response-arrival time so out-of-order concurrent

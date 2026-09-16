@@ -7,18 +7,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 )
 
 // handleDiagClassifier reports whether the configured complexity classifier
-// is reachable and what device it loaded the model on. Used by `brick claude
-// status` to surface "the classifier is actually being hit" without requiring
+// is reachable and what device it loaded the model on. Used by `brick status`
+// to surface "the classifier is actually being hit" without requiring
 // the caller to know the bearer token. Returns:
 //
 //	{"reachable": true, "device": "cuda", "latency_ms": 12, "endpoint": "..."}
 //
-// The probe depends on the protocol. The brick protocol (local auto-spawned
-// server) exposes an unauthenticated GET /health returning {status, model,
+// The probe depends on the protocol. A custom brick API exposes an unauthenticated GET /health returning {status, model,
 // device}. The openai protocol (a hosted OpenAI-compatible endpoint such as
 // Regolo's brick-complexity-pro) has no /health and requires a bearer token,
 // so we probe GET /v1/models with Authorization instead. Probing /health on
@@ -35,15 +35,8 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 
 	endpoint := cfg.ComplexityService.BaseURL
 	if endpoint == "" {
-		addr := cfg.ComplexityService.Address
-		if addr == "" {
-			addr = "127.0.0.1"
-		}
-		port := cfg.ComplexityService.Port
-		if port == 0 {
-			port = 8093
-		}
-		endpoint = formatHTTPEndpoint(addr, port)
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "reachable": false, "error": "classifier API base_url is required"})
+		return
 	}
 
 	isOpenAI := strings.EqualFold(strings.TrimSpace(cfg.ComplexityService.Protocol), "openai")
@@ -71,7 +64,29 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 
 	// The openai probe hits an authenticated endpoint; the brick /health is open.
 	if isOpenAI {
-		if token, terr := cfg.ComplexityService.ResolveBearerToken(); terr == nil && token != "" {
+		var token string
+		var tokenErr error
+		// Native Codex requests authenticate to the local router with a scoped
+		// Brick key, not with the Regolo credential. Match the classifier client:
+		// Codex profiles use the configured server-side classifier token.
+		if !cfg.CodexRouter.Enabled && cfg.ComplexityService.UsesClientKey() {
+			requestKey, requestKeyErr := s.resolveClientAPIKey(r)
+			if requestKeyErr != nil {
+				tokenErr = requestKeyErr
+			} else {
+				token, tokenErr = config.ValidateCredential(requestKey)
+			}
+		} else {
+			token, tokenErr = cfg.ComplexityService.ResolveBearerToken()
+		}
+		if tokenErr != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"enabled": true, "endpoint": endpoint, "reachable": false,
+				"error": "classifier credential is unavailable",
+			})
+			return
+		}
+		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 	}
@@ -103,7 +118,6 @@ func (s *Server) handleDiagClassifier(w http.ResponseWriter, r *http.Request) {
 		model = cfg.ComplexityService.ModelName
 	} else {
 		var health struct {
-			Status string `json:"status"`
 			Model  string `json:"model"`
 			Device string `json:"device"`
 		}
@@ -127,31 +141,4 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
-}
-
-func formatHTTPEndpoint(addr string, port int) string {
-	return "http://" + addr + ":" + intToStr(port)
-}
-
-func intToStr(n int) string {
-	// Avoid pulling strconv just for this; perf irrelevant on a diag handler.
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

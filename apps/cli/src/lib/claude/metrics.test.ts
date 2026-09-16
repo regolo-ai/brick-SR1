@@ -1,25 +1,18 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { unifyEconomy, fetchEconomics, economy, type EconomicsResponse, type ParsedMetrics } from './metrics.js';
+import { unifyEconomy, fetchEconomics, type EconomicsResponse, type HistoryStats } from './metrics.js';
 
-// Minimal ParsedMetrics fixture: only the fields economy()/routedRowsByModel()
-// actually read are populated; the rest are empty containers.
-function emptyMetrics(overrides: Partial<ParsedMetrics> = {}): ParsedMetrics {
-  return {
-    requestsByLabelModel: new Map(),
-    effortByModelEffort: new Map(),
-    routingByDiffEffortModel: new Map(),
-    fallbackTotal: 0,
-    classifyDurationCount: 0,
-    classifyDurationSum: 0,
-    classifyDurationBuckets: [],
-    ...overrides,
-  };
+function emptyMetrics(): HistoryStats {
+  return { overall: { calls: 0, completed_calls: 0, failed_calls: 0 }, models: [] };
 }
 
-function metricsWithRoutedTraffic(): ParsedMetrics {
-  // routedRowsByModel derives from requestsByLabelModel keyed "label|model".
-  const requestsByLabelModel = new Map<string, number>([['medium|claude-sonnet-4-6', 10]]);
-  return emptyMetrics({ requestsByLabelModel });
+function metricsWithRoutedTraffic(): HistoryStats {
+  return {
+    overall: { calls: 12, completed_calls: 12, failed_calls: 0 },
+    models: [
+      { model: 'claude-sonnet-4-6', routed_calls: 10, native_calls: 0, reasoning_modes: [] },
+      { model: 'claude-opus-4-8', routed_calls: 0, native_calls: 2, reasoning_modes: [] },
+    ],
+  };
 }
 
 function economicsResponse(overrides: Partial<EconomicsResponse> = {}): EconomicsResponse {
@@ -78,17 +71,16 @@ describe('unifyEconomy', () => {
     expect(result.totalOutputTokens).toBe(215);
   });
 
-  it('falls back to the legacy request-count estimate when econ is null', () => {
+  it('falls back to the request-count estimate when econ is null', () => {
     const m = metricsWithRoutedTraffic();
     const result = unifyEconomy(null, m);
 
     expect(result.source).toBe('estimate');
-    const legacy = economy(m);
-    expect(result.savedPct).toBe(legacy.savedPct);
-    expect(result.totalRoutedReqs).toBe(legacy.totalRoutedReqs);
+    expect(result.savedPct).toBeCloseTo(40);
+    expect(result.totalRoutedReqs).toBe(10);
   });
 
-  it('falls back to the legacy estimate when pricing_available is false', () => {
+  it('falls back to the request-count estimate when pricing_available is false', () => {
     const m = metricsWithRoutedTraffic();
     const econ = economicsResponse({ pricing_available: false });
     const result = unifyEconomy(econ, m);
@@ -96,7 +88,7 @@ describe('unifyEconomy', () => {
     expect(result.source).toBe('estimate');
   });
 
-  it('falls back to the legacy estimate when there is no priced baseline yet', () => {
+  it('falls back to the request-count estimate when there is no priced baseline yet', () => {
     const m = metricsWithRoutedTraffic();
     const econ = economicsResponse({ baseline_cost_units_all_expensive: 0 });
     const result = unifyEconomy(econ, m);
@@ -124,6 +116,15 @@ describe('unifyEconomy', () => {
     expect(result.source).toBe('real');
     expect(result.savedPctVsOpus).toBeUndefined();
   });
+
+  it('does not fall back to all-opus when an explicit baseline is unavailable', () => {
+    const econ = economicsResponse({ pricing_available: false, note: 'baseline missing' });
+    const result = unifyEconomy(econ, metricsWithRoutedTraffic(), 'gpt-5.6-sol');
+    expect(result.source).toBe('unavailable');
+    expect(result.baselineModel).toBe('gpt-5.6-sol');
+    expect(result.note).toBe('baseline missing');
+    expect(result.totalInputTokens).toBe(1080);
+  });
 });
 
 describe('fetchEconomics', () => {
@@ -140,6 +141,15 @@ describe('fetchEconomics', () => {
 
     const result = await fetchEconomics('http://localhost:8000');
     expect(result).toEqual(econ);
+  });
+
+  it('passes an explicit baseline model as an encoded query parameter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => economicsResponse() });
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchEconomics('http://localhost:8000', 'gpt-5.6-sol');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8000/api/v1/economics?baseline_model=gpt-5.6-sol'
+    );
   });
 
   it('returns null when the response is not ok', async () => {

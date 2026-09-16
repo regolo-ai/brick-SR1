@@ -1,19 +1,20 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 
-const ROOT = process.env.BRICK_HOME ?? join(homedir(), '.brick');
+const ROOT = resolve(process.env.BRICK_HOME ?? join(homedir(), '.brick'));
 
 export interface ProfilePaths {
   root: string;
   profile: string;
   profileDir: string;
   config: string;
-  compose: string;
   env: string;
-  models: string;
   codexCatalog: string;
+  codexBridgePid: string;
   state: string;
+  runtime: string;
+  harness: string;
 }
 
 export interface State {
@@ -28,24 +29,26 @@ export function profilesDir(): string { return join(ROOT, 'profiles'); }
 export function statePath(): string { return join(ROOT, 'state.json'); }
 
 export function paths(profile: string): ProfilePaths {
+  validateProfileName(profile, { allowReserved: true });
   const dir = join(ROOT, 'profiles', profile);
   return {
     root: ROOT,
     profile,
     profileDir: dir,
     config: join(dir, 'config.yaml'),
-    compose: join(dir, 'docker-compose.yml'),
     env: join(dir, '.env'),
-    models: join(dir, 'models'),
     codexCatalog: join(dir, 'codex-model-catalog.json'),
+    codexBridgePid: join(dir, 'codex-flat-bridge.pid'),
     state: statePath(),
+    runtime: join(dir, 'runtime'),
+    harness: join(dir, 'runtime', 'harness.json'),
   };
 }
 
 export function listProfiles(): string[] {
   try {
     return readdirSync(profilesDir(), { withFileTypes: true })
-      .filter((d) => d.isDirectory())
+      .filter((d) => d.isDirectory() && PROFILE_NAME_RE.test(d.name))
       .map((d) => d.name)
       .sort();
   } catch {
@@ -60,6 +63,15 @@ export function profileExists(name: string): boolean {
   } catch {
     return false;
   }
+}
+
+export const RESERVED_PROFILES = new Set(['claude', 'codex']);
+export const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+export function validateProfileName(name: string, options: { allowReserved?: boolean } = {}): string {
+  if (!PROFILE_NAME_RE.test(name)) throw new Error(`invalid profile name '${name}' (use 1–64 lowercase letters, digits, - or _)`);
+  if (!options.allowReserved && RESERVED_PROFILES.has(name)) throw new Error(`'${name}' is reserved for the official Brick harness and cannot be managed as a custom profile`);
+  return name;
 }
 
 export function readState(): State {
@@ -87,20 +99,20 @@ export function updateState(patch: Partial<State>): State {
 }
 
 /**
- * Resolve which profile to use for a command.
- * Order: explicit arg → BRICK_PROFILE env → state.activeProfile → throw with guidance.
+ * Resolve a profile. 3.0 deliberately has no active profile fallback: callers
+ * must name the resource explicitly, except for the running-profile helper.
  */
 export function resolveProfile(explicit?: string): string {
-  const candidate = explicit ?? process.env.BRICK_PROFILE ?? readState().activeProfile;
+  const candidate = explicit;
   if (!candidate) {
     const profs = listProfiles();
     if (profs.length === 0) {
-      throw new Error('no profiles found. Run `brick config new <name>` (or `brick init`) to create one.');
+      throw new Error('no profiles found. Run `brick profile create <name>` to create one.');
     }
-    throw new Error(`no active profile. Run \`brick config use <name>\` or pass --profile. Available: ${profs.join(', ')}`);
+    throw new Error(`a profile is required. Available: ${profs.join(', ')}`);
   }
   if (!profileExists(candidate)) {
-    throw new Error(`profile '${candidate}' not found. Run \`brick config list\` to see available profiles.`);
+    throw new Error(`profile '${candidate}' not found. Run \`brick profile list\` to see available profiles.`);
   }
   return candidate;
 }
@@ -108,7 +120,5 @@ export function resolveProfile(explicit?: string): string {
 /** Path to legacy single-config layout (pre multi-profile). */
 export const LEGACY = {
   config: join(ROOT, 'config.yaml'),
-  compose: join(ROOT, 'docker-compose.yml'),
   env: join(ROOT, '.env'),
-  models: join(ROOT, 'models'),
 };

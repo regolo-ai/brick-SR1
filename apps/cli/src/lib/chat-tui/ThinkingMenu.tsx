@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box,Text,useInput } from 'ink';
+import { useState } from 'react';
 import type { ThinkingMode } from '../client/openai.js';
 
 const accent = '#00d4aa';
@@ -34,7 +34,7 @@ export function ThinkingMenu(props: {
     return i < 0 ? 0 : i;
   });
 
-  useInput((input, key) => {
+  useInput((_input, key) => {
     if (key.escape) {
       if (stage === 'mode') setStage('top');
       else props.onClose();

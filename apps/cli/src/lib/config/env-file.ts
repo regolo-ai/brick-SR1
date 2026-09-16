@@ -3,18 +3,28 @@
 // present are replaced in place; unrelated lines (comments, other keys) are
 // preserved. The file is written 0600 since it holds secrets.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { atomicWrite } from './atomic-file.js';
 
-/** Read a single KEY=value from a .env file, or null if absent/unreadable. */
-export async function readEnvValue(envPath: string, key: string): Promise<string | null> {
-  try {
-    const txt = await readFile(envPath, 'utf8');
-    const m = txt.match(new RegExp(`^${key}=(.*)$`, 'm'));
-    if (m) return m[1].trim();
-  } catch {
-    // missing file / unreadable: treat as absent
+/** Parse the same dotenv syntax for profile editing and runtime launch. */
+export function parseProfileEnv(text: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) throw new Error('Invalid profile .env syntax');
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    values[match[1]] = value;
   }
+  return values;
+}
+
+/** Read a key without interpreting a permissions error as a missing credential. */
+export async function readEnvValue(envPath: string, key: string): Promise<string | null> {
+  try { return parseProfileEnv(await readFile(envPath, 'utf8'))[key] ?? null; }
+  catch (error: any) { if (error.code !== 'ENOENT') throw error; }
   return null;
 }
 
@@ -28,19 +38,22 @@ export async function upsertEnvValues(envPath: string, values: Record<string, st
   let existing = '';
   try {
     existing = await readFile(envPath, 'utf8');
-  } catch {
-    // new file
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') throw error;
   }
 
+  for (const [key, value] of Object.entries(values)) {
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(key) || /[\r\n\0]/.test(value)) throw new Error('Invalid environment key or multiline credential');
+  }
   const pending = new Map(Object.entries(values));
   const outLines: string[] = [];
 
   for (const line of existing.split('\n')) {
-    const m = line.match(/^([A-Z_][A-Z0-9_]*)=/);
+    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
     if (m && pending.has(m[1])) {
       outLines.push(`${m[1]}=${pending.get(m[1])}`);
       pending.delete(m[1]);
-    } else {
+    } else if (!m || !(m[1] in values)) {
       outLines.push(line);
     }
   }
@@ -54,5 +67,5 @@ export async function upsertEnvValues(envPath: string, values: Record<string, st
     outLines.push(`${k}=${v}`);
   }
 
-  await writeFile(envPath, outLines.join('\n') + '\n', { mode: 0o600 });
+  await atomicWrite(envPath, outLines.join('\n') + '\n');
 }

@@ -1,0 +1,77 @@
+# Example: Brick profile that routes across OpenRouter models.
+# Drop this at ~/.brick/profiles/brickdemo/config.yaml and pair it with a
+# .env containing OPENROUTER_API_KEY (use a FAKE key to smoke-test routing
+# without spending tokens — the request will reach OpenRouter and return 401,
+# proving the full pipeline keyword→ModernBERT→complexity→skill_math→forward
+# works end-to-end).
+
+default_model: brick
+auto_model_name: brick
+server_port: 8000
+
+brick:
+  enabled: true
+
+complexity_service:
+  enabled: true
+  base_url: http://127.0.0.1:8094
+  timeout_seconds: 8
+  auto_spawn: true
+  device: cpu
+
+skill_router:
+  enabled: true
+  capabilities: [coding, creative_synthesis, instruction_following, math_reasoning, planning_agentic, world_knowledge]
+  capability_model:
+    repo_id: massaindustries/modernbert-capability-classifier
+  complexity_model:
+    model_id: regolo/brick-complexity-2-eco
+    base_model_id: Qwen/Qwen3.5-0.8B
+    auto_spawn: true
+    device: cpu
+  math:
+    tau: { easy: 0.55, medium: 0.72, hard: 0.88 }
+    complexity_mu: 1.07
+    complexity_bias: 0.15
+    cost_penalty_beta: 0.63
+    over_penalty_lambda: 0.35
+    preference_power: 1.56
+    max_mu_multiplier: 3.24
+    max_bias_shift: 1.05
+    max_cost_relief: 13.4
+    max_over_relief: 896
+    min_mu_multiplier: 0.377
+    min_bias_shift: -5.87
+    min_cost_boost: 13
+    min_over_boost: 11.9
+    tie_epsilon: 0.03
+    clip_min: 0.02
+    clip_max: 0.98
+  models:
+    - model: anthropic/claude-3.5-sonnet
+      base_url: https://openrouter.ai/api/v1
+      api_key_env: OPENROUTER_API_KEY
+      skill_vector: [0.92, 0.85, 0.90, 0.88, 0.83, 0.91]
+      custom_params:
+        max_tokens: 4096
+    - model: deepseek/deepseek-chat
+      base_url: https://openrouter.ai/api/v1
+      api_key_env: OPENROUTER_API_KEY
+      skill_vector: [0.86, 0.72, 0.81, 0.84, 0.79, 0.80]
+    - model: openai/gpt-4o-mini
+      base_url: https://openrouter.ai/api/v1
+      api_key_env: OPENROUTER_API_KEY
+      skill_vector: [0.80, 0.95, 0.82, 0.65, 0.74, 0.85]
+      custom_params:
+        max_tokens: 2048
+
+# Smoke test:
+#   brick serve brickdemo
+#   for q in "Write Python quicksort" "Prove sqrt(2) irrational" "Haiku about rain"; do
+#     curl -is http://localhost:8000/v1/chat/completions \
+#       -H 'Content-Type: application/json' \
+#       -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+#       -d "{\"model\":\"brick\",\"messages\":[{\"role\":\"user\",\"content\":\"$q\"}]}" \
+#       | grep -iE 'x-vsr-selected-model|HTTP/'
+#   done
+# Expect: status 401 (fake key) + x-vsr-selected-model header changes per prompt.

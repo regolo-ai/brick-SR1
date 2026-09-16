@@ -83,9 +83,9 @@ func TestHandleEconomicsMethodNotAllowed(t *testing.T) {
 //	savings  = (1 - 600/2200) * 100 = 72.7272...%
 func TestHandleEconomicsComputesSavings(t *testing.T) {
 	store := economics.NewStore()
-	store.RecordUsage("cheap", 1000, 1000)
-	store.RecordUsage("expensive", 100, 100)
-	store.RecordUsage("unpriced", 50, 50)
+	store.RecordCachedUsage("cheap", 1000, 0, 0, 1000)
+	store.RecordCachedUsage("expensive", 100, 0, 0, 100)
+	store.RecordCachedUsage("unpriced", 50, 0, 0, 50)
 
 	srv := &Server{
 		economicsStore: store,
@@ -211,9 +211,9 @@ func TestHandleEconomicsSavingsVsOpusDistinctFromMostExpensive(t *testing.T) {
 	}
 
 	store := economics.NewStore()
-	store.RecordUsage("claude-haiku", 1000, 1000)
-	store.RecordUsage("claude-fable", 100, 100)
-	store.RecordUsage("claude-opus", 50, 50)
+	store.RecordCachedUsage("claude-haiku", 1000, 0, 0, 1000)
+	store.RecordCachedUsage("claude-fable", 100, 0, 0, 100)
+	store.RecordCachedUsage("claude-opus", 50, 0, 0, 50)
 
 	srv := &Server{economicsStore: store, pricingPath: path}
 
@@ -266,8 +266,8 @@ func TestHandleEconomicsSavingsVsOpusMatchesWhenOpusIsMostExpensive(t *testing.T
 	}
 
 	store := economics.NewStore()
-	store.RecordUsage("claude-haiku", 1000, 1000)
-	store.RecordUsage("claude-opus", 100, 100)
+	store.RecordCachedUsage("claude-haiku", 1000, 0, 0, 1000)
+	store.RecordCachedUsage("claude-opus", 100, 0, 0, 100)
 
 	srv := &Server{economicsStore: store, pricingPath: path}
 
@@ -300,8 +300,8 @@ func TestHandleEconomicsSavingsVsOpusMatchesWhenOpusIsMostExpensive(t *testing.T
 func TestHandleEconomicsCacheAwareCost(t *testing.T) {
 	store := economics.NewStore()
 	store.RecordCachedUsage("cheap", 1000, 400, 10000, 1000)
-	store.RecordUsage("expensive", 0, 0) // never recorded (all-zero); keep pool via a real call
-	store.RecordUsage("expensive", 1, 1)
+	store.RecordCachedUsage("expensive", 0, 0, 0, 0) // never recorded (all-zero); keep pool via a real call
+	store.RecordCachedUsage("expensive", 1, 0, 0, 1)
 
 	srv := &Server{
 		economicsStore: store,
@@ -333,11 +333,74 @@ func TestHandleEconomicsCacheAwareCost(t *testing.T) {
 	}
 }
 
+func TestHandleEconomicsExplicitUnobservedBaseline(t *testing.T) {
+	pricing := `
+- provider: openai
+  model: gpt-5.6-sol
+  input_price: 5
+  cached_input_price: 0.5
+  output_price: 30
+  currency: USD
+- provider: openai
+  model: gpt-5.6-terra
+  input_price: 2.5
+  cached_input_price: 0.25
+  output_price: 15
+  currency: USD
+- provider: openai
+  model: gpt-5.6-luna
+  input_price: 1
+  cached_input_price: 0.1
+  output_price: 6
+  currency: USD
+`
+	path := filepath.Join(t.TempDir(), "pricing.yaml")
+	if err := writeFile(path, pricing); err != nil {
+		t.Fatal(err)
+	}
+	store := economics.NewStore()
+	store.RecordCachedUsage("gpt-5.6-luna", 100, 0, 100, 10)
+	store.RecordCachedUsage("gpt-5.6-terra", 100, 0, 100, 10)
+	// Sol is deliberately not observed: it must still work as the baseline.
+	srv := &Server{economicsStore: store, pricingPath: path}
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet,
+		"/api/v1/economics?baseline_model=gpt-5.6-sol", nil))
+	resp := decodeEconomicsResponse(t, rec)
+	if !resp.PricingAvailable || resp.BaselineModel != "gpt-5.6-sol" {
+		t.Fatalf("unexpected explicit baseline response: %+v", resp)
+	}
+	if resp.SavingsPctVsOpus != nil {
+		t.Fatal("explicit baseline must omit savings_pct_vs_opus")
+	}
+	// actual=170+425=595; all-Sol baseline=850*2=1700.
+	want := (1 - 595.0/1700.0) * 100
+	if !approxEqual(resp.SavingsPct, want, 1e-9) {
+		t.Fatalf("savings_pct=%v want %v", resp.SavingsPct, want)
+	}
+}
+
+func TestHandleEconomicsExplicitInvalidBaselineKeepsTokens(t *testing.T) {
+	store := economics.NewStore()
+	store.RecordCachedUsage("cheap", 10, 0, 4, 2)
+	srv := &Server{economicsStore: store, pricingPath: writeTestPricingFile(t)}
+	rec := httptest.NewRecorder()
+	srv.handleEconomics(rec, httptest.NewRequest(http.MethodGet,
+		"/api/v1/economics?baseline_model=missing", nil))
+	resp := decodeEconomicsResponse(t, rec)
+	if resp.PricingAvailable || resp.BaselineModel != "missing" || resp.Note == "" {
+		t.Fatalf("unexpected invalid-baseline response: %+v", resp)
+	}
+	if len(resp.Models) != 1 || resp.Models[0].InputTokens != 10 || resp.Models[0].CacheReadInputTokens != 4 {
+		t.Fatalf("token counts not retained: %+v", resp.Models)
+	}
+}
+
 // TestHandleEconomicsMissingPricingFile verifies the endpoint stays usable
 // (200, token counts only) when pricing.yaml is absent.
 func TestHandleEconomicsMissingPricingFile(t *testing.T) {
 	store := economics.NewStore()
-	store.RecordUsage("cheap", 10, 20)
+	store.RecordCachedUsage("cheap", 10, 0, 0, 20)
 
 	srv := &Server{
 		economicsStore: store,
@@ -442,11 +505,11 @@ func TestHandleEconomicsMixedCurrencyRestrictsPoolToDominant(t *testing.T) {
 
 	store := economics.NewStore()
 	// USD side has more requests, so USD must be the dominant currency.
-	store.RecordUsage("usd-cheap", 1000, 1000)
-	store.RecordUsage("usd-expensive", 100, 100)
+	store.RecordCachedUsage("usd-cheap", 1000, 0, 0, 1000)
+	store.RecordCachedUsage("usd-expensive", 100, 0, 0, 100)
 	// EUR side is priced but has fewer requests; it must be excluded from
 	// the cost-ratio pool entirely, not mixed into a USD/EUR ratio.
-	store.RecordUsage("eur-model", 500, 500)
+	store.RecordCachedUsage("eur-model", 500, 0, 0, 500)
 
 	srv := &Server{economicsStore: store, pricingPath: path}
 

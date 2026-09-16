@@ -1,16 +1,16 @@
-import * as p from '@clack/prompts';
-import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdir,readFile,writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { discoverModels } from '../catalog/discovery.js';
+import { catalog,reasoningFamiliesDefault } from '../catalog/index.js';
+import { resolveModelTransport } from '../catalog/transport.js';
+import { MODES,R_BY_MODE,type ClaudeMode } from '../claude/modes.js';
+import { REGOLO_API_KEY_ENV,REGOLO_CLASSIFIER_MODEL,REGOLO_CLASSIFIER_URL } from '../config/classifier.js';
+import { saveCredential } from '../config/credentials.js';
 import { paths } from '../config/paths.js';
 import { saveConfig } from '../config/save.js';
-import { ConfigSchema, type BrickConfig } from '../config/schema.js';
-import { catalog, reasoningFamiliesDefault } from '../catalog/index.js';
-import { writeCompose } from '../docker/compose.js';
+import { ConfigSchema,type BrickConfig } from '../config/schema.js';
 import { resolveSkillCards } from '../skills/resolver.js';
-import { discoverModels } from '../catalog/discovery.js';
-import { REGOLO_CLASSIFIER_URL, REGOLO_CLASSIFIER_MODEL, REGOLO_API_KEY_ENV } from '../claude/settings-apply.js';
-import { MODES, R_BY_MODE, type ClaudeMode } from '../claude/modes.js';
+import * as p from '../ui/prompts.js';
 
 export async function runWizard(profile: string): Promise<BrickConfig> {
   const pp = paths(profile);
@@ -27,7 +27,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     required: true,
   });
   if (p.isCancel(enabledProvidersRaw)) { p.cancel('aborted'); process.exit(0); }
-  const enabledProviders = enabledProvidersRaw as string[];
+  const enabledProviderTypes = enabledProvidersRaw as string[];
 
   const apiKeys: Record<string, string> = {};
   const providers: Record<string, any> = {};
@@ -35,11 +35,15 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   const providerEndpoints: any[] = [];
   const modelConfig: Record<string, any> = {};
   let selectedModelIds: string[] = [];
+  const providerKinds: Record<string, string> = {};
 
-  // initial pass over the providers picked in the multiselect above
-  for (const pid of enabledProviders) {
-    await ensureProviderAuth(pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
-    await selectProviderModels(pid, modelConfig, selectedModelIds);
+  // Provider type and endpoint ID are intentionally separate. A Regolo
+  // endpoint defaults to `regolo`, but `regolo-pool-models` is equally valid.
+  for (const kind of enabledProviderTypes) {
+    const pid = await promptProviderId(kind, providers);
+    providerKinds[pid] = kind;
+    await ensureProviderAuth(kind, pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
+    await selectProviderModels(kind, pid, providers[pid].base_url, pp.env, modelConfig, selectedModelIds);
   }
 
   // loop-back: let the user keep adding models, returning to the provider list.
@@ -50,13 +54,23 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     if (p.isCancel(more)) { p.cancel('aborted'); process.exit(0); }
     if (!more) break;
     const pick = await p.select({
-      message: 'Provider to configure:',
-      options: Object.keys(catalog).map((id) => ({ value: id, label: catalog[id].label })),
+      message: 'Provider endpoint to configure:',
+      options: [
+        ...providerEndpoints.map((endpoint) => ({
+          value: `existing:${endpoint.name}`,
+          label: endpoint.name,
+          hint: providers[endpoint.provider_profile]?.base_url,
+        })),
+        ...Object.keys(catalog).map((id) => ({ value: `new:${id}`, label: `Add ${catalog[id].label} endpoint` })),
+      ],
     });
     if (p.isCancel(pick)) { p.cancel('aborted'); process.exit(0); }
-    const pid = String(pick);
-    await ensureProviderAuth(pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
-    await selectProviderModels(pid, modelConfig, selectedModelIds);
+    const [mode, value] = String(pick).split(':', 2);
+    const pid = mode === 'existing' ? value : await promptProviderId(value, providers);
+    const kind = mode === 'existing' ? providerKinds[pid] : value;
+    providerKinds[pid] = kind;
+    await ensureProviderAuth(kind, pid, pp, apiKeys, providers, providerProfiles, providerEndpoints);
+    await selectProviderModels(kind, pid, providers[pid].base_url, pp.env, modelConfig, selectedModelIds);
   }
 
   const defaultModelChoice = await p.select({
@@ -66,46 +80,14 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   if (p.isCancel(defaultModelChoice)) { p.cancel('aborted'); process.exit(0); }
   const defaultModel = String(defaultModelChoice);
 
-  // complexity service — always enabled (it is essential to Brick routing); the
-  // wizard asks where the difficulty classifier lives: bundled local Docker
-  // sidecar, or a remote OpenAI-compatible endpoint (vLLM / hosted API).
-  const complexityMode = await p.select({
-    message: 'complexity classifier:',
-    options: [
-      { value: 'local', label: 'Local (Docker sidecar)', hint: 'bundled classifier container, runs on this host' },
-      { value: 'api', label: 'API — hosted Regolo', hint: 'brick-complexity-pro' },
-    ],
-    initialValue: 'local',
-  });
-  if (p.isCancel(complexityMode)) { p.cancel('aborted'); process.exit(0); }
-
-  let complexityService: any;
-  if (complexityMode === 'api') {
-    p.note('Hosted Regolo classifier: brick-complexity-pro. The key is stored only in the profile .env.', 'classifier');
-    const token = await p.password({ message: 'Regolo API key:' });
-    if (p.isCancel(token)) { p.cancel('aborted'); process.exit(0); }
-    if (String(token).trim()) apiKeys[REGOLO_API_KEY_ENV] = String(token).trim();
-    complexityService = {
-      enabled: true,
-      protocol: 'openai',
-      base_url: REGOLO_CLASSIFIER_URL,
-      model_name: REGOLO_CLASSIFIER_MODEL,
-      bearer_token: '${' + REGOLO_API_KEY_ENV + '}',
-      timeout_seconds: 8,
-      auto_spawn: false,
-    };
-  } else {
-    // Local Docker sidecar reached via the compose service DNS name.
-    const classifierToken = randomBytes(24).toString('hex');
-    apiKeys.BRICK_CLASSIFIER_TOKEN = classifierToken;
-    complexityService = {
-      enabled: true,
-      base_url: 'http://classifier:8094',
-      bearer_token: '${BRICK_CLASSIFIER_TOKEN}',
-      timeout_seconds: 8,
-      auto_spawn: false,
-    };
-  }
+  p.note('Complexity classification uses the Regolo API. The key is stored in this profile.', 'classifier');
+  const token = await p.password({ message: 'Regolo API key:' });
+  if (p.isCancel(token)) { p.cancel('aborted'); process.exit(0); }
+  if (String(token).trim()) apiKeys[REGOLO_API_KEY_ENV] = String(token).trim();
+  const complexityService: any = {
+    enabled: true, protocol: 'openai', base_url: REGOLO_CLASSIFIER_URL,
+    model_name: REGOLO_CLASSIFIER_MODEL, bearer_token: '${' + REGOLO_API_KEY_ENV + '}', timeout_seconds: 8,
+  };
 
   // routing mode — quantized preset of the continuous r knob
   // (skill_router.math.routing_preference, honored by the Go router).
@@ -191,8 +173,8 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   for (const id of imageCapable as string[]) caps[id] = { ...caps[id], images: true };
   for (const id of audioCapable as string[]) caps[id] = { ...caps[id], audio: true };
 
-  const primaryProvider = enabledProviders.includes('regolo') ? 'regolo' : enabledProviders[0];
-  const mm = catalog[primaryProvider].multimodal;
+  const primaryProviderKind = Object.values(providerKinds).includes('regolo') ? 'regolo' : Object.values(providerKinds)[0];
+  const mm = catalog[primaryProviderKind].multimodal;
   const brick = {
     enabled: true,
     use_model_routing: Boolean(modelRouting),
@@ -205,18 +187,15 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     ocr_min_text_length: 10,
   };
 
-  const skillRouter = await buildSkillRouter(selectedModelIds, complexityService?.base_url, routingPreference, customKeywordRules, caps);
-  if (complexityMode === 'api') {
-    skillRouter.complexity_model.model_id = REGOLO_CLASSIFIER_MODEL;
-    skillRouter.complexity_model.base_model_id = REGOLO_CLASSIFIER_MODEL;
-    skillRouter.complexity_model.bearer_token = '${' + REGOLO_API_KEY_ENV + '}';
-  } else {
-    skillRouter.complexity_model.model_id = 'Qwen/Qwen3.5-0.8B';
-    skillRouter.complexity_model.base_model_id = 'Qwen/Qwen3.5-0.8B';
-  }
+  const skillRouter = await buildSkillRouter(
+    selectedModelIds, complexityService?.base_url, routingPreference, customKeywordRules, caps,
+    modelConfig, providerProfiles, providerEndpoints,
+  );
+  skillRouter.complexity_model.model_id = REGOLO_CLASSIFIER_MODEL;
+  skillRouter.complexity_model.bearer_token = '${' + REGOLO_API_KEY_ENV + '}';
   skillRouter.dynamic_effort = Boolean(thinkingRouting);
   if (!skillRouter.models.length) {
-    throw new Error('No selected model has a skill-card. Run `brick skills extract <model>` and retry.');
+    throw new Error('No selected model has a skill-card. Run the evaluation skill-profile export workflow and retry.');
   }
   const poolIds = skillRouter.models.map((m: any) => m.model);
   const effectiveDefaultModel = poolIds.includes(defaultModel) ? defaultModel : poolIds[0];
@@ -231,10 +210,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
   }
 
   const cfg: BrickConfig = ConfigSchema.parse({
-    model: { name: 'brick', description: 'Virtual multimodal routing model' },
-    mom_registry: {
-      'models/modernbert-capability-classifier': 'massaindustries/modernbert-capability-classifier',
-    },
+    config_version: 1,
     providers,
     brick,
     server_port: 8000,
@@ -247,13 +223,11 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
     default_reasoning_effort: 'medium',
     complexity_service: complexityService,
     skill_router: skillRouter,
-    keyword_rules: [],
-    decisions: [],
   });
 
   // summary
   const skillLines = skillRouter.models.map(
-    (m: any) => `  ${m.model}: ${m.skill_source}${m.skill_source === 'heuristic' ? ' (run: brick skills extract)' : ''}`
+    (m: any) => `  ${m.model}: remote skill table`
   );
   p.note(
     [
@@ -277,8 +251,7 @@ export async function runWizard(profile: string): Promise<BrickConfig> {
 
   await saveConfig(cfg, profile);
   await writeEnvFile(apiKeys, pp.env);
-  await writeCompose({ profile, port: cfg.server_port, useLocalClassifier: complexityMode === 'local' });
-  p.outro(`done. config=${pp.config} compose=${pp.compose} env=${pp.env}`);
+  p.outro(`done. config=${pp.config} env=${pp.env}`);
   return cfg;
 }
 
@@ -310,34 +283,27 @@ async function buildSkillRouter(
   complexityBaseUrl?: string,
   routingPreference = 0,
   extraKeywordRules: any[] = [],
-  caps: Record<string, { images?: boolean; audio?: boolean }> = {}
+  caps: Record<string, { images?: boolean; audio?: boolean }> = {},
+  modelConfig: Record<string, any> = {},
+  providerProfiles: Record<string, any> = {},
+  providerEndpoints: Array<{ name: string; provider_profile: string }> = [],
 ): Promise<any> {
   const cards = await resolveSkillCards(modelIds);
   const eligibleIds = modelIds.filter((id) => cards.has(id));
   const excluded = modelIds.length - eligibleIds.length;
   if (excluded) {
-    p.note(`${excluded} model(s) excluded from the skill-router pool because no skill-card is available. Run \`brick skills extract <model>\`.`, 'skill cards');
+    p.note(`${excluded} model(s) excluded because they are not present in the published skill table.`, 'skill table');
   }
   const models = eligibleIds.map((id, idx) => {
     const published = cards.get(id)!;
     const skill_vector = published.skill_vector;
-    const skill_source = published.source;
-    const skill_confidence = published.confidence;
+    const transport = resolveModelTransport(id, modelConfig, providerProfiles, providerEndpoints);
     return {
       model: id,
       skill_vector,
-      skill_source,
-      ...(skill_confidence ? { skill_confidence } : {}),
-      ...(published ? {
-        skill_card_metadata: {
-          provider: published.provider,
-          support: published.support,
-          subset_hash: published.subset_hash,
-          date: published.date,
-          notes: published.notes,
-        },
-      } : {}),
       use_reasoning: false,
+      ...(transport?.baseUrl ? { base_url: transport.baseUrl } : {}),
+      ...(transport?.apiKeyEnv ? { api_key_env: transport.apiKeyEnv } : {}),
       cost_weight: KNOWN_COST_WEIGHTS[id] ?? Number(((idx + 1) / Math.max(1, modelIds.length)).toFixed(2)),
       // Native multimodal flags: when set, the brick gateway forwards the raw
       // image/audio to this model instead of OCR/STT-flattening it to text.
@@ -351,19 +317,14 @@ async function buildSkillRouter(
     capabilities: CAPABILITIES,
     capability_model: {
       model_id: 'models/modernbert-capability-classifier',
-      repo_id: 'regolo/modernbert-capability-classifier',
       labels: CAPABILITIES,
-      use_cpu: true,
     },
     complexity_model: {
       model_id: 'regolo/brick-complexity-2-eco',
-      base_model_id: 'Qwen/Qwen3.5-0.8B',
       ...(complexityBaseUrl ? { base_url: complexityBaseUrl } : {}),
       timeout_seconds: 8,
-      auto_spawn: false,
     },
     math: {
-      prior_strength: 8,
       tau: { easy: 0.55, medium: 0.72, hard: 0.88 },
       routing_preference: routingPreference,
       complexity_mu: 0.345170,
@@ -408,16 +369,12 @@ async function buildSkillRouter(
   };
 }
 
-function heuristicSkillVector(index: number, total: number): number[] {
-  const base = 0.62 + 0.18 * (index / Math.max(1, total - 1));
-  return [base, base, Math.min(0.9, base + 0.05), Math.min(0.92, base + 0.08), base, Math.max(0.35, base - 0.1)];
-}
-
 // Configure a provider's auth/endpoint and register it. Idempotent: if the
 // provider is already in `providers`, it returns early without re-asking the key
 // so the loop-back can re-select an already-configured provider just to add more
 // models.
 async function ensureProviderAuth(
+  kind: string,
   pid: string,
   pp: ReturnType<typeof paths>,
   apiKeys: Record<string, string>,
@@ -426,9 +383,9 @@ async function ensureProviderAuth(
   providerEndpoints: any[]
 ): Promise<void> {
   if (providers[pid]) return;
-  const cat = catalog[pid];
+  const cat = catalog[kind];
   let baseUrl = cat.base_url;
-  if (pid === 'local') {
+  if (kind === 'local') {
     const u = await p.text({ message: 'Local endpoint base_url:', placeholder: cat.base_url, defaultValue: cat.base_url });
     if (p.isCancel(u)) { p.cancel('aborted'); process.exit(0); }
     baseUrl = String(u || cat.base_url);
@@ -443,7 +400,11 @@ async function ensureProviderAuth(
     key = String(k);
   }
   apiKeys[cat.env_key] = key;
-  providers[pid] = { type: 'openai_compatible', base_url: baseUrl };
+  // Persist credentials as soon as the endpoint is accepted. A later wizard
+  // cancellation must not leave an apparently configured provider with a lost
+  // key, and unrelated .env entries are preserved.
+  if (!existing) await saveCredential(pp.profile, cat.env_key, key, baseUrl, /anthropic/i.test(kind) ? 'anthropic' : 'openai');
+  providers[pid] = { base_url: baseUrl };
   providerProfiles[pid] = { type: 'openai_compatible', base_url: baseUrl };
   providerEndpoints.push({ name: pid, provider_profile: pid, weight: 1 });
 }
@@ -451,18 +412,24 @@ async function ensureProviderAuth(
 // Select models for a provider and merge them into modelConfig/selectedModelIds.
 // Additive with dedup: ids already chosen are pre-selected and never duplicated.
 async function selectProviderModels(
+  kind: string,
   pid: string,
+  baseUrl: string,
+  envPath: string,
   modelConfig: Record<string, any>,
   selectedModelIds: string[]
 ): Promise<void> {
-  const cat = catalog[pid];
+  const cat = catalog[kind];
   const add = (id: string, conf: any) => {
     modelConfig[id] = conf;
     if (!selectedModelIds.includes(id)) selectedModelIds.push(id);
   };
   let available = cat.models;
-  if (pid === 'regolo') {
-    const result = await discoverModels(pid, cat.base_url);
+  try {
+    const key = await readEnvKey(cat.env_key, envPath);
+    const result = await discoverModels(pid, baseUrl, {
+      ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
+    });
     const discovered = result.models.map((m) => ({ id: m.id, label: m.id, param_size: '', reasoning_family: undefined }));
     const cards = await resolveSkillCards(discovered.map((m) => m.id));
     const excluded = discovered.filter((m) => !cards.has(m.id));
@@ -473,17 +440,22 @@ async function selectProviderModels(
         excluded.length
           ? `${excluded.length} Regolo model(s) are hidden because Brick could not find a matching card.`
           : 'Every discovered Regolo model has a matching skill-card.',
-        "If you don't see your model, it is not covered by the skill cards yet. Run `brick skills extract <model>` and restart `brick init`.",
+        "If you don't see your model, it is not covered by the skill cards yet. Choose a covered model or export its evaluated skill profile before creating a profile.",
       ].join('\n'),
-      'Regolo model eligibility',
+      `${cat.label} model eligibility`,
     );
-    if (result.source === 'cache') p.note('Regolo /models unavailable; using the local model catalog cache.', 'models');
+    if (result.source === 'cache') p.note(`${pid} /models unavailable; using the local model catalog cache.`, 'models');
+  } catch (error: any) {
+    p.note(
+      `${error?.message ?? error}\n${available.length ? 'Using the bundled compatibility catalog for onboarding.' : 'No cache or bundled catalog is available; enter model IDs manually.'}`,
+      'model discovery',
+    );
   }
   if (available.length === 0) {
     const ids = await p.text({ message: `Comma-separated model IDs for ${cat.label}:`, placeholder: 'mistral,llama3' });
     if (p.isCancel(ids)) { p.cancel('aborted'); process.exit(0); }
     const list = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
-    for (const id of list) add(id, { preferred_endpoints: [pid], param_size: 'unknown' });
+    for (const id of list) add(id, { preferred_endpoints: [pid] });
   } else {
     const sel = await p.multiselect({
       message: `Select models for ${cat.label}:`,
@@ -496,11 +468,25 @@ async function selectProviderModels(
       const m = available.find((x) => x.id === id)!;
       add(id, {
         preferred_endpoints: [pid],
-        param_size: m.param_size,
         ...(m.reasoning_family ? { reasoning_family: m.reasoning_family } : {}),
       });
     }
   }
+}
+
+async function promptProviderId(kind: string, existing: Record<string, any>): Promise<string> {
+  const value = await p.text({
+    message: `${catalog[kind].label} provider ID:`,
+    defaultValue: kind,
+    placeholder: kind === 'regolo' ? 'regolo-pool-models' : kind,
+    validate: (raw) => {
+      const id = raw.trim();
+      if (!/^[A-Za-z0-9._-]+$/.test(id)) return 'use letters, digits, dot, - or _';
+      if (existing[id]) return `provider ID '${id}' already exists`;
+    },
+  });
+  if (p.isCancel(value)) { p.cancel('aborted'); process.exit(0); }
+  return String(value).trim();
 }
 
 async function readEnvKey(envKey: string, envPath?: string): Promise<string | null> {

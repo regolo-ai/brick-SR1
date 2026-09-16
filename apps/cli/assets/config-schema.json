@@ -1,0 +1,568 @@
+{
+  "fields": {
+    "anthropic_passthrough": {
+      "fields": {
+        "compact_keep_recent_turns": {
+          "scalar": true
+        },
+        "compact_shadow_only": {
+          "scalar": true
+        },
+        "context_1m_threshold_bytes": {
+          "scalar": true
+        },
+        "context_window": {
+          "fields": {
+            "enabled": {
+              "scalar": true
+            },
+            "k": {
+              "scalar": true
+            }
+          }
+        },
+        "enabled": {
+          "scalar": true
+        },
+        "extra_usage_enabled": {
+          "scalar": true
+        },
+        "fixed_model": {
+          "scalar": true
+        },
+        "model_map": {
+          "fields": {
+            "easy": {
+              "scalar": true
+            },
+            "hard": {
+              "scalar": true
+            },
+            "medium": {
+              "scalar": true
+            }
+          }
+        },
+        "model_map_1m": {
+          "fields": {
+            "easy": {
+              "scalar": true
+            },
+            "hard": {
+              "scalar": true
+            },
+            "medium": {
+              "scalar": true
+            }
+          }
+        },
+        "route_subagents": {
+          "scalar": true
+        },
+        "routing_mode": {
+          "scalar": true
+        },
+        "sticky_score_margin": {
+          "scalar": true
+        },
+        "sticky_ttl_seconds": {
+          "scalar": true
+        },
+        "upstream_url": {
+          "scalar": true
+        },
+        "use_model_routing": {
+          "scalar": true
+        },
+        "use_skill_router": {
+          "scalar": true
+        },
+        "use_thinking_routing": {
+          "scalar": true
+        }
+      }
+    },
+    "auto_model_name": {
+      "scalar": true
+    },
+    "brick": {
+      "fields": {
+        "context_window": {
+          "fields": {
+            "enabled": {
+              "scalar": true
+            },
+            "k": {
+              "scalar": true
+            }
+          }
+        },
+        "enabled": {
+          "scalar": true
+        },
+        "fixed_model": {
+          "scalar": true
+        },
+        "ocr_endpoint": {
+          "scalar": true
+        },
+        "ocr_min_text_length": {
+          "scalar": true
+        },
+        "ocr_model": {
+          "scalar": true
+        },
+        "routing_mode": {
+          "scalar": true
+        },
+        "sticky_score_margin": {
+          "scalar": true
+        },
+        "sticky_ttl_seconds": {
+          "scalar": true
+        },
+        "stt_endpoint": {
+          "scalar": true
+        },
+        "stt_model": {
+          "scalar": true
+        },
+        "use_model_routing": {
+          "scalar": true
+        },
+        "vision_endpoint": {
+          "scalar": true
+        },
+        "vision_model": {
+          "scalar": true
+        }
+      }
+    },
+    "codex_router": {
+      "fields": {
+        "enabled": {
+          "scalar": true
+        },
+        "local_key_env": {
+          "scalar": true
+        },
+        "timeout_seconds": {
+          "scalar": true
+        }
+      }
+    },
+    "complexity_service": {
+      "fields": {
+        "base_url": {
+          "scalar": true
+        },
+        "bearer_token": {
+          "scalar": true
+        },
+        "bearer_token_file": {
+          "scalar": true
+        },
+        "default_confidence": {
+          "scalar": true
+        },
+        "enabled": {
+          "scalar": true
+        },
+        "model_name": {
+          "scalar": true
+        },
+        "protocol": {
+          "scalar": true
+        },
+        "timeout_seconds": {
+          "scalar": true
+        },
+        "use_client_key": {
+          "scalar": true
+        }
+      }
+    },
+    "config_version": {
+      "scalar": true
+    },
+    "default_model": {
+      "scalar": true
+    },
+    "default_reasoning_effort": {
+      "scalar": true
+    },
+    "include_config_models_in_list": {
+      "scalar": true
+    },
+    "model_config": {
+      "values": {
+        "fields": {
+          "access_key": {
+            "scalar": true
+          },
+          "access_key_env": {
+            "scalar": true
+          },
+          "allowed_thinking_modes": {
+            "items": {
+              "scalar": true
+            }
+          },
+          "context_window_size": {
+            "scalar": true
+          },
+          "external_model_ids": {
+            "values": {
+              "scalar": true
+            }
+          },
+          "preferred_endpoints": {
+            "items": {
+              "scalar": true
+            }
+          },
+          "reasoning_family": {
+            "scalar": true
+          },
+          "transport_capabilities": {
+            "items": {
+              "scalar": true
+            }
+          },
+          "upstream_model": {
+            "scalar": true
+          },
+          "use_client_key": {
+            "scalar": true
+          }
+        }
+      }
+    },
+    "observability": {
+      "fields": {
+        "metrics": {
+          "fields": {
+            "enabled": {
+              "scalar": true
+            }
+          }
+        }
+      }
+    },
+    "provider_endpoints": {
+      "items": {
+        "fields": {
+          "address": {
+            "scalar": true
+          },
+          "name": {
+            "scalar": true
+          },
+          "port": {
+            "scalar": true
+          },
+          "provider_profile": {
+            "scalar": true
+          },
+          "type": {
+            "scalar": true
+          },
+          "weight": {
+            "scalar": true
+          }
+        }
+      }
+    },
+    "provider_profiles": {
+      "values": {
+        "fields": {
+          "api_key_env": {
+            "scalar": true
+          },
+          "api_version": {
+            "scalar": true
+          },
+          "auth_header": {
+            "scalar": true
+          },
+          "auth_prefix": {
+            "scalar": true
+          },
+          "auth_source": {
+            "scalar": true
+          },
+          "base_url": {
+            "scalar": true
+          },
+          "capabilities": {
+            "items": {
+              "scalar": true
+            }
+          },
+          "chat_path": {
+            "scalar": true
+          },
+          "compact_path": {
+            "scalar": true
+          },
+          "extra_headers": {
+            "values": {
+              "scalar": true
+            }
+          },
+          "protocol": {
+            "scalar": true
+          },
+          "responses_path": {
+            "scalar": true
+          },
+          "type": {
+            "scalar": true
+          }
+        }
+      }
+    },
+    "providers": {
+      "values": {
+        "fields": {
+          "api_key": {
+            "scalar": true
+          },
+          "base_url": {
+            "scalar": true
+          }
+        }
+      }
+    },
+    "reasoning_families": {
+      "values": {
+        "fields": {
+          "parameter": {
+            "scalar": true
+          }
+        }
+      }
+    },
+    "server_port": {
+      "scalar": true
+    },
+    "skill_router": {
+      "fields": {
+        "active_models": {
+          "items": {
+            "scalar": true
+          }
+        },
+        "capabilities": {
+          "items": {
+            "scalar": true
+          }
+        },
+        "capability_model": {
+          "fields": {
+            "labels": {
+              "items": {
+                "scalar": true
+              }
+            },
+            "local_path": {
+              "scalar": true
+            },
+            "model_id": {
+              "scalar": true
+            }
+          }
+        },
+        "complexity_model": {
+          "fields": {
+            "base_url": {
+              "scalar": true
+            },
+            "bearer_token": {
+              "scalar": true
+            },
+            "bearer_token_file": {
+              "scalar": true
+            },
+            "default_confidence": {
+              "scalar": true
+            },
+            "model_id": {
+              "scalar": true
+            },
+            "model_name": {
+              "scalar": true
+            },
+            "protocol": {
+              "scalar": true
+            },
+            "timeout_seconds": {
+              "scalar": true
+            },
+            "use_client_key": {
+              "scalar": true
+            }
+          }
+        },
+        "dynamic_effort": {
+          "scalar": true
+        },
+        "enabled": {
+          "scalar": true
+        },
+        "keyword_rules": {
+          "items": {
+            "fields": {
+              "bias": {
+                "values": {
+                  "scalar": true
+                }
+              },
+              "capability": {
+                "scalar": true
+              },
+              "case_sensitive": {
+                "scalar": true
+              },
+              "importance": {
+                "scalar": true
+              },
+              "keywords": {
+                "items": {
+                  "scalar": true
+                }
+              },
+              "mode": {
+                "scalar": true
+              },
+              "model": {
+                "scalar": true
+              },
+              "name": {
+                "scalar": true
+              },
+              "operator": {
+                "scalar": true
+              }
+            }
+          }
+        },
+        "math": {
+          "fields": {
+            "clip_max": {
+              "scalar": true
+            },
+            "clip_min": {
+              "scalar": true
+            },
+            "complexity_bias": {
+              "scalar": true
+            },
+            "complexity_mu": {
+              "scalar": true
+            },
+            "cost_penalty_beta": {
+              "scalar": true
+            },
+            "max_bias_shift": {
+              "scalar": true
+            },
+            "max_cost_relief": {
+              "scalar": true
+            },
+            "max_mu_multiplier": {
+              "scalar": true
+            },
+            "max_over_relief": {
+              "scalar": true
+            },
+            "min_bias_shift": {
+              "scalar": true
+            },
+            "min_cost_boost": {
+              "scalar": true
+            },
+            "min_mu_multiplier": {
+              "scalar": true
+            },
+            "min_over_boost": {
+              "scalar": true
+            },
+            "over_penalty_lambda": {
+              "scalar": true
+            },
+            "preference_power": {
+              "scalar": true
+            },
+            "routing_preference": {
+              "scalar": true
+            },
+            "tau": {
+              "values": {
+                "scalar": true
+              }
+            },
+            "tie_epsilon": {
+              "scalar": true
+            }
+          }
+        },
+        "models": {
+          "items": {
+            "fields": {
+              "api_key": {
+                "scalar": true
+              },
+              "api_key_env": {
+                "scalar": true
+              },
+              "api_key_file": {
+                "scalar": true
+              },
+              "base_url": {
+                "scalar": true
+              },
+              "cost_weight": {
+                "scalar": true
+              },
+              "custom_params": {
+                "values": {
+                  "any": true
+                }
+              },
+              "handles_audio": {
+                "scalar": true
+              },
+              "handles_images": {
+                "scalar": true
+              },
+              "latency_weight": {
+                "scalar": true
+              },
+              "model": {
+                "scalar": true
+              },
+              "reasoning_effort": {
+                "scalar": true
+              },
+              "skill_vector": {
+                "items": {
+                  "scalar": true
+                }
+              },
+              "use_client_key": {
+                "scalar": true
+              },
+              "use_reasoning": {
+                "scalar": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "trusted_proxy_header": {
+      "scalar": true
+    }
+  }
+}

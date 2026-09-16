@@ -1,5 +1,4 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import { Box,Text } from 'ink';
 import TextInput from 'ink-text-input';
 
 const accent = '#00d4aa';
