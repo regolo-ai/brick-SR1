@@ -64,6 +64,147 @@ func TestResponsesToChatMessages_EmptyInputSkipped(t *testing.T) {
 	}
 }
 
+func TestChatGPTCodexForwardHeaders_PreservesAuthAndCodexMetadata(t *testing.T) {
+	src := make(http.Header)
+	src.Set("Authorization", "Bearer oauth-token")
+	src.Set("ChatGPT-Account-ID", "workspace-123")
+	src.Set("Originator", "codex_exec")
+	src.Set("X-Codex-Installation-Id", "install-123")
+	src.Set("X-Codex-Turn-State", "turn-state")
+	src.Set("Connection", "keep-alive")
+	src.Set("X-Selected-Model", "internal-only")
+
+	got := chatGPTCodexForwardHeaders(src)
+	for key, want := range map[string]string{
+		"Authorization":           "Bearer oauth-token",
+		"ChatGPT-Account-ID":      "workspace-123",
+		"Originator":              "codex_exec",
+		"X-Codex-Installation-Id": "install-123",
+		"X-Codex-Turn-State":      "turn-state",
+	} {
+		value := ""
+		for gotKey, gotValue := range got {
+			if strings.EqualFold(gotKey, key) {
+				value = gotValue
+				break
+			}
+		}
+		if value != want {
+			t.Errorf("header %s = %q, want %q", key, value, want)
+		}
+	}
+	if _, ok := got["Connection"]; ok {
+		t.Error("hop-by-hop Connection header must not be forwarded")
+	}
+	if _, ok := got["X-Selected-Model"]; ok {
+		t.Error("internal X-Selected-Model header must not be forwarded")
+	}
+}
+
+func TestApplyResponsesReasoningLevel_PreservesResponsesPayload(t *testing.T) {
+	useReasoning := true
+	cfg := &config.RouterConfig{
+		SkillRouter: config.SkillRouterConfig{
+			Models: []config.SkillRouterModelConfig{{
+				Model: "gpt-5.6-terra",
+				ModelReasoningControl: config.ModelReasoningControl{
+					UseReasoning: &useReasoning,
+				},
+			}},
+		},
+	}
+	body := []byte(`{
+		"model":"brick",
+		"input":[{"type":"function_call_output","call_id":"call_1","output":"ok"}],
+		"tools":[{"type":"function","name":"shell"}],
+		"reasoning":{"effort":"high","summary":"auto"},
+		"stream":true
+	}`)
+
+	gotBody, effort := applyResponsesReasoningLevel(body, cfg, "gpt-5.6-terra", 2)
+	if effort != "medium" {
+		t.Fatalf("effort = %q, want medium", effort)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(gotBody, &got); err != nil {
+		t.Fatalf("rewritten body is invalid JSON: %v", err)
+	}
+	if got["reasoning_effort"] != nil || got["thinking"] != nil {
+		t.Fatalf("Chat-only reasoning fields leaked into Responses payload: %v", got)
+	}
+	reasoning, ok := got["reasoning"].(map[string]interface{})
+	if !ok || reasoning["effort"] != "medium" || reasoning["summary"] != "auto" {
+		t.Fatalf("Responses reasoning object was not preserved/re-written correctly: %v", got["reasoning"])
+	}
+	if _, ok := got["tools"]; !ok {
+		t.Error("tools were dropped from native Responses payload")
+	}
+	if _, ok := got["input"]; !ok {
+		t.Error("function-call input was dropped from native Responses payload")
+	}
+}
+
+func TestNativeResponsesForward_PreservesBodyHeadersAndSSE(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	var gotHeaders http.Header
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotHeaders = r.Header.Clone()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Codex-Turn-State", "next-turn")
+		_, _ = w.Write([]byte("event: response.completed\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":11,\"output_tokens\":2}}}\n\n"))
+	}))
+	defer backend.Close()
+
+	srv := &Server{}
+	body := []byte(`{"model":"gpt-5.6-terra","input":"hello","tools":[{"type":"function","name":"shell"}],"stream":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(string(body)))
+	result := &RoutingResult{
+		ForwardBody:     body,
+		ForwardEndpoint: extractHost(backend.URL),
+		ForwardPath:     "/backend-api/codex/responses",
+		ForwardHeaders: map[string]string{
+			"Authorization":      "Bearer oauth-token",
+			"ChatGPT-Account-ID": "workspace-123",
+		},
+		IsStreaming: true,
+		IsResponses: true,
+		Model:       "gpt-5.6-terra",
+	}
+	rec := httptest.NewRecorder()
+	srv.forwardToBackend(rec, req, result)
+
+	if gotPath != "/backend-api/codex/responses" {
+		t.Errorf("upstream path = %q", gotPath)
+	}
+	if gotHeaders.Get("Authorization") != "Bearer oauth-token" || gotHeaders.Get("ChatGPT-Account-ID") != "workspace-123" {
+		t.Fatalf("ChatGPT auth headers missing upstream: %v", gotHeaders)
+	}
+	if string(gotBody) != string(body) {
+		t.Fatalf("native Responses body changed unexpectedly:\ngot  %s\nwant %s", gotBody, body)
+	}
+	if strings.Contains(string(gotBody), "stream_options") {
+		t.Error("Chat Completions stream_options leaked into native Responses request")
+	}
+	if rec.Header().Get("X-Codex-Turn-State") != "next-turn" {
+		t.Errorf("turn-state response header = %q", rec.Header().Get("X-Codex-Turn-State"))
+	}
+	if !strings.Contains(rec.Body.String(), "event: response.completed") {
+		t.Fatalf("SSE stream was not forwarded: %s", rec.Body.String())
+	}
+}
+
+func TestExtractOpenAIUsage_ResponsesCompletedEvent(t *testing.T) {
+	payload := []byte(`{"type":"response.completed","response":{"usage":{"input_tokens":11,"output_tokens":2}}}`)
+	got := extractOpenAIUsage(payload)
+	if got.PromptTokens != 11 || got.CompletionTokens != 2 {
+		t.Fatalf("Responses usage = %+v, want prompt=11 completion=2", got)
+	}
+}
+
 func TestExtractChatCompletion(t *testing.T) {
 	body := []byte(`{
 		"choices":[{"message":{"role":"assistant","content":"42"}}],

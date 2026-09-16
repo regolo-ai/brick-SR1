@@ -30,6 +30,7 @@ type RoutingResult struct {
 	ForwardPath     string            // backend path (e.g., "/v1/chat/completions")
 	ForwardHeaders  map[string]string // headers to set on the upstream request
 	IsStreaming     bool              // whether the original request has stream=true
+	IsResponses     bool              // native Responses protocol; disables Chat-only body mutation
 	Model           string            // selected model name, used for economics tracking
 	RoutingSource   string            // "routed" or "native", for durable call history
 	ReasoningMode   string
