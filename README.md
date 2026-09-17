@@ -48,7 +48,7 @@ Brick is for anyone running against more than one model, or paying flat rate for
 ## ⚡ Quickstart
 
 The fastest working path today is the CLI, which self-hosts the router and wires it into
-**Claude Code** for you. Requires Node >= 18 and Docker.
+**Claude Code** for you. Requires Node 20 or 22+ and Docker.
 
 ```bash
 git clone https://github.com/regolo-ai/brick-SR1.git
@@ -85,9 +85,35 @@ curl http://localhost:18000/v1/chat/completions \
 The `x-selected-model` response header tells you which backend Brick picked.
 That math prompt routes to a reasoning model; `"Hello"` routes to the cheapest one.
 
-Until then, `brick serve` (from the CLI above) runs the same router locally from source.
+Until then, `brick start <profile>` (from the CLI above) runs the same router locally,
+syncing skill vectors, starting the container, and connecting the harness for official profiles.
 
 </details>
+
+---
+
+## 🧱 Brick 3.0 workflow
+
+Brick 3.0 stores independent profiles under `~/.brick/profiles`. Profile names are explicit for every lifecycle operation.
+
+```bash
+brick profile create work
+brick profile edit work
+brick profile show work
+brick profile list
+
+brick start work
+brick restart work
+brick stop work
+brick clear work
+brick update
+```
+
+`clear` removes containers and runtime state while preserving profile configuration, `.env`, managed harness assets, and volumes. For Codex, `brick stop codex` restores future launches to vanilla Codex while preserving the current thread's local Responses bridge; `brick clear codex` also terminates that bridge. `update --cli`, `update --router`, `update --profile <name>`, and `-y` are available for targeted or unattended updates.
+
+[`skill_vectors.csv`](https://huggingface.co/datasets/regolo/brick-skill-tables/blob/main/skill_vectors.csv) is the only authoritative skill-vector source. Brick refreshes it during profile lifecycle commands and caches a private copy at `~/.brick/cache/skill_vectors.csv` for network outages. The six canonical capabilities are `coding`, `creative_synthesis`, `instruction_following`, `math_reasoning`, `planning_agentic`, and `world_knowledge`.
+
+The official `claude` and `codex` profiles are materialized automatically. They begin dormant, without bundled vectors; select models with `brick profile edit claude` or `brick profile edit codex` before starting them. Starting an official profile connects its corresponding harness after the router becomes healthy.
 
 ---
 
@@ -241,7 +267,7 @@ This materializes a dedicated Codex profile (the OpenAI-pool skill router) and a
 To revert:
 
 ```bash
-brick codex off     # restores your previous Codex model/provider
+brick stop codex     # detaches future Codex launches from Brick, keeps the current thread's Responses bridge
 ```
 
 Codex exposes the same 5 modes and status view as Claude Code:
@@ -251,7 +277,9 @@ brick codex mode           # or: brick codex eco | lite | mid | pro | max
 brick codex status         # live routing dashboard
 ```
 
-Use `brick codex on --no-start` to require an already-healthy router instead of auto-starting one. The Claude and Codex router stacks share host port 8000, so only one can serve at a time; stop the other before wiring.
+Use `brick codex on --no-start` to require an already-healthy router instead of auto-starting one. The Claude and Codex router stacks share host port 8000, so only one can serve at a time; `brick stop` the other before wiring.
+
+The [native Codex Responses integration](docs/quickstart/codex-native.md) keeps tools in the original session and isolates provider credentials. Official Codex tool cycles have passed against both the subscription upstream and Regolo's Chat Completions endpoint.
 
 ---
 
@@ -259,14 +287,14 @@ Use `brick codex on --no-start` to require an already-healthy router instead of 
 
 Brick can run as a standalone OpenAI-compatible gateway. You can put it in front of a hosted pool (Regolo, OpenAI, Anthropic, or another compatible service), a local server such as Ollama/vLLM, or a mixture of both. The client only sees one virtual model: `brick`.
 
-### 1. Create a profile with `brick init`
+### 1. Create a profile with `brick profile create`
 
 Start with the guided wizard:
 
 ```bash
-brick init                     # creates the default profile
-brick init work                # creates ~/.brick/profiles/work/
-brick init work                # re-run the wizard for an existing profile
+brick profile create default     # creates ~/.brick/profiles/default/
+brick profile create work        # creates ~/.brick/profiles/work/
+brick profile edit work          # re-run the wizard for an existing profile
 ```
 
 The wizard asks, in order:
@@ -286,17 +314,16 @@ It writes three profile files:
 ~/.brick/profiles/<profile>/docker-compose.yml
 ```
 
-Secrets are never written into YAML. For the hosted classifier, the YAML contains `${REGOLO_API_KEY}` and the real value lives in `.env`. Regolo models are discovered from `GET https://api.regolo.ai/v1/models`; if the endpoint is unavailable Brick uses its local model-catalog cache. A model enters the skill-router pool only when Brick can resolve a skill-card (bundled, cached, or downloaded from `regolo/brick-skill-tables`). To measure a missing card, use `brick skills extract <model>`.
+Secrets are never written into YAML. For the hosted classifier, the YAML contains `${REGOLO_API_KEY}` and the real value lives in `.env`. Regolo models are discovered from `GET https://api.regolo.ai/v1/models`; if the endpoint is unavailable Brick uses its local model-catalog cache. The authoritative skill-vector source is [`skill_vectors.csv`](https://huggingface.co/datasets/regolo/brick-skill-tables/blob/main/skill_vectors.csv) on `regolo/brick-skill-tables`; Brick does not measure skill vectors locally, and a model enters the skill-router pool only when Brick can resolve its row from that table.
 
 ### 2. Start and inspect the router
 
 ```bash
-brick serve                    # starts the active profile with Docker Compose
-brick serve work               # starts a named profile
-brick serve --pull             # pull updated images first
-brick status                   # container and health status
-brick logs                     # follow router logs
-brick down                     # stop/remove containers; volumes remain
+brick start <profile>            # sync skill vectors + start the router (+ harness for official profiles)
+brick start work                 # start a named profile
+brick status                     # container and health status
+brick logs                       # follow router logs
+brick stop <profile>             # stop the router container; volumes persist
 ```
 
 The listening address is `http://127.0.0.1:<server_port>` (the wizard defaults to port `8000`). The compose file mounts the profile YAML read-only, loads `.env`, and adds the classifier sidecar only in local-classifier mode.
@@ -478,18 +505,17 @@ The `brick` block is the fallback path for images and audio. If a selected model
 Use the menu when you want to change one part without rebuilding everything:
 
 ```bash
-brick config edit                 # providers, models, pool, classifier, multimodal, port...
-brick config edit work
-brick skills extract <model> --base-url https://api.regolo.ai/v1 --api-key-env REGOLO_API_KEY
+brick profile edit                 # providers, models, pool, classifier, multimodal, port...
+brick profile edit work
 ```
 
-`brick config edit` preserves existing profiles and reports “no changes” when you exit without modifying anything. `brick skills extract` runs the frozen probe set, writes the measured vector to the profile and to the local skill-table cache, and can optionally offer publication to the public dataset.
+`brick profile edit` preserves existing profiles and reports “no changes” when you exit without modifying anything.
 
 If you prefer hand editing, restart after saving:
 
 ```bash
-brick down
-brick serve
+brick stop <profile>
+brick start <profile>
 ```
 
 That ensures the container reloads both YAML and environment changes.
