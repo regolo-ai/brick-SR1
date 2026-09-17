@@ -185,42 +185,31 @@ Once you have picked the tier, how hard to think is decided **autonomously per r
 
 Selecting **opus**, **sonnet**, or **haiku** explicitly in the picker skips Brick entirely: the request is forwarded verbatim to that exact model, with no skill routing and no effort override. Only **brick-claude** runs the router.
 
-### Configuration: the `brick claude settings` menu
+### Configuration: the `brick claude settings` editor
 
-Everything about *how* Brick routes lives behind one interactive menu:
+`brick claude settings` opens the unified profile editor on the Claude profile (it is an alias for `brick settings claude`). You can pass a profile name explicitly: `brick claude settings <profile>`.
 
 ```bash
 brick claude settings
 ```
 
-Each entry shows its current value and opens a submenu; the defaults are sane, so you only change what you care about. The first time, walk the list top to bottom, starting with **Models**. Every choice is written to the profile config and takes effect on the next request, with no restart of your Claude Code session.
+The interactive menu has five top-level entries; each one shows its current value inline and takes effect on the next request, with no restart of your Claude Code session:
 
-#### Models
+- **Providers** — backend endpoints in the pool (Regolo, Anthropic, local servers, ...) and their credentials. Secrets are stored in the profile `.env`, never in the YAML.
+- **Models** — the Claude models Brick may route to, plus the allowed thinking modes per model. Pick which of haiku / sonnet / opus (and the Anthropic point releases you have access to) are in play. The skill-vector router only ever picks from this pool; a difficulty fallback map covers the case where the skill router is off.
+- **Thinking modes** — the per-model allowed reasoning efforts (off / low / medium / high / xhigh / max).
+- **Cache-aware routing** — how Brick handles the prompt-cache invalidation that follows a mid-conversation model switch (see below).
+- **Advanced** — server port, complexity service, legacy classifier, multimodal preprocessing, and plugins.
 
-The pool of Claude models Brick may route to, plus the allowed thinking modes per model. Set this first: pick which of Haiku 4.5, Sonnet 4.6, Opus 4.8, Sonnet 5 and Fable 5 are in play. The skill-vector router only ever picks from this pool (a difficulty fallback map covers the case where the skill router is off).
+For one-off tweaks there are also direct subcommands that jump straight to a single setting:
 
-#### Context-awareness
-
-Classify on the last *K* conversation turns instead of only the latest message, so routing reflects where the conversation is heading, not just the final line (default `K = 8`).
-
-#### Compute: local vs hosted classifier
-
-Where the complexity classifier runs:
-
-- **`local`** — an auto-spawned Qwen3.5-0.8B server (~1.6 GB VRAM on GPU, or a few seconds per call on CPU).
-- **`api`** — the hosted Regolo `brick-complexity-pro` endpoint. You paste your Regolo API key once; it is saved in the profile `.env`, never in the YAML, and you are not asked again on later visits.
-
-#### Subagent routing
-
-Also route Claude Code subagents that pin an explicit native model through Brick, instead of letting them bypass the router.
-
-#### Model routing
-
-On lets Brick pick the model by complexity; off pins every request to one fixed model.
-
-#### Thinking routing
-
-On lets Brick compute the reasoning effort per query; off forwards the client's own effort unchanged.
+| Subcommand | What it changes |
+|---|---|
+| `brick claude settings context` | Context-awareness: classify on the last *K* turns instead of only the latest message (default `K = 8`). |
+| `brick claude settings compute` | Where the complexity classifier runs: `local` (auto-spawned Qwen3.5-0.8B, ~1.6 GB VRAM on GPU or a few seconds on CPU) or `api` (hosted Regolo `brick-complexity-pro`; key saved once in `.env`). |
+| `brick claude settings subagents` | Also route Claude Code subagents that pin an explicit native model through Brick, instead of letting them bypass the router. |
+| `brick claude settings mode` | Cache-aware routing mode (shortcut to the same value as the menu entry). |
+| `brick claude settings show` | Print the current context-awareness, compute, and subagent routing values without opening the editor. |
 
 #### Cache-aware routing
 
@@ -229,7 +218,6 @@ Switching models mid-conversation invalidates the prompt cache: each provider's 
 - **`off`** — per-request routing, no cross-turn memory. The default.
 - **`sticky`** — keep a conversation on its current model unless switching is actually worth it: downswitching to a cheaper model is always free, upswitching only happens when the estimated quality gain clears the cost of re-priming the cache. See [`docs/proof/sticky-savings.md`](docs/proof/sticky-savings.md) for measured savings on real traffic.
 - **`smartsqueeze`** — the opposite tack: instead of avoiding switches, make them cheap. Same cache-aware hysteresis as `sticky`, but when a switch *is* taken it compacts the forwarded context (clearing older `tool_result` blocks, keeping recent turns raw) so the new model reprocesses a small prefix instead of the full one. Deterministic and model-agnostic (works across providers, not just Anthropic), never touches the system prompt or first user turn, and only fires on a switch (a warm cache is never disturbed). Ships shadow-first (`compact_shadow_only: true` measures the saving without changing what is served) so you can quantify the win before turning it on.
-- **`orchestrator`** — shadow-mode v2 path: computed for evaluation, not yet served.
 
 ### Observability
 
@@ -270,12 +258,30 @@ To revert:
 brick stop codex     # detaches future Codex launches from Brick, keeps the current thread's Responses bridge
 ```
 
-Codex exposes the same 5 modes and status view as Claude Code:
+Codex exposes the same routing modes as Claude Code, plus a text status view:
 
 ```bash
 brick codex mode           # or: brick codex eco | lite | mid | pro | max
-brick codex status         # live routing dashboard
+brick codex status         # wiring + router reachability + per-model routing counts (text)
+brick codex status --once  # one snapshot, no refresh
+brick codex status --watch # refresh every 2 s (configurable with --interval)
 ```
+
+`brick codex status` is a passive text report (config path, wiring state, router health, call counts and thinking-mode distribution per model). It does **not** run inference or probe upstream authentication, and it is not the ink live dashboard of `brick claude status`.
+
+### Codex settings
+
+`brick codex settings <subcommand>` jumps straight to a single setting, like the Claude equivalents:
+
+| Subcommand | What it changes |
+|---|---|
+| `brick codex settings show` | Print the current Codex settings without opening the editor. |
+| `brick codex settings context` | Context-awareness: classify on the last *K* turns instead of only the latest message. |
+| `brick codex settings compute` | Where the complexity classifier runs: `local` or `api`. |
+| `brick codex settings model-routing` | Enable or disable model routing by complexity. |
+| `brick codex settings models` | Configure the OpenAI model pool and per-model thinking modes. |
+| `brick codex settings thinking` | Enable or disable autonomous `reasoning_effort` routing. |
+| `brick codex settings mode` | Cache-aware routing: `off`, `sticky`, or `smartsqueeze` (same semantics as the Claude setting). |
 
 Use `brick codex on --no-start` to require an already-healthy router instead of auto-starting one. The Claude and Codex router stacks share host port 8000, so only one can serve at a time; `brick stop` the other before wiring.
 
