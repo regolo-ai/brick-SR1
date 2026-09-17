@@ -119,7 +119,13 @@ def validate_runtime(archive: tarfile.TarFile, prefix: str, target: str, version
         execute_version(archive, binary_name, version)
 
 
-def validate_cli(archive: tarfile.TarFile, names: list[str], version: str, execute: bool) -> None:
+def validate_cli(
+    archive: tarfile.TarFile,
+    names: list[str],
+    version: str,
+    execute: bool,
+    allow_partial_runtimes: bool,
+) -> None:
     for name in names:
         if name.startswith("package/dist/commands/") and name.endswith(".js"):
             command = name.removeprefix("package/dist/commands/").split("/")[0].removesuffix(".js")
@@ -131,11 +137,22 @@ def validate_cli(archive: tarfile.TarFile, names: list[str], version: str, execu
             fail(f"Unsupported manifest command: {command}")
     if any("assets/models/" in name for name in names):
         fail("Model weights must be verified by postinstall, not packed from a developer cache")
-    for target in TARGETS:
+    packaged_targets = {target for target in TARGETS if f"package/runtimes/{target}/package.json" in names}
+    if not packaged_targets:
+        fail("CLI package does not contain any native runtime")
+    if not allow_partial_runtimes and packaged_targets != set(TARGETS):
+        missing = ", ".join(sorted(set(TARGETS) - packaged_targets))
+        fail(f"Universal CLI package is missing runtimes: {missing}")
+    for target in packaged_targets:
         validate_runtime(archive, f"package/runtimes/{target}/", target, version, execute)
 
 
-def validate_archives(paths: list[Path], root: Path = ROOT, execute: bool = True) -> None:
+def validate_archives(
+    paths: list[Path],
+    root: Path = ROOT,
+    execute: bool = True,
+    allow_partial_runtimes: bool = False,
+) -> None:
     expected_version = repository_version(root)
     if not paths:
         fail("At least one npm tarball is required")
@@ -154,7 +171,7 @@ def validate_archives(paths: list[Path], root: Path = ROOT, execute: bool = True
             if version != expected_version:
                 fail(f"Tarball version {version!r} does not match repository version {expected_version!r}")
             if package.get("name") == CLI_NAME:
-                validate_cli(archive, names, version, execute)
+                validate_cli(archive, names, version, execute, allow_partial_runtimes)
             elif package.get("name", "").startswith("@regoloai/brick-runtime-"):
                 target = package["name"].removeprefix("@regoloai/brick-runtime-")
                 if target not in TARGETS:
@@ -167,7 +184,10 @@ def validate_archives(paths: list[Path], root: Path = ROOT, execute: bool = True
 
 def main() -> None:
     try:
-        validate_archives([Path(argument) for argument in sys.argv[1:]])
+        arguments = sys.argv[1:]
+        allow_partial = "--allow-partial-runtimes" in arguments
+        paths = [Path(argument) for argument in arguments if not argument.startswith("--")]
+        validate_archives(paths, allow_partial_runtimes=allow_partial)
     except (KeyError, OSError, subprocess.SubprocessError, tarfile.TarError, ValueError) as error:
         raise SystemExit(str(error)) from error
 

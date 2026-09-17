@@ -77,3 +77,18 @@ def test_rejects_absolute_runtime_loader_path(tmp_path: Path) -> None:
     replacement.replace(path)
     with pytest.raises(ValueError, match="absolute build or deployment path"):
         validate_archives([path], project(tmp_path), execute=False)
+
+
+def test_rejects_incomplete_universal_package(tmp_path: Path) -> None:
+    path = cli_tarball(tmp_path)
+    replacement = tmp_path / "replacement.tgz"
+    with tarfile.open(path) as source, tarfile.open(replacement, "w:gz") as destination:
+        for member in source.getmembers():
+            if "/runtimes/darwin-arm64/" in member.name:
+                continue
+            contents = source.extractfile(member).read() if member.isfile() else b""
+            destination.addfile(member, io.BytesIO(contents) if member.isfile() else None)
+    replacement.replace(path)
+    with pytest.raises(ValueError, match="missing runtimes: darwin-arm64"):
+        validate_archives([path], project(tmp_path), execute=False)
+    validate_archives([path], project(tmp_path / "partial"), execute=False, allow_partial_runtimes=True)

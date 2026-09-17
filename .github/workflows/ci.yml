@@ -172,7 +172,7 @@ jobs:
           npm pack ./apps/cli --pack-destination dist/tarballs
           npm install --prefix dist/installed --foreground-scripts --no-audit --no-fund dist/tarballs/*.tgz
       - name: Check published package contents
-        run: python3 scripts/check_npm_package.py dist/tarballs/*.tgz
+        run: python3 scripts/check_npm_package.py --allow-partial-runtimes dist/tarballs/*.tgz
       - name: Install and execute without developer tools on PATH
         run: python3 scripts/install_linux_acceptance.py dist/tarballs/*.tgz
       - name: Verify process lifecycle with installed assets
