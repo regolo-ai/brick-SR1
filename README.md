@@ -63,6 +63,38 @@ installation and rollback never restart profiles automatically.
 
 See [installation, lifecycle, migration and recovery](docs/quickstart/serve.md).
 
+## Quick start with coding agents
+
+Configure the official profile, start it, then open a new agent session. Brick
+runs one profile at a time.
+
+### Claude Code
+
+```bash
+brick profile edit claude  # configure providers, models, routing, and thinking
+brick start claude         # start the router and connect Claude Code
+```
+
+In a new Claude Code session, select `brick-claude` in the `/model` picker.
+Use `brick profile edit claude` to change routing, models, or thinking settings,
+then `brick restart claude` to apply changes to a running router. Inspect the
+profile with `brick status claude` or its non-interactive form,
+`brick status claude --static`. Disconnect with `brick stop claude`; use
+`brick clear claude` to remove its runtime while preserving the profile.
+
+### Codex
+
+```bash
+brick profile edit codex   # configure providers, models, routing, and thinking
+brick start codex          # start the router and connect Codex
+```
+
+Open a new Codex session after starting the profile. Use `brick profile edit
+codex` and `brick restart codex` for changes, and `brick status codex` (or
+`brick status codex --static`) for observability. `brick stop codex` restores
+future launches while retaining the local bridge used by the current thread;
+`brick clear codex` also terminates that bridge and removes the runtime.
+
 ## Skill vectors
 
 [`skill_vectors.csv`](https://huggingface.co/datasets/regolo/brick-skill-tables/blob/main/skill_vectors.csv)
