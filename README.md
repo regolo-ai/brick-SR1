@@ -5,14 +5,14 @@ capability, complexity, cost, and reasoning behavior.
 
 ## Install
 
-Brick 3.0.1 includes a JavaScript CLI and verified native runtimes for every
+Brick 3.0.2 includes a JavaScript CLI and verified native runtimes for every
 supported platform. The installer selects the matching bundled runtime; users
 do not need Docker, Python, Go, Rust, or a compiler.
 
 Install the current release:
 
 ```bash
-npm install --global @regoloai/brick@3.0.1
+npm install --global @regoloai/brick@3.0.2
 ```
 
 For local release verification on Linux x64:
@@ -29,7 +29,7 @@ npm pack ./apps/cli --pack-destination dist/tarballs
 Copy the tarball to the user machine and install it:
 
 ```bash
-npm install --global ./regoloai-brick-3.0.1.tgz
+npm install --global ./regoloai-brick-3.0.2.tgz
 ```
 
 Installation downloads and verifies the pinned ModernBERT assets. Node.js 20

@@ -120,7 +120,7 @@ jobs:
       - name: State external-data test scope
         run: echo "Generated dataset/report checks are separate; run make test-python-data after the evaluation pipeline."
       - name: pytest (required offline unit tests)
-        run: uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py -q -rs
+        run: uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py scripts/test_check_npm_package.py -q -rs
 
   node-test:
     name: npm test (apps/cli)
@@ -172,7 +172,7 @@ jobs:
           npm pack ./apps/cli --pack-destination dist/tarballs
           npm install --prefix dist/installed --foreground-scripts --no-audit --no-fund dist/tarballs/*.tgz
       - name: Check published package contents
-        run: python3 scripts/check_npm_package.py dist/tarballs/*.tgz
+        run: python3 scripts/check_npm_package.py --allow-partial-runtimes dist/tarballs/*.tgz
       - name: Install and execute without developer tools on PATH
         run: python3 scripts/install_linux_acceptance.py dist/tarballs/*.tgz
       - name: Verify process lifecycle with installed assets

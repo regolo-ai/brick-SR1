@@ -43,7 +43,7 @@ test-rust:
 	cd apps/router/candle-binding && cargo test --locked --no-default-features
 
 test-python:
-	uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py -q
+	uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py scripts/test_check_npm_package.py -q
 
 test-python-data:
 	uv run --frozen python -m pytest packages/evals/tests -m generated_data -q
