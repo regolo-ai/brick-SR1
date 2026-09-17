@@ -120,7 +120,7 @@ jobs:
       - name: State external-data test scope
         run: echo "Generated dataset/report checks are separate; run make test-python-data after the evaluation pipeline."
       - name: pytest (required offline unit tests)
-        run: uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py -q -rs
+        run: uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py scripts/test_check_npm_package.py -q -rs
 
   node-test:
     name: npm test (apps/cli)

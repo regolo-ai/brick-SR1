@@ -9,8 +9,8 @@ loads before downloading weights. Other platform packages require execution
 testing before publication.
 
 ```bash
-npm install --global ./regoloai-brick-runtime-linux-x64-3.0.0.tgz \
-  ./regoloai-brick-3.0.0.tgz
+npm install --global ./regoloai-brick-runtime-linux-x64-3.0.2.tgz \
+  ./regoloai-brick-3.0.2.tgz
 brick profile create work
 brick profile edit work
 brick start work
