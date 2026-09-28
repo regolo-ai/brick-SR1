@@ -74,6 +74,27 @@ func TestLoadPricingTable_ValidFile(t *testing.T) {
 	}
 }
 
+func TestDynamicCostWeightRejectsMixedCurrencies(t *testing.T) {
+	table := NewPricingTable([]PriceEntry{
+		{Model: "usd-model", OutputPrice: 80, Currency: "USD"},
+		{Model: "eur-model", OutputPrice: 20, Currency: "EUR"},
+	})
+	if _, ok := table.DynamicCostWeight("usd-model", []string{"usd-model", "eur-model"}); ok {
+		t.Fatal("expected dynamic cost weight to be unavailable for a mixed-currency pool")
+	}
+}
+
+func TestDynamicCostWeightNormalizesWithinOneCurrency(t *testing.T) {
+	table := NewPricingTable([]PriceEntry{
+		{Model: "cheap", OutputPrice: 5, Currency: "USD"},
+		{Model: "expensive", OutputPrice: 20, Currency: "USD"},
+	})
+	got, ok := table.DynamicCostWeight("cheap", []string{"cheap", "expensive"})
+	if !ok || got != 0.25 {
+		t.Fatalf("DynamicCostWeight() = (%v, %v), want (0.25, true)", got, ok)
+	}
+}
+
 func TestLoadPricingTable_MissingFile(t *testing.T) {
 	_, err := LoadPricingTable("/nonexistent/path/pricing.yaml")
 	if err == nil {

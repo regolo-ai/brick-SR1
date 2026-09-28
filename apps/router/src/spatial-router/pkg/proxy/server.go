@@ -18,6 +18,7 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/pricing"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/sticky"
 )
 
@@ -62,7 +63,8 @@ type Server struct {
 	// the prompt-cache invalidation cost of a switch without an on-demand load
 	// per request. Nil when pricing.yaml is absent/unparseable, in which case
 	// sticky hysteresis is skipped (the router's candidate model stands).
-	pricingTable *economics.PricingTable
+	pricingTable     *economics.PricingTable
+	pricingRefresher *pricing.Refresher
 
 	// routingEventLog appends one JSONL record per routed request (mode,
 	// candidate/served model, session identity, sticky switch delta, e2e
@@ -130,6 +132,13 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 		pricingTable = nil
 	}
 
+	// Native Go pricing refresher (OpenRouter + Regolo). Replaces the Python
+	// subprocess approach. Fetches directly from OpenRouter API with 1h cache TTL.
+	pricingRefresher := pricing.NewRefresher(os.Getenv("OPENROUTER_API_KEY"))
+	if pricingTable != nil {
+		pricingRefresher.SetTable(pricingTable)
+	}
+
 	return &Server{
 		cfg:                   cfg,
 		configPath:            configPath,
@@ -139,6 +148,7 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 		economicsSnapshotPath: snapshotPath,
 		stickyStore:           sticky.New(stickyTTL),
 		pricingTable:          pricingTable,
+		pricingRefresher:      pricingRefresher,
 		routingEventLog:       routingEventLog,
 		routingEventPath:      routingEventPath,
 		callHistory:           callHistory,
@@ -156,6 +166,10 @@ func (s *Server) SetRuntimeIdentity(id, profile, version string) {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	ctx = runCtx
+
 	go func() {
 		_, err := s.getBrickRouter(s.cfg)
 		s.routingReady.Store(err == nil)
@@ -164,6 +178,12 @@ func (s *Server) Start(ctx context.Context) error {
 			logging.Warnf("Routing unavailable: %v", err)
 		}
 	}()
+
+	if s.pricingRefresher != nil {
+		go s.pricingRefresher.Start(ctx)
+		go stopWhenPricingStale(ctx, cancelRun, s.pricingRefresher, time.Minute)
+	}
+
 	mux := http.NewServeMux()
 
 	// Register routes
@@ -268,6 +288,23 @@ func (s *Server) Start(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return s.httpServer.Shutdown(shutdownCtx)
+	}
+}
+
+func stopWhenPricingStale(ctx context.Context, cancel context.CancelFunc, refresher *pricing.Refresher, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if refresher.CacheAge() > pricing.CacheTTL {
+				logging.Errorf("pricing: cache stale (>1h) and refresh failed — stopping router")
+				cancel()
+				return
+			}
+		}
 	}
 }
 

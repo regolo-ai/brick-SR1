@@ -71,6 +71,16 @@ func LoadPricingTable(path string) (*PricingTable, error) {
 	return &PricingTable{entries: entries}, nil
 }
 
+// NewPricingTable builds a PricingTable in-memory from a slice of entries.
+// Used by the native Go pricing refresher (no YAML file involved).
+func NewPricingTable(entries []PriceEntry) *PricingTable {
+	table := &PricingTable{entries: make(map[string]PriceEntry, len(entries))}
+	for _, e := range entries {
+		table.entries[e.Model] = e
+	}
+	return table
+}
+
 // Price returns the PriceEntry for a model, and whether it was found.
 //
 // Lookup order: exact match first. If the exact name isn't in the table
@@ -150,4 +160,46 @@ func (t *PricingTable) costRatio(model string, pool []string, priceOf func(Price
 	}
 
 	return maxPrice / modelPrice, nil
+}
+
+// DynamicCostWeight returns the model's output price normalized to [0, 1]
+// relative to the most expensive model in the pool. Used by the router's
+// core scoring to replace the static cost_weight from config.
+func (t *PricingTable) DynamicCostWeight(model string, pool []string) (float64, bool) {
+	if len(pool) == 0 {
+		return 0, false
+	}
+
+	modelEntry, ok := t.Price(model)
+	if !ok {
+		return 0, false
+	}
+	if modelEntry.OutputPrice <= 0 {
+		return 0, false
+	}
+	if modelEntry.Currency == "" {
+		return 0, false
+	}
+
+	var maxPrice float64
+	seenMax := false
+	currency := modelEntry.Currency
+	for _, poolModel := range pool {
+		entry, ok := t.Price(poolModel)
+		if !ok {
+			continue
+		}
+		if entry.Currency == "" || entry.Currency != currency {
+			return 0, false
+		}
+		if entry.OutputPrice > maxPrice || !seenMax {
+			maxPrice = entry.OutputPrice
+			seenMax = true
+		}
+	}
+	if !seenMax || maxPrice <= 0 {
+		return 0, false
+	}
+
+	return modelEntry.OutputPrice / maxPrice, true
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 )
 
 func TestScoreModelsPrefersSufficientModelWithoutOverkill(t *testing.T) {
@@ -24,6 +25,56 @@ func TestScoreModelsPrefersSufficientModelWithoutOverkill(t *testing.T) {
 	}
 	if scores[0].Model != "fit" {
 		t.Fatalf("expected fit model, got %s (scores=%+v)", scores[0].Model, scores)
+	}
+}
+
+func TestScoreModelsUsesStaticCostsForMixedCurrencyPool(t *testing.T) {
+	newRouter := func() *Router {
+		return &Router{
+			skillCfg: config.SkillRouterConfig{Models: []config.SkillRouterModelConfig{
+				{Model: "usd-model", SkillVector: []float64{0.60, 0.60}, CostWeight: 0.1},
+				{Model: "eur-model", SkillVector: []float64{0.80, 0.80}, CostWeight: 0.9},
+			}},
+			mathCfg: newMathConfig(config.SkillRouterMathConfig{}),
+		}
+	}
+
+	baseline := newRouter().scoreModels([]float64{0.7, 0.7}, 0.72, nil)
+	withMixedPrices := newRouter()
+	withMixedPrices.SetPricingTable(economics.NewPricingTable([]economics.PriceEntry{
+		{Model: "usd-model", OutputPrice: 10, Currency: "USD"},
+		{Model: "eur-model", OutputPrice: 1, Currency: "EUR"},
+	}))
+	got := withMixedPrices.scoreModels([]float64{0.7, 0.7}, 0.72, nil)
+	if len(got) != len(baseline) {
+		t.Fatalf("got %d scores, baseline has %d", len(got), len(baseline))
+	}
+	for i := range got {
+		if got[i] != baseline[i] {
+			t.Fatalf("mixed currencies changed static score at %d: got %+v, want %+v", i, got[i], baseline[i])
+		}
+	}
+}
+
+func TestScoreModelsUsesDynamicCostsForSingleCurrencyPool(t *testing.T) {
+	r := &Router{
+		skillCfg: config.SkillRouterConfig{Models: []config.SkillRouterModelConfig{
+			{Model: "expensive", SkillVector: []float64{0.7, 0.7}, CostWeight: 0.1},
+			{Model: "cheap", SkillVector: []float64{0.7, 0.7}, CostWeight: 0.9},
+		}},
+		mathCfg: newMathConfig(config.SkillRouterMathConfig{}),
+	}
+	r.SetPricingTable(economics.NewPricingTable([]economics.PriceEntry{
+		{Model: "expensive", OutputPrice: 100, Currency: "USD"},
+		{Model: "cheap", OutputPrice: 10, Currency: "USD"},
+	}))
+
+	scores := r.scoreModels([]float64{0.7, 0.7}, 0.72, nil)
+	if len(scores) != 2 {
+		t.Fatalf("expected 2 scores, got %d", len(scores))
+	}
+	if scores[0].Model != "cheap" {
+		t.Fatalf("dynamic prices should override static weights, got scores %+v", scores)
 	}
 }
 

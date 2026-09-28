@@ -11,9 +11,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 	candle "github.com/regolo-ai/brick-SR1/candle-binding"
@@ -68,9 +70,8 @@ type Router struct {
 	capability   *capabilityClassifier
 	complexity   *complexityClient
 	mathCfg      mathConfig
-	// kp stores the resolved base knob parameters so that RouteWithPreference
-	// can derive a per-request mathConfig without touching the singleton mathCfg.
-	kp knobParams
+	kp           knobParams
+	pricingTable atomic.Pointer[economics.PricingTable]
 }
 
 type mathConfig struct {
@@ -162,6 +163,12 @@ func New(cfg *config.RouterConfig) (*Router, error) {
 		mathCfg:      newMathConfig(skillCfg.Math),
 		kp:           resolveKnobParams(skillCfg.Math),
 	}, nil
+}
+
+// SetPricingTable sets the dynamic pricing table used for cost-aware scoring.
+// When nil, the router falls back to static cost_weight from config.
+func (r *Router) SetPricingTable(table *economics.PricingTable) {
+	r.pricingTable.Store(table)
 }
 
 func (r *Router) Route(ctx context.Context, text string) (*Result, error) {
@@ -293,9 +300,19 @@ func (r *Router) scoreModelsWithConfig(probabilities []float64, tauQuery float64
 			expected += p * model.SkillVector[i]
 		}
 		distance := math.Sqrt(underSum + mc.lambdaOver*overSum)
+
+		costWeight := model.CostWeight
+		if pricingTable := r.pricingTable.Load(); pricingTable != nil {
+			if pool := r.poolModels(allow); len(pool) > 0 {
+				if w, ok := pricingTable.DynamicCostWeight(model.Model, pool); ok {
+					costWeight = w
+				}
+			}
+		}
+
 		// Cost-penalized routing objective: J_m = D_m + beta * a_m, where a_m is
 		// the model's normalized cost (cost_weight).
-		score := distance + mc.beta*model.CostWeight
+		score := distance + mc.beta*costWeight
 		scores = append(scores, ModelScore{
 			Model:           model.Model,
 			Distance:        distance,
@@ -323,6 +340,17 @@ func modelAllowed(allow map[string]bool, model string) bool {
 		return true
 	}
 	return allow[model]
+}
+
+// poolModels returns the list of model names eligible under the allowlist.
+func (r *Router) poolModels(allow map[string]bool) []string {
+	var pool []string
+	for _, m := range r.skillCfg.Models {
+		if modelAllowed(allow, m.Model) {
+			pool = append(pool, m.Model)
+		}
+	}
+	return pool
 }
 
 // activeAllow returns the active_models allowlist as a map, or nil when the list

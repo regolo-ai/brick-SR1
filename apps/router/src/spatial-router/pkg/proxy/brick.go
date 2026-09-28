@@ -11,6 +11,7 @@ import (
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/headers"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/multimodal"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
@@ -380,6 +381,11 @@ func (s *Server) getBrickRouter(cfg *config.RouterConfig) (brickModelRouter, err
 	s.brickRouterOnce.Do(func() {
 		s.brickRouter, s.brickRouterErr = brickrouting.New(cfg)
 	})
+	if router, ok := s.brickRouter.(interface {
+		SetPricingTable(*economics.PricingTable)
+	}); ok && s.pricingRefresher != nil {
+		router.SetPricingTable(s.pricingRefresher.Table())
+	}
 	return s.brickRouter, s.brickRouterErr
 }
 
