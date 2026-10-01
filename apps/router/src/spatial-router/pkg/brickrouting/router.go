@@ -268,6 +268,9 @@ func (r *Router) routeCore(ctx context.Context, text string, allow map[string]bo
 		reason = "skill_vector_keyword_bias"
 	}
 
+	logging.Infof("[Brick2] routing brick_complexity_classifier=%s modernBERT_classifier=%s model_pool=%v model_chosen=%s",
+		complexityRes.label, formatVector(probabilities), r.poolModels(allow), selected)
+
 	return &Result{
 		Model:                selected,
 		Reason:               reason,
@@ -278,6 +281,14 @@ func (r *Router) routeCore(ctx context.Context, text string, allow map[string]bo
 		TauQuery:             tauQuery,
 		Scores:               scores,
 	}, nil
+}
+
+func formatVector(values []float64) string {
+	parts := make([]string, len(values))
+	for i, value := range values {
+		parts[i] = fmt.Sprintf("%.3f", value)
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 func (r *Router) scoreModelsWithConfig(probabilities []float64, tauQuery float64, allow map[string]bool, mc mathConfig) []ModelScore {

@@ -172,3 +172,13 @@ func TestKeywordOverrideBeatsBias(t *testing.T) {
 		t.Fatalf("expected kimi2.6 override, got %s", override.rule.Model)
 	}
 }
+
+func TestFormatVectorRoundsAndBrackets(t *testing.T) {
+	got := formatVector([]float64{0.8944559501771971, 0.024997275774892847, 0.03388519508469959, 0.01833133474050271, 0.016109354395705995, 0.012220889827001806})
+	if want := "[0.894 0.025 0.034 0.018 0.016 0.012]"; got != want {
+		t.Fatalf("formatVector() = %q, want %q", got, want)
+	}
+	if uniform := 1.0 / 6.0; formatVector([]float64{uniform, uniform, uniform, uniform, uniform, uniform}) != "[0.167 0.167 0.167 0.167 0.167 0.167]" {
+		t.Fatalf("uniform vector rendering changed: %s", formatVector([]float64{uniform, uniform, uniform, uniform, uniform, uniform}))
+	}
+}
