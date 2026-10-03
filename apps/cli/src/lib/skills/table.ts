@@ -16,11 +16,15 @@ export function parseSkillTableCsv(input: string): Map<string, SkillTableRecord>
   const records = new Map<string, SkillTableRecord>();
   for (let row = 1; row < lines.length; row++) {
     const fields = lines[row].split(',');
-    if (fields.length !== SKILL_TABLE_HEADER.length) throw new Error(`invalid skill table row ${row + 1}`);
-    const model = fields[0].trim();
+    // The model id may itself contain commas (e.g. unquoted variant suffixes
+    // in parentheses); the skill vector is always the last 6 numeric fields.
+    if (fields.length < SKILL_TABLE_HEADER.length) throw new Error(`invalid skill table row ${row + 1}`);
+    const skillFields = fields.slice(-SKILL_CAPABILITIES.length);
+    let model = fields.slice(0, fields.length - SKILL_CAPABILITIES.length).join(',').trim();
+    if (model.length >= 2 && model.startsWith('"') && model.endsWith('"')) model = model.slice(1, -1);
     if (!model) throw new Error(`empty model id at row ${row + 1}`);
     if (records.has(model)) throw new Error(`duplicate model id '${model}'`);
-    const skill_vector = fields.slice(1).map((field) => Number(field.trim()));
+    const skill_vector = skillFields.map((field) => Number(field.trim()));
     if (skill_vector.some((value) => !Number.isFinite(value) || value <= 0 || value >= 1))
       throw new Error(`invalid skill vector for '${model}' (values must be finite and strictly between 0 and 1)`);
     records.set(model, { model, skill_vector });

@@ -156,3 +156,29 @@ func TestConcurrentSubscriptionRequests(t *testing.T) {
 		t.Fatal("session response mismatch")
 	}
 }
+
+func TestForwardSurvivesDirtyStreamTeardown(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "event: response.created\ndata: {}\n\n")
+		w.(http.Flusher).Flush()
+		// Abrupt close without a clean EOF framing: the client surfaces a
+		// non-EOF read error. Forward must return normally so the caller
+		// still records the call instead of unwinding via panic.
+		if hj, ok := w.(http.Hijacker); ok {
+			conn, _, _ := hj.Hijack()
+			_ = conn.Close()
+		}
+	}))
+	defer upstream.Close()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	Forward(rec, req, upstream.Client(), upstream.URL, "test-provider", "k", false, []byte(`{}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "response.created") {
+		t.Fatalf("expected streamed event, got %q", rec.Body.String())
+	}
+}

@@ -215,7 +215,12 @@ func Forward(w http.ResponseWriter, r *http.Request, client *http.Client, endpoi
 			return
 		}
 		if readErr != nil {
-			panic(http.ErrAbortHandler)
+			// A dirty stream teardown (client disconnect after a complete
+			// response, upstream reset) must not panic: panicking with
+			// http.ErrAbortHandler would unwind past the caller's history
+			// recording, silently losing the call from stats. The HTTP
+			// status was already sent; just stop copying.
+			return
 		}
 	}
 }
