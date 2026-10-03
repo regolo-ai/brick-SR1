@@ -282,3 +282,7 @@ plans/
 
 # Temporary CLI entrypoint test packages
 apps/cli/.entrypoint-test-*/
+
+# Local non-publishable archive (brevetto, history logs, research mounts) — NEVER commit
+/local/
+/local/**/*.tar.gz

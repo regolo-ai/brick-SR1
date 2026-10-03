@@ -16,8 +16,11 @@ Weights & Biases and needs credentials. The input cache is a reproducibility
 asset; it is not part of the npm package.
 
 The last two require `BRICK_RESEARCH_INPUT`, pointing to a research directory
-with `external_comparison/predictions`, `scientificv1/data/inference` and the
-production `router_requests.jsonl` trace. These inputs are not redistributed.
+with `external_comparison/predictions` (router comparison outputs),
+`scientificv1/data/inference` and the production `router_requests.jsonl`
+trace. The default mount is `local/research-mount/` (gitignored, never
+redistributed; history tarballs live in `local/history-logs/`). These inputs
+are not redistributed.
 Outputs go beside the generators. Do not treat missing traces as a successful
 reproduction of the paper's measurements.
 
