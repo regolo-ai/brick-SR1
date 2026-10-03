@@ -41,7 +41,7 @@ vllm-sr --version                  # STALE — see note below
 
 # 6. Check the binary supports v0.3 canonical config
 vllm-sr config validate --config config.yaml   # STALE — see note below
-```
+```text
 
 > **STALE:** `/root/forkGO/spatial-routing` does not exist. Repo root is
 > `/root/forkGO`; router code lives in `apps/router/`. Config files:
@@ -70,11 +70,11 @@ ls -la models/mom-domain-classifier/category_mapping.json
 # Check sizes (the ModernBERT classifier is ~400MB)
 du -sh models/mom-domain-classifier/
 du -sh models/mom-embedding-pro/
-```
+```text
 
 ### 0.3 Recommended action sequence (post-audit)
 
-```
+```text
 STEP 1: git pull / update to latest version
 STEP 2: Backup current config → cp config.yaml config.yaml.backup
 STEP 3: Critical fixes (factual errors in config)
@@ -95,7 +95,7 @@ STEP 7: Evaluate migration to v0.3 canonical
          - Diff and review the result
 STEP 8: Add plugins (system_prompt, jailbreak, pii) if production
 STEP 9: End-to-end test with sample queries for each decision
-```
+```text
 
 ### 0.4 Deep dive: does the complexity signal work?
 
@@ -156,7 +156,7 @@ curl -s http://localhost:8000/v1/chat/completions \
 
 # 3. Confirm via Prometheus metrics
 curl -s http://localhost:9190/metrics | grep -i "routing\|reasoning\|classification"
-```
+```text
 
 **Plan B if it does not work:** convert complexity rules to the fully
 documented embedding-signal format — Option A: `routing.signals.embeddings`
@@ -283,14 +283,18 @@ custom HNSW options, non-standard in public docs.
 
 ## 2. Model-by-Model Analysis
 
-### 2.1 qwen3.5-9b → `simple_chat` + `easy_reasoning` — EXCELLENT
+### 2.1 qwen3.5-9b
+
+**Routes:**→ `simple_chat` + `easy_reasoning` — EXCELLENT
 
 Beats GPT-OSS-120B (a 13x larger model) on GPQA Diamond (81.7 vs 71.5) and
 MMMU-Pro (70.1 vs 59.7). Oversized for greetings/trivia but the cheapest
 model in the fleet, so correct; latency minimal. Suggestion: also use it for
 `formatting_tasks` instead of `mistral-small3.2` — capable and cheaper.
 
-### 2.2 gpt-oss-20b → `default_model` + `domain_business` + `domain_general` — GOOD WITH RESERVES
+### 2.2 gpt-oss-20b
+
+**Routes:**→ `default_model` + `domain_business` + `domain_general` — GOOD WITH RESERVES
 
 OpenAI MoE (21B total, 3.6B active/token), configurable reasoning, ~o3-mini
 class. Great fast/cheap default. Issues: (a) **harmony response format** —
@@ -301,7 +305,9 @@ business/economics but not specialized (Mistral Small 4 119B better for
 complex economic analysis). Fallback: if harmony is unsupported, replace the
 default with `qwen3.5-9b` or `mistral-small3.2`.
 
-### 2.3 gpt-oss-120b → referenced by NO decision — DECLARED BUT UNUSED
+### 2.3 gpt-oss-120b
+
+**Routes:**→ referenced by NO decision — DECLARED BUT UNUSED
 
 In `model_config` with `param_size: "120b"` but no decision references it:
 dead config. Additional errors: `reasoning_family: "qwen3"` is WRONG —
@@ -311,7 +317,9 @@ low/medium/high), NOT Qwen3 `enable_thinking`; would break if ever used with
 reasoning if used.) Action: remove, or create a decision with the correct
 reasoning family.
 
-### 2.4 qwen3-coder-next → `coding_tasks` + `math_reasoning` + `hard/medium/easy_code` + `domain_cs` — EXCELLENT FOR CODE, QUESTIONABLE FOR MATH
+### 2.4 qwen3-coder-next
+
+**Routes:**→ `coding_tasks` + `math_reasoning` + `hard/medium/easy_code` + `domain_cs` — EXCELLENT FOR CODE, QUESTIONABLE FOR MATH
 
 MoE (80B total, 3B active) trained for coding agents; ~Sonnet 4.5 on coding,
 44.3% on SWE-Bench Pro. The right model for all code decisions. Issues:
@@ -323,7 +331,9 @@ reasoning; for proofs/calculus/abstract algebra prefer `qwen3.5-122b` with
 helps hard math; set `true`, or split computational math (coder) vs
 theoretical math (qwen3.5-122b + reasoning).
 
-### 2.5 Llama-3.3-70B-Instruct → UNUSED — DECLARED BUT UNUSED
+### 2.5 Llama-3.3-70B-Instruct
+
+**Routes:**→ UNUSED — DECLARED BUT UNUSED
 
 In `model_config`, referenced by no decision: dead config. Solid versatile
 model but redundant here (Mistral Small 4 119B covers humanities/creative,
@@ -331,7 +341,9 @@ Qwen3.5-122B covers STEM/reasoning). Action: remove or assign (e.g.
 `domain_business` / `domain_humanities` as lighter Mistral Small 4
 alternative).
 
-### 2.6 mistral-small3.2 → `formatting_tasks` (primary, confidence fallback to mistral-small-4-119b) — ACCEPTABLE BUT UNDERUSED
+### 2.6 mistral-small3.2
+
+**Routes:**→ `formatting_tasks` (primary, confidence fallback to mistral-small-4-119b) — ACCEPTABLE BUT UNDERUSED
 
 Dense 24B, good instruction following/formatting, but oversized for
 formatting (`qwen3.5-9b` does it cheaper) and a 24B-vs-119B confidence
@@ -339,7 +351,9 @@ algorithm just to capitalize text is overkill — one model suffices. Unused
 elsewhere; if kept, give it more work (e.g. fast instruct for medium general
 queries).
 
-### 2.7 mistral-small-4-119b → `creative_writing` + `analysis_medium` + `domain_humanities` + `medium_reasoning` + `formatting_tasks` (fallback) — EXCELLENT
+### 2.7 mistral-small-4-119b
+
+**Routes:**→ `creative_writing` + `analysis_medium` + `domain_humanities` + `medium_reasoning` + `formatting_tasks` (fallback) — EXCELLENT
 
 Released 16 March 2026 — 119B MoE, 128 experts, 4 active/token (~6B active);
 unified instruct/reasoning/multimodal; beats GPT-OSS-120B on LiveCodeBench
@@ -353,7 +367,9 @@ Mistral's system (`reasoning_effort: none/low/medium/high`), NOT Qwen3
 before any `use_reasoning: true` use. `param_size: "119b"` is correct as total
 but misleading for cost/latency estimates (~6B active).
 
-### 2.8 qwen3.5-122b → `deep_reasoning` + `domain_stem` + `domain_science` + `hard_reasoning` — EXCELLENT, FLEET TANK
+### 2.8 qwen3.5-122b
+
+**Routes:**→ `deep_reasoning` + `domain_stem` + `domain_science` + `hard_reasoning` — EXCELLENT, FLEET TANK
 
 Most powerful in fleet: MoE 122B total / 10B active; score 42 on Artificial
 Analysis Intelligence Index; BFCL-V4 tool use 72.2 (beats GPT-5 mini),
@@ -392,7 +408,7 @@ enable reasoning for STEM (at least medium/hard).
 
 ### Suggested final model map
 
-```
+```text
 Greetings/Trivial → qwen3.5-9b (use_reasoning: false)        confirmed
 Formatting        → qwen3.5-9b (use_reasoning: false)        changed (was mistral-small3.2)
 Code (all)        → qwen3-coder-next (use_reasoning: false)  confirmed
@@ -405,7 +421,7 @@ Humanities        → mistral-small-4-119b (use_reasoning: false) confirmed
 Business/General  → gpt-oss-20b (use_reasoning: false)       confirmed (verify harmony)
 Life sciences     → qwen3.5-122b (use_reasoning: false)      confirmed
 Default           → gpt-oss-20b                              confirmed
-```
+```text
 
 Models to remove if unused: `gpt-oss-120b`, `Llama-3.3-70B-Instruct`,
 potentially `mistral-small3.2` (replaced by qwen3.5-9b for formatting).

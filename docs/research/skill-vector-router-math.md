@@ -1,13 +1,19 @@
 # Skill-Vector Router Math (6D)
 
-> Source: consolidated English translation and synthesis of `/root/forkGO/router_skill_vector_math.md` (583 lines, Italian, mathematical know-how of the 6D skill-vector router) and `/root/forkGO/script.md` (90 lines, English narrative draft on superficial vs capability routing).
+> Source: consolidated English translation and synthesis of
+> `/root/forkGO/router_skill_vector_math.md` (583 lines, Italian, mathematical
+> know-how of the 6D skill-vector router) and `/root/forkGO/script.md` (90
+> lines, English narrative draft on superficial vs capability routing).
 > Date: 2026-10-01.
 > Originals preserved: both source files were NOT deleted or modified.
-> Scope: preserves all mathematics from the Italian source; incorporates the narrative reasoning from `script.md` where pertinent; flags known discrepancies versus paper / implementation.
+> Scope: preserves all mathematics from the Italian source; incorporates the
+> narrative reasoning from `script.md` where pertinent; flags known
+> discrepancies versus paper / implementation.
 
 ## 1. Objective: capability routing, not superficial routing
 
-The goal is a mathematical rule that lets the router pick the best model for a query using three inputs:
+The goal is a mathematical rule that lets the router pick the best model for a
+query using three inputs:
 
 1. empirical model performance on an evaluation database;
 2. the query capability vector extracted by ModernBERT;
@@ -32,22 +38,32 @@ planning_agentic
 world_knowledge
 ```
 
-Each model becomes a point in skill space. Each query becomes a point in the same space. The selected model is the one best positioned for the query.
+Each model becomes a point in skill space. Each query becomes a point in the
+same space. The selected model is the one best positioned for the query.
 
 ### 1.1 Why not superficial routing
 
-Deciding which LLM is best for a task is an empirical process: the only way to discover a particular talent of a model for a specific task type is testing, testing, and testing again.
+Deciding which LLM is best for a task is an empirical process: the only way to
+discover a particular talent of a model for a specific task type is testing,
+testing, and testing again.
 
 Other routing systems use:
 
 - coarse domains (science, math, humanities, economics, ...), or
 - query length plus keyword/regex matching on the payload.
 
-That is called here **superficial routing**. It is insufficient because real models must be judged on very different capability types. If a coding agent knows only that a query domain is "computer science", that does not decide between a large pool of models.
+That is called here **superficial routing**. It is insufficient because real
+models must be judged on very different capability types. If a coding agent
+knows only that a query domain is "computer science", that does not decide
+between a large pool of models.
 
-Context length is not the answer either: a 10-line question asking for a calculator in Python can be trivial, while a 1-line query asking to solve the Riemann hypothesis can be extremely hard.
+Context length is not the answer either: a 10-line question asking for a
+calculator in Python can be trivial, while a 1-line query asking to solve the
+Riemann hypothesis can be extremely hard.
 
-This router therefore uses **capability routing**: direction from a capability classifier plus distance from a complexity estimator, matched against empirical per-capability model skills.
+This router therefore uses **capability routing**: direction from a capability
+classifier plus distance from a complexity estimator, matched against empirical
+per-capability model skills.
 
 ## 2. Model skill vectors
 
@@ -64,7 +80,8 @@ The naive estimate would be:
 accuracy_m,c = K_m,c / N_m,c
 ```
 
-But this estimate is unstable when the example count is small. Therefore use a Bayesian smoothed estimate:
+But this estimate is unstable when the example count is small. Therefore use a
+Bayesian smoothed estimate:
 
 ```text
 a_m,c = (K_m,c + k * mu_c) / (N_m,c + k)
@@ -103,18 +120,21 @@ A_m = [
 ]
 ```
 
-`None` answers, errors, timeouts, truncations, or incomplete answers must count as incorrect:
+`None` answers, errors, timeouts, truncations, or incomplete answers must count
+as incorrect:
 
 ```text
 K_m,c = correct_true
 N_m,c = correct_true + correct_false + correct_none
 ```
 
-This makes the score more realistic for the router: a model that does not complete an answer must not be considered reliable.
+This makes the score more realistic for the router: a model that does not
+complete an answer must not be considered reliable.
 
 ## 3. Query capability vector
 
-The ModernBERT capability classifier returns a probability distribution over the six capabilities:
+The ModernBERT capability classifier returns a probability distribution over the
+six capabilities:
 
 ```text
 P = [p_1, p_2, p_3, p_4, p_5, p_6]
@@ -172,7 +192,8 @@ tau(label) =
   0.88 if label = hard
 ```
 
-To avoid over-trusting the complexity classifier when confidence is low, always interpolate toward `medium`:
+To avoid over-trusting the complexity classifier when confidence is low, always
+interpolate toward `medium`:
 
 ```text
 tau_query = confidence * tau(label) + (1 - confidence) * tau_medium
@@ -225,7 +246,8 @@ Q = [
 ]
 ```
 
-This query requires mostly coding competence, a share of math reasoning, and little competence in the other capabilities.
+This query requires mostly coding competence, a share of math reasoning, and
+little competence in the other capabilities.
 
 ## 6. Logit transform and logit lift
 
@@ -277,7 +299,10 @@ z_q = bias + mu * logit(clip(tau_query))
 R_c = p_c * z_q
 ```
 
-where `bias` and `mu` are router config parameters. With `bias = 0` and `mu = 1` this reduces exactly to the base formula above. Any nonzero `bias` or `mu != 1` shifts/scales difficulty in log-odds space relative to the Italian source (see Section 15).
+where `bias` and `mu` are router config parameters. With `bias = 0` and `mu = 1`
+this reduces exactly to the base formula above. Any nonzero `bias` or `mu != 1`
+shifts/scales difficulty in log-odds space relative to the Italian source (see
+Section 15).
 
 ## 7. Asymmetric distance D_m
 
@@ -288,7 +313,9 @@ model too weak
 model too strong
 ```
 
-But for the router they are not equivalent. A too-weak model is a serious problem. A too-strong model is only overkill. Therefore use an asymmetric distance.
+But for the router they are not equivalent. A too-weak model is a serious
+problem. A too-strong model is only overkill. Therefore use an asymmetric
+distance.
 
 Per capability, define asymmetric residuals:
 
@@ -320,18 +347,21 @@ under-skill -> full penalty
 over-skill  -> light penalty
 ```
 
-Thus the router prefers a sufficiently capable model but does not punish too strongly the fact that it is stronger than necessary.
+Thus the router prefers a sufficiently capable model but does not punish too
+strongly the fact that it is stronger than necessary.
 
 ## 8. Cost-penalized objective J_m
 
-The quality-first selection uses `D_m`. A future / optional cost-aware variant adds cost directly to the score:
+The quality-first selection uses `D_m`. A future / optional cost-aware variant
+adds cost directly to the score:
 
 ```text
 J_m = D_m + beta * a_m
 Score_m = D_m + beta * normalized_cost_m
 ```
 
-where in this notation `a_m` / `normalized_cost_m` is the model normalized cost (`cost_weight`, possibly dynamic from the pricing table), not a skill value.
+where in this notation `a_m` / `normalized_cost_m` is the model normalized cost
+(`cost_weight`, possibly dynamic from the pricing table), not a skill value.
 
 Recommended settings:
 
@@ -402,7 +432,9 @@ and choose:
 m* = argmax_m E_m
 ```
 
-If expected success is also very close, use the cheaper or faster model. In the quality-first version cost does not enter the main score. Cost enters only as the final tie-breaker.
+If expected success is also very close, use the cheaper or faster model. In the
+quality-first version cost does not enter the main score. Cost enters only as
+the final tie-breaker.
 
 ## 11. Complete formula
 
@@ -509,9 +541,11 @@ medium -> medium requirement
 hard   -> high requirement
 ```
 
-The router picks the nearest model, using an asymmetric distance that prefers capable models over under-sized ones.
+The router picks the nearest model, using an asymmetric distance that prefers
+capable models over under-sized ones.
 
-For visualization, the draft suggests a 3D projection with model vectors and a nearby query vector; the full math remains 6D.
+For visualization, the draft suggests a 3D projection with model vectors and a
+nearby query vector; the full math remains 6D.
 
 ## 14. Synthetic example
 
@@ -545,16 +579,22 @@ coding
 math_reasoning
 ```
 
-The `small` model is penalized because it is below threshold. The `medium` model may be close but could still be insufficient. The `large` model is selected if it is closest under the asymmetric distance.
+The `small` model is penalized because it is below threshold. The `medium` model
+may be close but could still be insufficient. The `large` model is selected if
+it is closest under the asymmetric distance.
 
 ## 15. Empirical grounding from the narrative draft
 
 The draft grounds the math in an evaluation protocol:
 
-- 3 models from different labs and sizes: `qwen3.5-9b` (SOTA for <10B params), `deepseek-v4-flash` (SOTA for <500B), `kimi-2.6` (frontier open-source).
-- Custom evaluation dataset of 5000 questions, partly taken from other datasets and partly human+synthetic (description marked TODO in the draft).
+- 3 models from different labs and sizes: `qwen3.5-9b` (SOTA for <10B params),
+  `deepseek-v4-flash` (SOTA for <500B), `kimi-2.6` (frontier open-source).
+- Custom evaluation dataset of 5000 questions, partly taken from other datasets
+  and partly human+synthetic (description marked TODO in the draft).
 - Correct answers aggregated into `https://huggingface.co/datasets/massaindustries/dataset-A-routing`.
-- Router evaluation: each router receives all eval queries and outputs the first chosen model for that task. The correct router answer is defined as the cheapest model that solved that question, without overkill or underestimation.
+- Router evaluation: each router receives all eval queries and outputs the first
+  chosen model for that task. The correct router answer is defined as the
+  cheapest model that solved that question, without overkill or underestimation.
 
 Reported router-eval snapshot (verbatim from draft):
 
@@ -570,7 +610,10 @@ always_kimi,0.21275436046511628,1.0,{'kimi': 5504}
 oracle,1.0,0.3347365552325582,"{'qwen': 3477, 'kimi': 1171, 'ds4': 856}"
 ```
 
-The draft notes that discussion of competing algorithms, price/cost-saving graphs, ModernBERT training details (weights and biases images, DB link, hyperparameters), custom difficulty model HF page, latency paragraph, and "why this is cool" framing were still TODO.
+The draft notes that discussion of competing algorithms, price/cost-saving
+graphs, ModernBERT training details (weights and biases images, DB link,
+hyperparameters), custom difficulty model HF page, latency paragraph, and "why
+this is cool" framing were still TODO.
 
 ## 16. Properties of the logic
 
@@ -598,11 +641,26 @@ Pipeline framing from the draft:
 
 ## 17. Known discrepancies versus paper / implementation
 
-1. Tie band location: the request flags `router.go:241-246`. In the current checkout the tie logic lives in `scoreModelsWithConfig` / sort comparator (`router.go:324-332`): if `abs(Score_i - Score_j) < tieEps`, compare `ExpectedSuccess`, then cheapest tie cost. Any paper text citing lines 241-246 is stale relative to the current file layout; the semantics (epsilon band then quality proxy then cost) are unchanged.
-2. Quality-proxy vs oracle: the router tie-breaker `E_m = sum_c p_c * a_m,c` is only a quality proxy. It is not the eval oracle from Section 15 (cheapest model that actually solved the question, accuracy 1.0 by construction). Do not present `E_m` as oracle performance.
-3. Logit lift: the implementation uses `z_q = bias + mu * logit(tau_query)` before multiplying by `p_c`. The Italian source has no `bias`/`mu`. Results coincide only for `bias = 0, mu = 1`.
-4. Cost objective: the Italian source sets `beta = 0` (cost as tie-breaker only). The implementation supports `J_m = D_m + beta * cost_weight` with dynamic pricing-table weights, so cost-aware runs diverge from the quality-first formula.
-5. Keyword path: the implementation has a keyword-override / keyword-bias path that bypasses or shifts the skill-vector score. That path is outside the pure `D_m` / `J_m` math preserved above.
+1. Tie band location: the request flags `router.go:241-246`. In the current
+   checkout the tie logic lives in `scoreModelsWithConfig` / sort comparator
+   (`router.go:324-332`): if `abs(Score_i - Score_j) < tieEps`, compare
+   `ExpectedSuccess`, then cheapest tie cost. Any paper text citing lines
+   241-246 is stale relative to the current file layout; the semantics (epsilon
+   band then quality proxy then cost) are unchanged.
+2. Quality-proxy vs oracle: the router tie-breaker `E_m = sum_c p_c * a_m,c` is
+   only a quality proxy. It is not the eval oracle from Section 15 (cheapest
+   model that actually solved the question, accuracy 1.0 by construction). Do
+   not present `E_m` as oracle performance.
+3. Logit lift: the implementation uses `z_q = bias + mu * logit(tau_query)`
+   before multiplying by `p_c`. The Italian source has no `bias`/`mu`. Results
+   coincide only for `bias = 0, mu = 1`.
+4. Cost objective: the Italian source sets `beta = 0` (cost as tie-breaker
+   only). The implementation supports `J_m = D_m + beta * cost_weight` with
+   dynamic pricing-table weights, so cost-aware runs diverge from the
+   quality-first formula.
+5. Keyword path: the implementation has a keyword-override / keyword-bias path
+   that bypasses or shifts the skill-vector score. That path is outside the pure
+   `D_m` / `J_m` math preserved above.
 
 ## 18. Final mathematical decision procedure
 

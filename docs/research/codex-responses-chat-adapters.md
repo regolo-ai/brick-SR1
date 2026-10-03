@@ -126,13 +126,18 @@ freeform-tool conversion and verify it against Regolo. The original activation
 gate should then be replaced by that live test result, not by a requirement that
 Regolo expose a native Responses endpoint.
 
+<!-- markdownlint-disable MD013 -->
 ## Sources
 
 1. OpenAI Codex repository, [Responses test helpers](https://github.com/openai/codex/blob/main/codex-rs/core/tests/common/responses.rs), accessed September 10, 2026.
 2. mapleafgo, [Codex API Gateway protocol coverage](https://github.com/mapleafgo/codex-api-gateway/blob/main/docs/protocol-coverage.md), accessed September 10, 2026.
-3. router-for-me/CLIProxyAPI, [Issue #4219: streamed tool calls and custom tools](https://github.com/router-for-me/CLIProxyAPI/issues/4219), July 2026.
+3. router-for-me/CLIProxyAPI, [Issue #4219: streamed tool calls and custom
+   tools](https://github.com/router-for-me/CLIProxyAPI/issues/4219), July 2026.
 4. yatesdr, [go-llm-proxy Codex documentation](https://github.com/yatesdr/go-llm-proxy/blob/master/docs/codex.md), accessed September 10, 2026.
 5. BerriAI, [LiteLLM Responses API documentation](https://github.com/BerriAI/litellm-docs/blob/main/docs/response_api.md), accessed September 10, 2026.
-6. bharat2808, [codex-universal-proxy](https://github.com/bharat2808/codex-universal-proxy), accessed September 10, 2026.
-7. tvrcgo, [codex-adapter](https://github.com/tvrcgo/codex-adapter), accessed September 10, 2026.
+6. bharat2808,
+   [codex-universal-proxy](https://github.com/bharat2808/codex-universal-proxy),
+   accessed September 10, 2026.
+7. tvrcgo, [codex-adapter](https://github.com/tvrcgo/codex-adapter), accessed
+   September 10, 2026.
 8. NoahStepheno, [completion-to-response](https://github.com/NoahStepheno/completion-to-response), accessed September 10, 2026.
