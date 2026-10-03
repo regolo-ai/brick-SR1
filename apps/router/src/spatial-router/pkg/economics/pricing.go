@@ -81,6 +81,19 @@ func NewPricingTable(entries []PriceEntry) *PricingTable {
 	return table
 }
 
+// Entries returns a snapshot copy of all price entries in the table.
+// Nil-receiver safe: a nil table yields no entries.
+func (t *PricingTable) Entries() []PriceEntry {
+	if t == nil {
+		return nil
+	}
+	out := make([]PriceEntry, 0, len(t.entries))
+	for _, e := range t.entries {
+		out = append(out, e)
+	}
+	return out
+}
+
 // Price returns the PriceEntry for a model, and whether it was found.
 //
 // Lookup order: exact match first. If the exact name isn't in the table

@@ -2,6 +2,8 @@ package pricing
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -41,11 +43,46 @@ func TestRefresherCacheAge(t *testing.T) {
 	}
 }
 
-func TestRefresherRefreshNoToken(t *testing.T) {
+func TestRefresherRefreshNoTokenUsesStaticSources(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "")
 	r := NewRefresher("")
-	err := r.Refresh(context.Background())
-	if err == nil {
-		t.Fatal("expected error when no token available")
+	if err := r.Refresh(context.Background()); err != nil {
+		t.Fatalf("expected refresh to succeed from static sources without a token: %v", err)
+	}
+	table := r.Table()
+	if table == nil {
+		t.Fatal("expected non-nil table after refresh")
+	}
+	entry, ok := table.Price("qwen3.5-122b")
+	if !ok || entry.Currency != "EUR" {
+		t.Fatalf("expected static Regolo entry for qwen3.5-122b, got %+v (found=%v)", entry, ok)
+	}
+	if r.CacheAge() > CacheTTL {
+		t.Error("expected fresh cache age after successful refresh")
+	}
+}
+
+func TestRefresherRefreshOpenRouterFailureKeepsPrevious(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	t.Cleanup(func() { openRouterModelsURL = openRouterBaseURL + "/models" })
+	openRouterModelsURL = upstream.URL
+
+	r := NewRefresher("test-token")
+	r.SetTable(economics.NewPricingTable([]economics.PriceEntry{
+		{Model: "seeded-model", InputPrice: 1.0, OutputPrice: 2.0, Currency: "USD"},
+	}))
+	if err := r.Refresh(context.Background()); err != nil {
+		t.Fatalf("expected refresh to degrade gracefully on OpenRouter failure: %v", err)
+	}
+	table := r.Table()
+	if _, ok := table.Price("seeded-model"); !ok {
+		t.Error("expected previously known entry to survive a failed OpenRouter refresh")
+	}
+	if _, ok := table.Price("qwen3.5-122b"); !ok {
+		t.Error("expected static Regolo entries to be applied despite OpenRouter failure")
 	}
 }
 

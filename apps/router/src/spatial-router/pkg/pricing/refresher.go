@@ -3,6 +3,8 @@ package pricing
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,38 +58,60 @@ func (r *Refresher) GetTokenFromEnv() string {
 }
 
 func (r *Refresher) Refresh(ctx context.Context) error {
+	// Merge fresh entries over the previous table so a failing source
+	// degrades to the last known prices instead of wiping them. A pool
+	// served entirely from static sources (Regolo map, seeded pricing.yaml)
+	// therefore needs no OpenRouter key and never trips the stale-cache
+	// shutdown: every refresh succeeds and the timestamp stays fresh.
+	merged := make(map[string]economics.PriceEntry)
+	if prev := r.Table(); prev != nil {
+		for _, e := range prev.Entries() {
+			merged[e.Model] = e
+		}
+	}
+	sources := []string{}
+
 	token := r.token
 	if token == "" {
-		token = r.GetTokenFromEnv()
+		token = os.Getenv("OPENROUTER_API_KEY")
 	}
-
-	prices, err := FetchOpenRouterPricesContext(ctx, token)
-	if err != nil {
-		return fmt.Errorf("pricing: OpenRouter fetch failed: %w", err)
-	}
-
-	entries := make([]economics.PriceEntry, 0, len(prices))
-	for model, price := range prices {
-		entries = append(entries, economics.PriceEntry{
-			Model:       model,
-			InputPrice:  price.InputPrice,
-			OutputPrice: price.OutputPrice,
-			Currency:    "USD",
-		})
+	if token == "" {
+		logging.Infof("pricing: no OpenRouter token configured; using static sources only")
+	} else if prices, err := FetchOpenRouterPricesContext(ctx, token); err != nil {
+		logging.Warnf("pricing: OpenRouter refresh failed, keeping previous entries: %v", err)
+	} else {
+		for model, price := range prices {
+			merged[model] = economics.PriceEntry{
+				Model:       model,
+				InputPrice:  price.InputPrice,
+				OutputPrice: price.OutputPrice,
+				Currency:    "USD",
+			}
+		}
+		sources = append(sources, "openrouter")
 	}
 
 	for model, price := range GetRegoloPrices() {
-		entries = append(entries, economics.PriceEntry{
+		merged[model] = economics.PriceEntry{
 			Model:       model,
 			InputPrice:  price.InputPrice,
 			OutputPrice: price.OutputPrice,
 			Currency:    "EUR",
-		})
+		}
+	}
+	sources = append(sources, "regolo-static")
+
+	if len(merged) == 0 {
+		return fmt.Errorf("pricing: no prices available from any source")
 	}
 
+	entries := make([]economics.PriceEntry, 0, len(merged))
+	for _, e := range merged {
+		entries = append(entries, e)
+	}
 	r.SetTable(economics.NewPricingTable(entries))
 
-	logging.Infof("pricing: refreshed %d models", len(entries))
+	logging.Infof("pricing: refreshed %d models (%s)", len(entries), strings.Join(sources, "+"))
 	return nil
 }
 
