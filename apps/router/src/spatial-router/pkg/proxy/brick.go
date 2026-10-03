@@ -381,6 +381,13 @@ func (s *Server) getBrickRouter(cfg *config.RouterConfig) (brickModelRouter, err
 	s.brickRouterOnce.Do(func() {
 		s.brickRouter, s.brickRouterErr = brickrouting.New(cfg)
 	})
+	if s.brickRouterErr != nil {
+		// New returns a typed-nil *Router on failure, which is a non-nil
+		// interface: the type assertion below would succeed and the
+		// SetPricingTable call would panic on the nil receiver. Never
+		// touch the router when construction failed.
+		return s.brickRouter, s.brickRouterErr
+	}
 	if router, ok := s.brickRouter.(interface {
 		SetPricingTable(*economics.PricingTable)
 	}); ok && s.pricingRefresher != nil {

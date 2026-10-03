@@ -51,3 +51,18 @@ func TestStalePricingCacheCancelsServerContext(t *testing.T) {
 		t.Fatal("pricing cache watcher did not stop after cancellation")
 	}
 }
+
+func TestGetBrickRouterFailureSkipsPricingTable(t *testing.T) {
+	dir := t.TempDir()
+	// Empty config: brickrouting.New fails (skill router disabled) while
+	// the pricing refresher is initialized. New returns a typed-nil
+	// *Router, which satisfies the SetPricingTable assertion as a non-nil
+	// interface; touching it must not panic on the nil receiver.
+	server := NewServer(&config.RouterConfig{}, filepath.Join(dir, "config.yaml"), 0, dir)
+	if server.pricingRefresher == nil {
+		t.Fatal("precondition: pricing refresher must be initialized")
+	}
+	if _, err := server.getBrickRouter(server.cfg); err == nil {
+		t.Fatal("expected router construction to fail with skill router disabled")
+	}
+}
