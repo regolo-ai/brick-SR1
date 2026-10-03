@@ -39,6 +39,12 @@ requests return HTTP 503 if initialization fails; direct Codex forwarding
 remains
 available.
 
+For scripts and agents, `brick status <profile> --for-agent` returns the same
+state as the live dashboard as one JSON object. It needs no TTY, exits `0` even
+when the router is unreachable (fields become `null`), and takes precedence over
+`--json` and `--static`. See the Observability section of the README for the
+field reference.
+
 Profiles live in `~/.brick/profiles/<name>` (or `BRICK_HOME/profiles/<name>`):
 
 - `config.yaml` and `.env`: routing settings and credentials.

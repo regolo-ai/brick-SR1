@@ -53,3 +53,42 @@ export async function refreshOfficialHarness(profile: string, port: number): Pro
     if (readCodexWiring()?.wired && isWired(readCodexConfig())) await connectOfficialHarness(profile, port);
   }
 }
+
+export function normalizedUrl(value?: string | null): string | undefined {
+  return value?.replace(/\/+$/, '');
+}
+
+export type HarnessConnection = {
+  url?: string;
+  attached: boolean;
+  label: string;
+  disconnectedLabel: string;
+  unattachedLabel: string;
+};
+
+export function harnessConnection(profile: string, baseUrl: string): HarnessConnection {
+  if (profile === 'codex') {
+    const wiring = readCodexWiring();
+    const config = readCodexConfig();
+    return {
+      url: normalizedUrl(wiring?.baseUrl),
+      attached: !!wiring?.wired && normalizedUrl(wiring.baseUrl) === normalizedUrl(baseUrl) &&
+        isWired(config) && getTopLevelModel(config) === 'brick' && getTopLevelModelProvider(config) === 'brick',
+      label: 'Codex config',
+      disconnectedLabel: 'not wired — run brick start codex after updating the router',
+      unattachedLabel: 'not wired to this router',
+    };
+  }
+  if (profile === 'claude') {
+    const wiring = readWiring();
+    const settingsUrl = normalizedUrl(getBaseUrl());
+    return {
+      url: settingsUrl,
+      attached: !!wiring?.wired && settingsUrl === normalizedUrl(baseUrl) && hasBrickModelOption(),
+      label: 'Claude settings',
+      disconnectedLabel: 'not wired — run brick start claude',
+      unattachedLabel: 'not wired to this router',
+    };
+  }
+  return { url: baseUrl, attached: true, label: `profile ${profile}`, disconnectedLabel: 'not attached', unattachedLabel: 'not attached' };
+}

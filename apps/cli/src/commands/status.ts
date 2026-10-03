@@ -10,47 +10,9 @@ import { localBaseUrl } from '../lib/net/local.js';
 import { discoverRunningProfiles } from '../lib/profiles.js';
 import { readContextDiscoverySnapshot } from '../lib/catalog/context-windows.js';
 import { Dashboard } from '../lib/claude-tui/Dashboard.js';
-import { readCodexWiring } from '../lib/codex/wiring-state.js';
-import { getTopLevelModel, getTopLevelModelProvider, isWired, readCodexConfig } from '../lib/codex/config-toml.js';
-import { readWiring as readClaudeWiring } from '../lib/claude/wiring-state.js';
-import { getBaseUrl as getClaudeBaseUrl, hasBrickModelOption } from '../lib/claude/settings.js';
-
-function normalizedUrl(value?: string | null): string | undefined {
-  return value?.replace(/\/+$/, '');
-}
-
-function harnessConnection(profile: string, baseUrl: string): {
-  url?: string;
-  attached: boolean;
-  label: string;
-  disconnectedLabel: string;
-  unattachedLabel: string;
-} {
-  if (profile === 'codex') {
-    const wiring = readCodexWiring();
-    const config = readCodexConfig();
-    return {
-      url: normalizedUrl(wiring?.baseUrl),
-      attached: !!wiring?.wired && normalizedUrl(wiring.baseUrl) === normalizedUrl(baseUrl) &&
-        isWired(config) && getTopLevelModel(config) === 'brick' && getTopLevelModelProvider(config) === 'brick',
-      label: 'Codex config',
-      disconnectedLabel: 'not wired — run brick start codex after updating the router',
-      unattachedLabel: 'not wired to this router',
-    };
-  }
-  if (profile === 'claude') {
-    const wiring = readClaudeWiring();
-    const settingsUrl = normalizedUrl(getClaudeBaseUrl());
-    return {
-      url: settingsUrl,
-      attached: !!wiring?.wired && settingsUrl === normalizedUrl(baseUrl) && hasBrickModelOption(),
-      label: 'Claude settings',
-      disconnectedLabel: 'not wired — run brick start claude',
-      unattachedLabel: 'not wired to this router',
-    };
-  }
-  return { url: baseUrl, attached: true, label: `profile ${profile}`, disconnectedLabel: 'not attached', unattachedLabel: 'not attached' };
-}
+import { harnessConnection } from '../lib/harness.js';
+import { buildAgentReport } from '../lib/status/agent-report.js';
+import type { BrickConfig } from '../lib/config/schema.js';
 
 export default class Status extends Command {
   static description = 'Show profiles, runtime state, and health';
@@ -62,17 +24,19 @@ export default class Status extends Command {
     static: Flags.boolean({ description: 'show one-shot text output instead of the live dashboard' }),
     json: Flags.boolean({ description: 'emit machine-readable status' }),
     interval: Flags.integer({ min: 1, default: 2, description: 'dashboard refresh interval in seconds' }),
+    'for-agent': Flags.boolean({ description: 'emit the full dashboard state as a single JSON object for automation' }),
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Status);
     const state = readState();
     const profs = listProfiles();
-    const mayRenderDashboard = !!args.profile && !flags.static && !flags.json && args.action !== 'static' && process.stdout.isTTY;
-    if (!flags.json && !mayRenderDashboard) info(`profiles: ${profs.length === 0 ? '(none)' : profs.map((p) => `${p}${state.activeProfile === p ? ' [active]' : ''}${state.runningProfile === p ? ' [running]' : ''}`).join('  ·  ')}`);
+    const mayRenderDashboard = !!args.profile && !flags.static && !flags.json && !flags["for-agent"] && args.action !== 'static' && process.stdout.isTTY;
+    if (!flags.json && !flags["for-agent"] && !mayRenderDashboard) info(`profiles: ${profs.length === 0 ? '(none)' : profs.map((p) => `${p}${state.activeProfile === p ? ' [active]' : ''}${state.runningProfile === p ? ' [running]' : ''}`).join('  ·  ')}`);
 
     if (!args.profile) {
       const running = await discoverRunningProfiles();
       if (flags.json) { this.log(JSON.stringify(profs.map((name) => ({ profile: name, running: running.some((p) => p.profile === name) })))); return; }
+      if (flags["for-agent"]) { this.log(JSON.stringify({ schema_version: '1.0', profiles: profs.map((name) => ({ profile: name, running: running.some((p) => p.profile === name) })) })); return; }
       this.log(profs.length ? profs.map((name) => `${running.some((p) => p.profile === name) ? '●' : ' '} ${name}`).join('\n') : 'No profiles configured.');
       return;
     }
@@ -80,9 +44,18 @@ export default class Status extends Command {
     try { profile = resolveProfile(args.profile); }
     catch (e: any) { err(e?.message ?? String(e)); return; }
 
-    let cfg: Awaited<ReturnType<typeof loadConfig>>;
+    let cfg: BrickConfig;
     try { cfg = await loadConfig(profile); }
     catch (e: any) { err(`failed to load profile '${profile}': ${e?.message ?? e}`); return; }
+
+    if (flags["for-agent"]) {
+      try {
+        this.log(JSON.stringify(await buildAgentReport(profile, cfg), null, 2));
+      } catch (e: any) {
+        this.log(JSON.stringify({ schema_version: '1.0', profile, error: e?.message ?? String(e) }));
+      }
+      return;
+    }
 
     const baseUrl = localBaseUrl(cfg.server_port);
     const wantsLive = !flags.static && !flags.json && args.action !== 'static' && process.stdout.isTTY;

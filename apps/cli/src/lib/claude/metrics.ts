@@ -45,6 +45,30 @@ export async function probeHealth(baseUrl: string): Promise<boolean> {
   }
 }
 
+export type HealthResponse = {
+  status: string;
+  instance_id: string;
+  profile: string;
+  version: string;
+  pid: number;
+  config: string;
+  routing_ready: boolean;
+  routing_checked: boolean;
+  codex_router?: string;
+  authentication?: string;
+  capability?: string;
+};
+
+export async function fetchHealth(baseUrl: string): Promise<HealthResponse | null> {
+  try {
+    const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return null;
+    return (await r.json()) as HealthResponse;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDiag(baseUrl: string): Promise<DiagClassifier | null> {
   try {
     const r = await fetch(`${baseUrl}/api/v1/diag/classifier`, { signal: AbortSignal.timeout(4000) });

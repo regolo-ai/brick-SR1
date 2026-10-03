@@ -220,6 +220,7 @@ Switching models mid-conversation invalidates the prompt cache: each provider's 
 ```bash
 brick status claude           # live dashboard in an interactive terminal
 brick status claude --static  # static one-shot view
+brick status claude --for-agent  # full dashboard state as one JSON object
 ```
 
 The dashboard reports, since the last router restart:
@@ -229,6 +230,32 @@ The dashboard reports, since the last router restart:
 - **Economy**: an estimated `saved ~X% vs all-opus` over the routed request count (a relative estimate from request mix, excluding real token counts and caching).
 
 It also shows connection/wiring state, classifier latency (avg, p50, p95), and fallback rate.
+
+#### Machine-readable status
+
+`--for-agent` emits the same state as the dashboard as a single JSON object,
+for scripts and agents. It works without a TTY, never throws on an unreachable
+router (fields become `null`), and always exits `0` — branch on
+`router.routing_ready` instead of the exit code.
+
+```bash
+brick status claude --for-agent | jq '{ready: .router.routing_ready, saved: .economy.savedPct, models: [.stats.models[].model]}'
+```
+
+| Field | Source | Meaning |
+|---|---|---|
+| `schema_version` | — | Report shape version, currently `1.0`. |
+| `selection` | `config.yaml` | `default_model`, `active_models` (the eligible pool), and each model's `skill_vectors`. |
+| `runtime` | `runtime/process.json` + `/health` | `pid`, `instance_id`, `version`, `config`, `digest`, `healthy`, `routing_ready`. `null` when the profile is stopped. |
+| `router` | `GET /health` | Raw router health body, including `routing_ready` and `routing_checked`. `null` when unreachable. |
+| `harness` | wiring state | `label`, `url`, `attached` — whether Claude Code or Codex is pointed at this router. |
+| `classifier` | `GET /api/v1/diag/classifier` | `enabled`, `reachable`, `device`, `model`, `latency_ms`. |
+| `stats` | `GET /api/v1/stats` | Per-model routed/native counts, reasoning-mode histogram, difficulty mix, classifier fallback rate, and routing/provider/overall latencies. |
+| `economy` | `GET /api/v1/economics` | `source` is `real` (token-based), `estimate` (request-mix), or `unavailable`; plus `savedPct`, `savedPctVsOpus`, and token totals. |
+| `context_discovery` | context-window cache | Per-model verified context windows. |
+
+`--for-agent` takes precedence over `--json` and `--static`. Without a profile
+argument it lists profiles as JSON.
 
 ### Works with workflows and subagents
 
