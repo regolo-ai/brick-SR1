@@ -2793,6 +2793,13 @@ type SkillRouterCapabilityModelConfig struct {
 	LocalPath string   `yaml:"local_path,omitempty"`
 	Labels    []string `yaml:"labels,omitempty"`
 	UseCPU    bool     `yaml:"use_cpu,omitempty"`
+	// SidecarURL points at a brick-systemone-server (/vectors) instance.
+	// When set, the router prefers the sidecar and falls back to the local
+	// Candle classifier on error. When empty, Candle is used directly.
+	SidecarURL            string `yaml:"sidecar_url,omitempty"`
+	SidecarBearerToken    string `yaml:"sidecar_bearer_token,omitempty"`
+	SidecarTokenFile      string `yaml:"sidecar_bearer_token_file,omitempty"`
+	SidecarTimeoutSeconds int    `yaml:"sidecar_timeout_seconds,omitempty"`
 }
 
 type SkillRouterComplexityModelConfig struct {

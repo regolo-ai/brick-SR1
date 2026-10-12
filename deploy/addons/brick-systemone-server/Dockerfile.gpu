@@ -1,0 +1,39 @@
+# Brick SystemOne vector server — GPU variant.
+# CUDA 12.8 runtime to match cu128 torch wheels (Blackwell RTX PRO 6000 needs
+# driver >=580 on the host; see training notes in packages/training/systemone/).
+
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/root/.cache/huggingface
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip curl ca-certificates git \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements-gpu.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements-gpu.txt
+
+# Optional pre-cache at build time. Pass HF_TOKEN as build arg if the model is
+# gated/private; otherwise the first runtime call downloads.
+ARG HF_TOKEN=""
+ARG MODEL_ID="massaindustries/brick-systemone-large-v2"
+RUN if [ -n "$HF_TOKEN" ]; then hf auth login --token "$HF_TOKEN" --add-to-git-credential || true; fi \
+    && hf download "$MODEL_ID" \
+    && (hf auth logout || true)
+
+COPY server.py .
+
+EXPOSE 8095
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=180s --retries=20 \
+    CMD curl -fsS http://localhost:8095/health || exit 1
+
+# BRICK_CLASSIFIER_TOKEN is read by server.py at startup and protects /vectors.
+ENTRYPOINT ["python3", "server.py", "--port", "8095", "--device", "cuda"]

@@ -262,11 +262,79 @@ func newMathConfig(cfg config.SkillRouterMathConfig) mathConfig {
 type capabilityClassifier struct {
 	modelPath string
 	labels    []string
+	sidecar   *systemoneClient
 }
 
 type capabilityResult struct {
 	probabilities []float64
 	err           error
+}
+
+// systemoneClient talks to a brick-systemone-server sidecar (POST /vectors).
+// The sidecar returns raw sigmoid probabilities in canonical DIMS order;
+// mapping onto c.labels is done by dimension name.
+type systemoneClient struct {
+	baseURL     string
+	bearerToken string
+	httpClient  *http.Client
+}
+
+type systemoneVectorsResponse struct {
+	Vectors []float64 `json:"vectors"`
+	Dims    []string  `json:"dims"`
+}
+
+func newSystemoneClient(cfg config.SkillRouterCapabilityModelConfig) *systemoneClient {
+	baseURL := strings.TrimRight(cfg.SidecarURL, "/")
+	if baseURL == "" {
+		return nil
+	}
+	timeout := 30 * time.Second
+	if cfg.SidecarTimeoutSeconds > 0 {
+		timeout = time.Duration(cfg.SidecarTimeoutSeconds) * time.Second
+	}
+	token := strings.TrimSpace(cfg.SidecarBearerToken)
+	if token == "" && cfg.SidecarTokenFile != "" {
+		if b, err := os.ReadFile(cfg.SidecarTokenFile); err == nil {
+			token = strings.TrimSpace(string(b))
+		}
+	}
+	return &systemoneClient{
+		baseURL:     baseURL,
+		bearerToken: token,
+		httpClient:  &http.Client{Timeout: timeout},
+	}
+}
+
+func (c *systemoneClient) Vectors(ctx context.Context, text string) ([]float64, []string, error) {
+	body, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/vectors", bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("systemone sidecar status=%d", resp.StatusCode)
+	}
+	var out systemoneVectorsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, nil, err
+	}
+	if len(out.Vectors) == 0 || len(out.Vectors) != len(out.Dims) {
+		return nil, nil, fmt.Errorf("systemone sidecar returned %d vectors for %d dims", len(out.Vectors), len(out.Dims))
+	}
+	return out.Vectors, out.Dims, nil
 }
 
 func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabilities []string) (*capabilityClassifier, error) {
@@ -282,14 +350,60 @@ func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabi
 	if len(labels) == 0 {
 		labels = capabilities
 	}
+	c := &capabilityClassifier{modelPath: modelPath, labels: labels, sidecar: newSystemoneClient(cfg)}
+	if c.sidecar != nil {
+		logging.Infof("[Brick2] capability classifier: sidecar primary %s, Candle fallback %s", c.sidecar.baseURL, modelPath)
+		// Best-effort Candle init: sidecar is primary, so a missing local
+		// model only disables the fallback instead of failing startup.
+		if err := candle.InitModernBertClassifier(modelPath, cfg.UseCPU); err != nil {
+			logging.Warnf("[Brick2] Candle fallback unavailable: %v", err)
+			return c, nil
+		}
+		return c, nil
+	}
 	logging.Infof("[Brick2] initializing capability classifier: %s", modelPath)
 	if err := candle.InitModernBertClassifier(modelPath, cfg.UseCPU); err != nil {
 		return nil, fmt.Errorf("initialize capability classifier %q: %w", modelPath, err)
 	}
-	return &capabilityClassifier{modelPath: modelPath, labels: labels}, nil
+	return c, nil
 }
 
 func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
+	if c.sidecar != nil {
+		if p, err := c.classifySidecar(text); err == nil {
+			return p, nil
+		} else {
+			logging.Warnf("[Brick2] sidecar capability failed, Candle fallback: %v", err)
+		}
+	}
+	return c.classifyCandle(text)
+}
+
+// classifySidecar maps sidecar dims onto c.labels by name, then applies the
+// same normalize() as the Candle path so downstream routing math is unchanged.
+func (c *capabilityClassifier) classifySidecar(text string) ([]float64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.sidecar.httpClient.Timeout)
+	defer cancel()
+	vectors, dims, err := c.sidecar.Vectors(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+	byDim := make(map[string]float64, len(dims))
+	for i, d := range dims {
+		byDim[d] = vectors[i]
+	}
+	out := make([]float64, len(c.labels))
+	for i, l := range c.labels {
+		v, ok := byDim[l]
+		if !ok {
+			return nil, fmt.Errorf("sidecar response missing dim %q", l)
+		}
+		out[i] = v
+	}
+	return normalize(out), nil
+}
+
+func (c *capabilityClassifier) classifyCandle(text string) ([]float64, error) {
 	result, err := candle.ClassifyModernBertTextWithProbabilities(text)
 	if err != nil {
 		return nil, fmt.Errorf("capability classification failed: %w", err)

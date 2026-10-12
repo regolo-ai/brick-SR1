@@ -1,0 +1,34 @@
+name: brick-systemone
+
+resources:
+  accelerators: L40S:1
+
+workdir: .
+
+secrets:
+  BRICK_CLASSIFIER_TOKEN: null
+  HF_TOKEN: null
+
+envs:
+  BRICK_SYSTEMONE_MODEL_ID: massaindustries/brick-systemone-large-v2
+
+setup: |
+  set -euo pipefail
+  python3 -m pip install --upgrade pip
+  python3 -m pip install -r requirements-gpu.txt
+  if [ -n "${HF_TOKEN:-}" ]; then
+    hf auth login --token "$HF_TOKEN" --add-to-git-credential || true
+  fi
+  hf download "$BRICK_SYSTEMONE_MODEL_ID"
+
+run: |
+  set -euo pipefail
+  # Idempotent: pip install + hf download are no-ops when already cached.
+  # Lives in `run` (not just `setup`) so `sky exec` reruns work too.
+  python3 -m pip install -q -r requirements-gpu.txt
+  if [ -n "${HF_TOKEN:-}" ] && ! hf whoami >/dev/null 2>&1; then
+    hf auth login --token "$HF_TOKEN" --add-to-git-credential || true
+  fi
+  hf download "$BRICK_SYSTEMONE_MODEL_ID" >/dev/null
+  pkill -f 'server.py.*--port 8095' 2>/dev/null || true
+  python3 server.py --port 8095 --device cuda --model-id "$BRICK_SYSTEMONE_MODEL_ID" --bearer-token "$BRICK_CLASSIFIER_TOKEN"

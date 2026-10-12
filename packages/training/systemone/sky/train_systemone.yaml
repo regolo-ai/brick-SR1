@@ -1,0 +1,34 @@
+# SkyPilot task: SystemOne ModernBERT-large training on 2x RTX PRO 6000 96GB (Seeweb).
+name: systemone-large
+
+resources:
+  cloud: seeweb
+  instance_type: ECS2GPU12  # 2x RTX PRO 6000 96GB, 32 vCPU, 240GB, it-fr2
+
+workdir: .
+
+file_mounts:
+  /root/.hf_token_regolo: /root/.hf_token_regolo
+  /root/.wandb_key: /root/.wandb_key
+
+setup: |
+  set -e
+  python -m venv /tmp/venv --system-site-packages || true
+  source /tmp/venv/bin/activate
+  pip install --upgrade pip
+  # torch first (CUDA 12.8 image, no preinstalled torch; Blackwell needs cu128)
+  pip install torch --index-url https://download.pytorch.org/whl/cu128
+  pip install 'transformers>=4.49' 'datasets>=2.18' 'accelerate>=0.30' \
+              'scipy' 'scikit-learn' 'wandb' \
+              'huggingface_hub' 'safetensors'
+  # flash-attn optional: build needs torch present; Blackwell pref. Continue on failure (sdpa fallback).
+  pip install 'flash-attn>=2.7' --no-build-isolation || echo "WARN: flash-attn skipped, sdpa fallback"
+  huggingface-cli login --token "$(cat /root/.hf_token_regolo)" --add-to-git-credential || true
+  wandb login "$(cat /root/.wandb_key)" || true
+
+run: |
+  set -e
+  source /tmp/venv/bin/activate
+  export HF_TOKEN="$(cat /root/.hf_token_regolo)"
+  # Default: smoke test. Override via `sky exec ... -- --cmd "..."`
+  python scripts/train_systemone.py --smoke
