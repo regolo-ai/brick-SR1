@@ -127,7 +127,11 @@ async function terminate(state: RuntimeState): Promise<void> {
 async function launch(profile: string, bundle: any, config: string, digest: string, port: number, env: NodeJS.ProcessEnv, requireRouting = false): Promise<RuntimeState> {
   const instance = randomUUID();
   const envFile = resolve(paths(profile).runtime, `environment-${instance}.json`);
-  await atomicJSON(envFile, env);
+  const persistedEnv = { ...env };
+  // Hub download credentials are unnecessary for local inference and never enter snapshots.
+  delete persistedEnv.HF_TOKEN;
+  delete persistedEnv.HF_HUB_TOKEN;
+  await atomicJSON(envFile, persistedEnv);
   const log = await open(logPath(profile), 'a', 0o600);
   const args = ['--config', config, '--data-dir', resolve(paths(profile).profileDir), '--port', String(port), '--metrics-port', '0', '--model-dir', bundle.models, '--instance-id', instance, '--profile', profile];
   const child = spawn(bundle.binary, args, { env, detached: true, stdio: ['ignore', log.fd, log.fd], cwd: paths(profile).profileDir });

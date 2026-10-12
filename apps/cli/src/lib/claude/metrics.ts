@@ -2,10 +2,11 @@
 
 import { blendedPricePerReq,OPUS_BLENDED } from './pricing.js';
 
-export type DiagClassifier = {
+export type DiagSystemOne = {
   enabled: boolean;
-  endpoint?: string;
-  reachable?: boolean;
+  ready?: boolean;
+  engine?: string;
+  revision?: string;
   device?: string;
   model?: string;
   latency_ms?: number;
@@ -19,15 +20,13 @@ export interface Snapshot {
   attached: boolean;
   envUrl?: string;
   health: boolean;
-  diag: DiagClassifier | null;
+  diag: DiagSystemOne | null;
   stats: HistoryStats | null;
 }
 
 export type JsonStats = { overall: { calls: number; completed_calls: number; failed_calls: number }; models: Array<{ model: string; routed_calls: number; native_calls: number; reasoning_modes: Array<{ mode: string; calls: number }> }> };
 export type HistoryLatency = { average_ms: number | null; p50_ms: number | null; p95_ms: number | null };
 export type HistoryStats = JsonStats & {
-  difficulty?: Array<{ mode: string; calls: number }>;
-  classifier?: { calls: number; fallbacks: number; fallback_rate: number };
   latencies?: { routing: HistoryLatency; provider: HistoryLatency; overall: HistoryLatency };
 };
 
@@ -69,11 +68,11 @@ export async function fetchHealth(baseUrl: string): Promise<HealthResponse | nul
   }
 }
 
-export async function fetchDiag(baseUrl: string): Promise<DiagClassifier | null> {
+export async function fetchDiag(baseUrl: string): Promise<DiagSystemOne | null> {
   try {
-    const r = await fetch(`${baseUrl}/api/v1/diag/classifier`, { signal: AbortSignal.timeout(4000) });
+    const r = await fetch(`${baseUrl}/api/v1/diag/systemone`, { signal: AbortSignal.timeout(4000) });
     if (!r.ok) return null;
-    return (await r.json()) as DiagClassifier;
+    return (await r.json()) as DiagSystemOne;
   } catch {
     return null;
   }

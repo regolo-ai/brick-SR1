@@ -13,44 +13,12 @@ vi.mock('../runtime/identity.js', () => ({ profileRunning: mocks.running }));
 vi.mock('../runtime/process.js', () => ({ startRuntime: mocks.start }));
 vi.mock('../ui/prompts.js', () => ({ select: mocks.select, isCancel: (v: unknown) => typeof v === 'symbol' }));
 vi.mock('./credentials.js', async importOriginal => ({ ...await importOriginal<any>(), validateProfileCredentials: mocks.validate }));
-import { normalizeRegoloCredentials, saveProfileSettings } from './settings.js';
+import { saveProfileSettings } from './settings.js';
 
-const config = () => ({ config_version: 1, server_port: 8000, trusted_proxy_header: "X-Existing-Header", complexity_service: {
-  enabled: true, base_url: 'https://api.regolo.ai', model_name: 'classifier', bearer_token: '${COMPLEXITY_API_KEY}',
-}, skill_router: { complexity_model: { base_url: 'https://api.regolo.ai', bearer_token: '${COMPLEXITY_API_KEY}' },
-  models: [{ model: 'inference', base_url: 'https://api.regolo.ai/v1', api_key_env: 'REGOLO_API_KEY' }] } });
-
-describe('Regolo migration', () => {
-  it.each([undefined, 'same'])('handles missing or equal legacy credentials: %s', async legacy => {
-    const cfg = config(); const values = { REGOLO_API_KEY: 'same', ...(legacy ? { COMPLEXITY_API_KEY: legacy } : {}) };
-    const choose = vi.fn();
-    await normalizeRegoloCredentials(cfg, values, choose);
-    expect(choose).not.toHaveBeenCalled();
-    expect(cfg.complexity_service.bearer_token).toBe('${REGOLO_API_KEY}');
-    expect(cfg.skill_router.complexity_model.bearer_token).toBe('${REGOLO_API_KEY}');
-  });
-  it.each(['canonical', 'legacy'] as const)('asks which conflicting key to keep: %s', async choice => {
-    const values = { REGOLO_API_KEY: 'canonical', COMPLEXITY_API_KEY: 'legacy' };
-    const choose = vi.fn().mockResolvedValue(choice);
-    await normalizeRegoloCredentials(config(), values, choose);
-    expect(choose).toHaveBeenCalledWith(true);
-    expect(values.REGOLO_API_KEY).toBe(choice);
-  });
-  it('offers migration when the canonical key is absent', async () => {
-    const values: Record<string, string> = { COMPLEXITY_API_KEY: 'legacy' };
-    const choose = vi.fn().mockResolvedValue('legacy');
-    await normalizeRegoloCredentials(config(), values, choose);
-    expect(choose).toHaveBeenCalledWith(false);
-    expect(values.REGOLO_API_KEY).toBe('legacy');
-  });
-  it('leaves custom classifier credentials independent', async () => {
-    const cfg = config(); cfg.complexity_service.base_url = 'https://custom.test';
-    cfg.skill_router.complexity_model.base_url = 'https://custom.test';
-    const original = structuredClone(cfg); const choose = vi.fn();
-    await normalizeRegoloCredentials(cfg, { COMPLEXITY_API_KEY: 'custom', REGOLO_API_KEY: 'regolo' }, choose);
-    expect(cfg).toEqual(original); expect(choose).not.toHaveBeenCalled();
-  });
-});
+const config = () => ({ config_version: 2, server_port: 8000, trusted_proxy_header: "X-Existing-Header",
+  skill_router: { capabilities: ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'],
+    systemone: { local_path: 'models/systemone' }, knob: 0,
+    models: [{ model: 'inference', skill_vector: [0.1,0.2,0.3,0.4,0.5,0.6], base_url: 'https://api.regolo.ai/v1', api_key_env: 'REGOLO_API_KEY' }] } });
 
 describe('settings commit', () => {
   let dir: string; let pp: any; let cfg: any;
@@ -59,7 +27,7 @@ describe('settings commit', () => {
     pp = { config: join(dir, 'config.yaml'), env: join(dir, '.env') };
     mocks.paths.mockReturnValue(pp); mocks.running.mockResolvedValue(true);
     mocks.start.mockResolvedValue({});
-    cfg = config(); cfg.complexity_service.bearer_token = cfg.skill_router.complexity_model.bearer_token = '${REGOLO_API_KEY}';
+    cfg = config();
     await writeFile(pp.config, yaml.dump(cfg)); await writeFile(pp.env, '# keep\nREGOLO_API_KEY=old\nUNRELATED=keep\n');
   });
   afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
@@ -77,22 +45,6 @@ describe('settings commit', () => {
     await expect(saveProfileSettings('codex', cfg, { REGOLO_API_KEY: 'bad' })).rejects.toThrow('rejected');
     expect(await Promise.all(Object.values(pp).map(path => readFile(path as string, 'utf8')))).toEqual(before);
     expect(mocks.start).not.toHaveBeenCalled();
-  });
-  it('cancelling migration leaves files untouched', async () => {
-    cfg = config(); await writeFile(pp.env, 'COMPLEXITY_API_KEY=legacy\n');
-    mocks.select.mockResolvedValue('cancel');
-    const before = await readFile(pp.config, 'utf8');
-    await expect(saveProfileSettings('codex', cfg)).rejects.toThrow('cancelled');
-    expect(await readFile(pp.env, 'utf8')).toBe('COMPLEXITY_API_KEY=legacy\n');
-    expect(await readFile(pp.config, 'utf8')).toBe(before);
-  });
-  it('retains legacy provenance when compute already changed the reference in memory', async () => {
-    await writeFile(pp.config, yaml.dump(config()));
-    await writeFile(pp.env, 'COMPLEXITY_API_KEY=legacy\n');
-    mocks.select.mockResolvedValue('cancel');
-    await expect(saveProfileSettings('codex', cfg)).rejects.toThrow('cancelled');
-    expect(mocks.select).toHaveBeenCalled();
-    expect(await readFile(pp.env, 'utf8')).toBe('COMPLEXITY_API_KEY=legacy\n');
   });
   it('does not claim success when health times out', async () => {
     const before = await readFile(pp.env, 'utf8');

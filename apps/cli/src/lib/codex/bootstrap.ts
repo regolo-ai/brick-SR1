@@ -15,7 +15,7 @@ export const DEFAULT_CODEX_PROFILE = 'codex';
 // Default profiles share the loopback port and run one at a time.
 export const DEFAULT_CODEX_PORT = 8000;
 
-/** Create the Codex profile with hosted complexity and native transports. */
+/** Create the Codex profile with local SystemOne and native transports. */
 export async function ensureDefaultCodexProfile(): Promise<string> {
   const profile = DEFAULT_CODEX_PROFILE;
   if (profileExists(profile)) {
@@ -26,12 +26,12 @@ export async function ensureDefaultCodexProfile(): Promise<string> {
   const pp = paths(profile);
   mkdirSync(pp.profileDir, { recursive: true, mode: 0o700 });
 
-  // 1. Config (verbatim copy — preserves the skill_router + dynamic_effort block).
+  // 1. Config (verbatim copy — preserves the SystemOne routing block).
   const configTemplate = readFileSync(join(TEMPLATE_DIR, 'codex-default.config.yaml'), 'utf8');
   writeFileSync(pp.config, yaml.dump(nativeCodexTransport(yaml.load(configTemplate))), { mode: 0o600 });
 
-  // The classifier key is filled by the profile editor before first start.
-  writeFileSync(pp.env, '# Regolo complexity classifier credential\nREGOLO_API_KEY=\n', { mode: 0o600 });
+  // Generation provider credentials are optional until those providers are selected.
+  writeFileSync(pp.env, '# Generation provider credentials\nREGOLO_API_KEY=\n', { mode: 0o600 });
 
   await ensureCodexLocalKey(profile);
 

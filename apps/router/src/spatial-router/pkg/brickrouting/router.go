@@ -1,351 +1,183 @@
+// Package brickrouting selects a model using SystemOne capability vectors.
 package brickrouting
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 	"math"
-	"net/http"
 	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
-	candle "github.com/regolo-ai/brick-SR1/candle-binding"
-)
-
-const (
-	defaultTieEpsilon        = 0.03
-	defaultClipMin           = 0.02
-	defaultClipMax           = 0.98
-	defaultCapabilityModelID = "models/modernbert-capability-classifier"
-
-	// defaultOpenAINoLogprobConfidence is the confidence used by the OpenAI
-	// complexity protocol when the endpoint returns no usable token logprobs.
-	// 0.5 is neutral: tauQueryFrom blends the label and "medium" equally instead
-	// of assuming full certainty. Overridable via complexity_service
-	// (or skill complexity_model) default_confidence.
-	defaultOpenAINoLogprobConfidence = 0.5
-
-	// Locked production math configuration (paper Table 7). These are the
-	// calibrated base parameters and preference-knob anchors; the same values
-	// are written by the CLI profile editor so an absent field in the
-	// yaml resolves to identical behavior.
-	defaultComplexityMu      = 0.345170
-	defaultComplexityBias    = 0.822235
-	defaultCostPenaltyBeta   = 0.230778
-	defaultOverPenaltyLambda = 0.045207
-	defaultPreferencePower   = 2.920351
-	defaultMaxMuMultiplier   = 13.034935
-	defaultMaxBiasShift      = 5.294173
-	defaultMaxCostRelief     = 6559.073066
-	defaultMaxOverRelief     = 49.547940
-	defaultMinMuMultiplier   = 0.081493
-	defaultMinBiasShift      = -1.349259
-	defaultMinCostBoost      = 8.834043
-	defaultMinOverBoost      = 1002.068256
+	systemone "github.com/regolo-ai/brick-SR1/systemone"
 )
 
 var defaultCapabilities = []string{
-	"coding",
-	"creative_synthesis",
-	"instruction_following",
-	"math_reasoning",
-	"planning_agentic",
-	"world_knowledge",
+	"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis",
 }
 
 type Router struct {
-	cfg          *config.RouterConfig
-	skillCfg     config.SkillRouterConfig
-	capabilities []string
-	capIndex     map[string]int
-	capability   *capabilityClassifier
-	complexity   *complexityClient
-	mathCfg      mathConfig
-	kp           knobParams
-	pricingTable atomic.Pointer[economics.PricingTable]
-}
-
-type mathConfig struct {
-	tau     map[string]float64
-	tieEps  float64
-	clipMin float64
-	clipMax float64
-
-	// Effective knob-adjusted parameters (paper sec. brick-knob), computed once
-	// at startup from the base values + routing_preference via effectiveParams.
-	routingPreference float64
-	mu                float64 // effective complexity_mu
-	bias              float64 // effective complexity_bias
-	beta              float64 // effective cost_penalty_beta
-	lambdaOver        float64 // effective over_penalty_lambda
-}
-
-// knobParams are the base (r=0) math parameters plus the preference anchors.
-type knobParams struct {
-	complexityMu      float64
-	complexityBias    float64
-	costPenaltyBeta   float64
-	overPenaltyLambda float64
-	preferencePower   float64
-	maxMuMultiplier   float64
-	maxBiasShift      float64
-	maxCostRelief     float64
-	maxOverRelief     float64
-	minMuMultiplier   float64
-	minBiasShift      float64
-	minCostBoost      float64
-	minOverBoost      float64
+	skillCfg config.SkillRouterConfig
+	classify func(string) ([]float64, error)
 }
 
 type Result struct {
-	Model                string
-	Reason               string
-	MatchedKeyword       string
-	Capability           map[string]float64
-	ComplexityLabel      string
-	ComplexityConfidence float64
-	TauQuery             float64
-	Scores               []ModelScore
+	Model        string          `json:"model"`
+	QueryVector  []float64       `json:"query_vector"`
+	ScaledVector []float64       `json:"scaled_vector"`
+	Knob         float64         `json:"knob"`
+	Distances    []ModelDistance `json:"distances"`
 }
 
-type ModelScore struct {
-	Model string `json:"model"`
-	// Distance is the pure quality distance D_m.
+type ModelDistance struct {
+	Model    string  `json:"model"`
 	Distance float64 `json:"distance"`
-	// Score is the cost-penalized routing objective J_m = D_m + beta * cost.
-	// Selection minimizes Score, not Distance.
-	Score           float64 `json:"score"`
-	ExpectedSuccess float64 `json:"expected_success"`
-	// UnderCapacity is the pure under-capacity residual sqrt(underSum) in
-	// log-odds space: how far the model's skill falls SHORT of the query
-	// requirement (over-capacity excluded). Observability-only — it does not
-	// affect selection. The proxy uses it to set reasoning effort: a stretched
-	// model (high under-capacity) is told to think harder to close the gap.
-	UnderCapacity float64 `json:"under_capacity"`
+}
+
+// RoutingOptions combines the request's knob override and eligible models.
+type RoutingOptions struct {
+	Knob       *float64
+	Candidates map[string]bool
 }
 
 func New(cfg *config.RouterConfig) (*Router, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("router config is nil")
+	if cfg == nil || !cfg.SkillRouter.Enabled {
+		return nil, fmt.Errorf("SystemOne routing is disabled")
 	}
-	skillCfg := cfg.SkillRouter
-	if !skillCfg.Enabled {
-		return nil, fmt.Errorf("skill_router.enabled is false")
-	}
-	applyDefaults(&skillCfg)
-
-	capIndex := make(map[string]int, len(skillCfg.Capabilities))
-	for i, capability := range skillCfg.Capabilities {
-		capIndex[capability] = i
-	}
-
-	capability, err := newCapabilityClassifier(skillCfg.CapabilityModel, skillCfg.Capabilities)
+	skillCfg, err := canonicalConfig(cfg.SkillRouter)
 	if err != nil {
 		return nil, err
 	}
-
-	return &Router{
-		cfg:          cfg,
-		skillCfg:     skillCfg,
-		capabilities: skillCfg.Capabilities,
-		capIndex:     capIndex,
-		capability:   capability,
-		complexity:   newComplexityClient(cfg, skillCfg.ComplexityModel),
-		mathCfg:      newMathConfig(skillCfg.Math),
-		kp:           resolveKnobParams(skillCfg.Math),
-	}, nil
+	path := skillCfg.SystemOne.LocalPath
+	if path == "" {
+		return nil, fmt.Errorf("skill_router.systemone.local_path is required; install the pinned checkpoint")
+	}
+	if err := systemone.Init(path); err != nil {
+		return nil, err
+	}
+	return &Router{skillCfg: skillCfg, classify: func(text string) ([]float64, error) {
+		return systemone.Classify(text)
+	}}, nil
 }
 
-// SetPricingTable sets the dynamic pricing table used for cost-aware scoring.
-// When nil, the router falls back to static cost_weight from config.
-func (r *Router) SetPricingTable(table *economics.PricingTable) {
-	r.pricingTable.Store(table)
+// canonicalConfig copies and explicitly reorders configured vectors without mutating the profile.
+func canonicalConfig(input config.SkillRouterConfig) (config.SkillRouterConfig, error) {
+	if len(input.Capabilities) == 0 {
+		input.Capabilities = append([]string(nil), defaultCapabilities...)
+	}
+	order, err := capabilityLabelOrder(input.Capabilities, defaultCapabilities)
+	if err != nil {
+		return input, err
+	}
+	if math.IsNaN(input.Knob) || math.IsInf(input.Knob, 0) || input.Knob < -1 || input.Knob > 1 {
+		return input, fmt.Errorf("routing knob must be finite and in [-1, 1]")
+	}
+	input.Models = append([]config.SkillRouterModelConfig(nil), input.Models...)
+	for i := range input.Models {
+		model := &input.Models[i]
+		if err := validateVector(model.SkillVector, 6); err != nil {
+			return input, fmt.Errorf("model %s: %w", model.Model, err)
+		}
+		original := model.SkillVector
+		model.SkillVector = make([]float64, 6)
+		for j, index := range order {
+			model.SkillVector[j] = original[index]
+		}
+	}
+	input.Capabilities = append([]string(nil), defaultCapabilities...)
+	return input, nil
 }
 
 func (r *Router) Route(ctx context.Context, text string) (*Result, error) {
-	return r.RouteWithCandidates(ctx, text, nil)
+	return r.RouteWithOptions(ctx, text, RoutingOptions{})
 }
 
-// RouteWithCandidates routes like Route, but restricts model selection to the
-// allowlist when it is non-nil (an entry present and true is eligible). It is
-// used by the multimodal passthrough path to route only among models that can
-// handle the raw modalities present in the request. A nil allowlist means all
-// configured models are eligible (identical to Route). The caller allowlist is
-// intersected with active_models: candidacy = handles_modality AND active.
-func (r *Router) RouteWithCandidates(ctx context.Context, text string, allow map[string]bool) (*Result, error) {
-	return r.routeCore(ctx, text, intersectAllow(allow, r.activeAllow()), r.mathCfg)
+func (r *Router) RouteWithOptions(ctx context.Context, text string, options RoutingOptions) (*Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("no text available for SystemOne routing")
+	}
+	knob := r.skillCfg.Knob
+	if options.Knob != nil {
+		knob = *options.Knob
+	}
+	if math.IsNaN(knob) || math.IsInf(knob, 0) || knob < -1 || knob > 1 {
+		return nil, fmt.Errorf("routing knob must be finite and in [-1, 1]")
+	}
+	allow := intersectAllow(options.Candidates, r.activeAllow())
+	if !anyAllowed(r.skillCfg.Models, allow) {
+		return nil, fmt.Errorf("no eligible SystemOne candidates")
+	}
+	started := time.Now()
+	query, err := r.classify(text)
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
+	}
+	metrics.SystemOneDuration.WithLabelValues(outcome).Observe(time.Since(started).Seconds())
+	if err != nil {
+		return nil, fmt.Errorf("SystemOne inference failed: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	scaled, distances, err := selectSystemOne(query, knob, r.skillCfg.Models, allow)
+	if err != nil {
+		return nil, err
+	}
+	return &Result{Model: distances[0].Model, QueryVector: query, ScaledVector: scaled, Knob: knob, Distances: distances}, nil
 }
 
-// RouteWithPreference is like Route but overrides the routing-preference knob r
-// for this single call, recomputing the effective math parameters on the fly.
-// This lets the proxy apply a per-request mode (derived from the client's effort
-// field) without mutating the singleton Router or restarting the container.
-// r must be in [-1, 1]; values outside the range are clamped.
-func (r *Router) RouteWithPreference(ctx context.Context, text string, preference float64) (*Result, error) {
-	mu, bias, beta, lambda := effectiveParams(r.kp, preference)
-	mc := r.mathCfg
-	mc.routingPreference = preference
-	mc.mu = mu
-	mc.bias = bias
-	mc.beta = beta
-	mc.lambdaOver = lambda
-	// Restrict candidacy to active_models (the pool the user configured). If the
-	// list somehow excludes every configured model (hand-edited config), fall
-	// back to the full pool: the text path must never fail to route.
-	allow := r.activeAllow()
-	if allow != nil && !anyAllowed(r.skillCfg.Models, allow) {
-		logging.Warnf("[Brick2] active_models excluded every configured model; using full pool")
-		allow = nil
+func validateVector(vector []float64, dimensions int) error {
+	if len(vector) != dimensions {
+		return fmt.Errorf("skill vector has %d dimensions; expected %d", len(vector), dimensions)
 	}
-	return r.routeCore(ctx, text, allow, mc)
-}
-
-// routeCore is the shared implementation used by RouteWithCandidates and
-// RouteWithPreference. It runs keyword matching, capability + complexity
-// classification in parallel, then selects a model via scoreModels.
-func (r *Router) routeCore(ctx context.Context, text string, allow map[string]bool, mc mathConfig) (*Result, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil, fmt.Errorf("no text available for Brick routing")
-	}
-
-	matches := r.matchKeywords(text)
-	// A keyword override only wins if its model is eligible under the allowlist;
-	// otherwise it would break the passthrough guarantee (route to a model that
-	// cannot actually consume the raw modality).
-	if best := bestOverride(matches); best != nil && modelAllowed(allow, best.rule.Model) {
-		logging.Infof("[Brick2] keyword override matched rule=%s model=%s importance=%d",
-			best.rule.Name, best.rule.Model, best.importance)
-		return &Result{
-			Model:           best.rule.Model,
-			Reason:          "keyword_override",
-			MatchedKeyword:  best.rule.Name,
-			Capability:      uniformCapabilities(r.capabilities),
-			ComplexityLabel: "skipped",
-			TauQuery:        mc.tau["medium"],
-		}, nil
-	}
-
-	capCh := make(chan capabilityResult, 1)
-	complexityCh := make(chan complexityResult, 1)
-	go func() {
-		p, err := r.capability.Classify(text)
-		capCh <- capabilityResult{probabilities: p, err: err}
-	}()
-	go func() {
-		label, confidence := r.complexity.Classify(ctx, text)
-		complexityCh <- complexityResult{label: label, confidence: confidence}
-	}()
-
-	capRes := <-capCh
-	if capRes.err != nil {
-		return nil, capRes.err
-	}
-	probabilities := r.applyKeywordBiases(capRes.probabilities, matches)
-
-	complexityRes := <-complexityCh
-	tauQuery := tauQueryFrom(mc, complexityRes.label, complexityRes.confidence)
-	scores := r.scoreModelsWithConfig(probabilities, tauQuery, allow, mc)
-	if len(scores) == 0 {
-		if allow != nil {
-			return nil, fmt.Errorf("no eligible skill_router.models for the request modalities")
+	for _, value := range vector {
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+			return fmt.Errorf("skill vector values must be finite and in [0, 1]")
 		}
-		return nil, fmt.Errorf("no skill_router.models configured")
 	}
-
-	selected := scores[0].Model
-	reason := "skill_vector"
-	if len(matches) > 0 {
-		reason = "skill_vector_keyword_bias"
-	}
-
-	logging.Infof("[Brick2] routing brick_complexity_classifier=%s modernBERT_classifier=%s model_pool=%v model_chosen=%s",
-		complexityRes.label, formatVector(probabilities), r.poolModels(allow), selected)
-
-	return &Result{
-		Model:                selected,
-		Reason:               reason,
-		MatchedKeyword:       joinedRuleNames(matches),
-		Capability:           toCapabilityMap(r.capabilities, probabilities),
-		ComplexityLabel:      complexityRes.label,
-		ComplexityConfidence: complexityRes.confidence,
-		TauQuery:             tauQuery,
-		Scores:               scores,
-	}, nil
+	return nil
 }
 
-func formatVector(values []float64) string {
-	parts := make([]string, len(values))
-	for i, value := range values {
-		parts[i] = fmt.Sprintf("%.3f", value)
+func selectSystemOne(query []float64, knob float64, models []config.SkillRouterModelConfig, allow map[string]bool) ([]float64, []ModelDistance, error) {
+	if err := validateVector(query, 6); err != nil {
+		return nil, nil, err
 	}
-	return "[" + strings.Join(parts, " ") + "]"
-}
-
-func (r *Router) scoreModelsWithConfig(probabilities []float64, tauQuery float64, allow map[string]bool, mc mathConfig) []ModelScore {
-	// Difficulty lift in log-odds space (paper sec. brick-math):
-	//   z_q = bias + mu * logit(tau_query)
-	zq := mc.bias + mc.mu*logit(clamp(tauQuery, mc.clipMin, mc.clipMax))
-	scores := make([]ModelScore, 0, len(r.skillCfg.Models))
-	for _, model := range r.skillCfg.Models {
+	if math.IsNaN(knob) || math.IsInf(knob, 0) || knob < -1 || knob > 1 {
+		return nil, nil, fmt.Errorf("invalid routing knob")
+	}
+	scaled := make([]float64, len(query))
+	for i, value := range query {
+		scaled[i] = math.Min(1, value*(1+0.5*knob))
+	}
+	var scores []ModelDistance
+	for _, model := range models {
+		if err := validateVector(model.SkillVector, 6); err != nil {
+			return nil, nil, fmt.Errorf("model %s: %w", model.Model, err)
+		}
 		if !modelAllowed(allow, model.Model) {
 			continue
 		}
-		var underSum, overSum, expected float64
-		for i, p := range probabilities {
-			requirement := p * zq
-			modelValue := p * logit(clamp(model.SkillVector[i], mc.clipMin, mc.clipMax))
-			under := math.Max(0, requirement-modelValue)
-			over := math.Max(0, modelValue-requirement)
-			underSum += under * under
-			overSum += over * over
-			expected += p * model.SkillVector[i]
+		var sum float64
+		for i, value := range scaled {
+			delta := value - model.SkillVector[i]
+			sum += delta * delta
 		}
-		distance := math.Sqrt(underSum + mc.lambdaOver*overSum)
-
-		costWeight := model.CostWeight
-		if pricingTable := r.pricingTable.Load(); pricingTable != nil {
-			if pool := r.poolModels(allow); len(pool) > 0 {
-				if w, ok := pricingTable.DynamicCostWeight(model.Model, pool); ok {
-					costWeight = w
-				}
-			}
-		}
-
-		// Cost-penalized routing objective: J_m = D_m + beta * a_m, where a_m is
-		// the model's normalized cost (cost_weight).
-		score := distance + mc.beta*costWeight
-		scores = append(scores, ModelScore{
-			Model:           model.Model,
-			Distance:        distance,
-			Score:           score,
-			ExpectedSuccess: expected,
-			UnderCapacity:   math.Sqrt(underSum),
-		})
+		distance := math.Sqrt(sum)
+		scores = append(scores, ModelDistance{Model: model.Model, Distance: distance})
 	}
-	sort.SliceStable(scores, func(i, j int) bool {
-		if math.Abs(scores[i].Score-scores[j].Score) < mc.tieEps {
-			if math.Abs(scores[i].ExpectedSuccess-scores[j].ExpectedSuccess) > 1e-9 {
-				return scores[i].ExpectedSuccess > scores[j].ExpectedSuccess
-			}
-			return modelTieCost(r.skillCfg.Models, scores[i].Model) < modelTieCost(r.skillCfg.Models, scores[j].Model)
-		}
-		return scores[i].Score < scores[j].Score
-	})
-	return scores
+	if len(scores) == 0 {
+		return nil, nil, fmt.Errorf("no eligible SystemOne candidates")
+	}
+	sort.SliceStable(scores, func(i, j int) bool { return scores[i].Distance < scores[j].Distance })
+	return scaled, scores, nil
 }
 
-// modelAllowed reports whether a model is eligible under an allowlist. A nil
-// allowlist admits every model; otherwise only entries present and true pass.
 func modelAllowed(allow map[string]bool, model string) bool {
 	if allow == nil {
 		return true
@@ -353,19 +185,6 @@ func modelAllowed(allow map[string]bool, model string) bool {
 	return allow[model]
 }
 
-// poolModels returns the list of model names eligible under the allowlist.
-func (r *Router) poolModels(allow map[string]bool) []string {
-	var pool []string
-	for _, m := range r.skillCfg.Models {
-		if modelAllowed(allow, m.Model) {
-			pool = append(pool, m.Model)
-		}
-	}
-	return pool
-}
-
-// activeAllow returns the active_models allowlist as a map, or nil when the list
-// is empty (nil = admit all models, preserving backward compatibility).
 func (r *Router) activeAllow() map[string]bool {
 	if len(r.skillCfg.ActiveModels) == 0 {
 		return nil
@@ -377,9 +196,6 @@ func (r *Router) activeAllow() map[string]bool {
 	return allow
 }
 
-// anyAllowed reports whether at least one configured model passes the allowlist.
-// Used by the text path to detect an active_models set that excludes every model
-// (a hand-edited misconfiguration) so it can fall back to the full pool.
 func anyAllowed(models []config.SkillRouterModelConfig, allow map[string]bool) bool {
 	for _, m := range models {
 		if modelAllowed(allow, m.Model) {
@@ -389,9 +205,6 @@ func anyAllowed(models []config.SkillRouterModelConfig, allow map[string]bool) b
 	return false
 }
 
-// intersectAllow returns the models present-and-true in both allowlists. A nil
-// operand means "all admitted", so nil ∩ x == x. Mirrors the helper in
-// pkg/proxy/brick.go, duplicated here to keep the router package self-contained.
 func intersectAllow(a, b map[string]bool) map[string]bool {
 	if a == nil {
 		return b
@@ -408,197 +221,6 @@ func intersectAllow(a, b map[string]bool) map[string]bool {
 	return out
 }
 
-// tauQueryFrom computes the complexity interpolation parameter from the
-// mathConfig, complexity label and classifier confidence. It is a pure function
-// so that routeCore can use any mathConfig (including an on-the-fly one built by
-// RouteWithPreference) without accessing r.mathCfg directly.
-//
-// This is where the difficulty signal is consumed: the classifier (local brick
-// or remote OpenAI endpoint) supplies ONLY (label, confidence); everything else
-// in the routing decision — keyword rules, the capability classifier
-// (ModernBERT), per-model skill vectors and cost — is computed locally. The
-// label picks tau_label and the confidence shrinks it toward tau_medium when the
-// classifier is unsure, so confidence is a real input, not cosmetic.
-func tauQueryFrom(mc mathConfig, label string, confidence float64) float64 {
-	label = strings.ToLower(strings.TrimSpace(label))
-	if confidence < 0 {
-		confidence = 0
-	}
-	if confidence > 1 {
-		confidence = 1
-	}
-	tauLabel, ok := mc.tau[label]
-	if !ok {
-		tauLabel = mc.tau["medium"]
-		confidence = 0
-	}
-	return confidence*tauLabel + (1-confidence)*mc.tau["medium"]
-}
-
-func applyDefaults(cfg *config.SkillRouterConfig) {
-	if len(cfg.Capabilities) == 0 {
-		cfg.Capabilities = append([]string(nil), defaultCapabilities...)
-	}
-	if cfg.CapabilityModel.ModelID == "" && cfg.CapabilityModel.LocalPath == "" {
-		cfg.CapabilityModel.ModelID = defaultCapabilityModelID
-	}
-	if cfg.ComplexityModel.ModelID == "" {
-		cfg.ComplexityModel.ModelID = "regolo/brick-complexity-2-eco"
-	}
-
-}
-
-func newMathConfig(cfg config.SkillRouterMathConfig) mathConfig {
-	tau := map[string]float64{
-		"easy":   0.55,
-		"medium": 0.72,
-		"hard":   0.88,
-	}
-	for key, value := range cfg.Tau {
-		tau[strings.ToLower(strings.TrimSpace(key))] = value
-	}
-	tieEps := cfg.TieEpsilon
-	if tieEps == 0 {
-		tieEps = defaultTieEpsilon
-	}
-	clipMin := cfg.ClipMin
-	if clipMin == 0 {
-		clipMin = defaultClipMin
-	}
-	clipMax := cfg.ClipMax
-	if clipMax == 0 {
-		clipMax = defaultClipMax
-	}
-
-	kp := resolveKnobParams(cfg)
-
-	ptrOr := func(v *float64, def float64) float64 {
-		if v == nil {
-			return def
-		}
-		return *v
-	}
-	preference := ptrOr(cfg.RoutingPreference, 0)
-
-	mu, bias, beta, lambda := effectiveParams(kp, preference)
-	return mathConfig{
-		tau:               tau,
-		tieEps:            tieEps,
-		clipMin:           clipMin,
-		clipMax:           clipMax,
-		routingPreference: preference,
-		mu:                mu,
-		bias:              bias,
-		beta:              beta,
-		lambdaOver:        lambda,
-	}
-}
-
-// resolveKnobParams builds the knobParams from a SkillRouterMathConfig,
-// filling in locked production defaults for any absent field. It is extracted
-// from newMathConfig so that the Router can store kp once and reuse it in
-// RouteWithPreference without re-parsing the config.
-func resolveKnobParams(cfg config.SkillRouterMathConfig) knobParams {
-	floatOr := func(v, def float64) float64 {
-		if v == 0 {
-			return def
-		}
-		return v
-	}
-	ptrOr := func(v *float64, def float64) float64 {
-		if v == nil {
-			return def
-		}
-		return *v
-	}
-	return knobParams{
-		complexityMu:      floatOr(cfg.ComplexityMu, defaultComplexityMu),
-		complexityBias:    ptrOr(cfg.ComplexityBias, defaultComplexityBias),
-		costPenaltyBeta:   floatOr(cfg.CostPenaltyBeta, defaultCostPenaltyBeta),
-		overPenaltyLambda: floatOr(cfg.OverPenaltyLambda, defaultOverPenaltyLambda),
-		preferencePower:   floatOr(cfg.PreferencePower, defaultPreferencePower),
-		maxMuMultiplier:   floatOr(cfg.MaxMuMultiplier, defaultMaxMuMultiplier),
-		maxBiasShift:      ptrOr(cfg.MaxBiasShift, defaultMaxBiasShift),
-		maxCostRelief:     floatOr(cfg.MaxCostRelief, defaultMaxCostRelief),
-		maxOverRelief:     floatOr(cfg.MaxOverRelief, defaultMaxOverRelief),
-		minMuMultiplier:   floatOr(cfg.MinMuMultiplier, defaultMinMuMultiplier),
-		minBiasShift:      ptrOr(cfg.MinBiasShift, defaultMinBiasShift),
-		minCostBoost:      floatOr(cfg.MinCostBoost, defaultMinCostBoost),
-		minOverBoost:      floatOr(cfg.MinOverBoost, defaultMinOverBoost),
-	}
-}
-
-// effectiveParams reshapes the base math parameters through the routing
-// preference r in [-1,1] using the asymmetric power law from the paper
-// (reference: sweep_knob_aggressive.py effective_knob_params):
-//
-//	pos = max(r,0)^power, neg = max(-r,0)^power
-//	mu     = mu0    * exp( pos*ln(maxMuMultiplier) + neg*ln(minMuMultiplier) )
-//	bias   = bias0  + pos*maxBiasShift + neg*minBiasShift
-//	beta   = beta0  * exp(-pos*ln(maxCostRelief)   + neg*ln(minCostBoost) )
-//	lambda = lam0   * exp(-pos*ln(maxOverRelief)   + neg*ln(minOverBoost) )
-//
-// At r=0 every parameter equals its base. r=+1 maximizes quality (inflated
-// requirement, cost and over-capacity nearly free); r=-1 minimizes cost
-// (deflated requirement, strong cost and over-capacity pressure).
-func effectiveParams(kp knobParams, preference float64) (mu, bias, beta, lambda float64) {
-	r := clamp(preference, -1, 1)
-	power := kp.preferencePower
-	if power <= 0 || math.IsNaN(power) || math.IsInf(power, 0) {
-		power = 1.0
-	}
-	pos := math.Pow(math.Max(r, 0), power)
-	neg := math.Pow(math.Max(-r, 0), power)
-
-	mu = kp.complexityMu * math.Exp(pos*math.Log(kp.maxMuMultiplier)+neg*math.Log(kp.minMuMultiplier))
-	bias = kp.complexityBias + pos*kp.maxBiasShift + neg*kp.minBiasShift
-	beta = kp.costPenaltyBeta * math.Exp(-pos*math.Log(kp.maxCostRelief)+neg*math.Log(kp.minCostBoost))
-	lambda = kp.overPenaltyLambda * math.Exp(-pos*math.Log(kp.maxOverRelief)+neg*math.Log(kp.minOverBoost))
-	return mu, bias, beta, lambda
-}
-
-type capabilityClassifier struct {
-	modelPath string
-	labels    []string
-	order     []int
-}
-
-type capabilityResult struct {
-	probabilities []float64
-	err           error
-}
-
-func newCapabilityClassifier(cfg config.SkillRouterCapabilityModelConfig, capabilities []string) (*capabilityClassifier, error) {
-	modelPath := cfg.LocalPath
-	if modelPath == "" {
-		modelPath = cfg.ModelID
-	}
-	if modelPath == "" {
-		modelPath = defaultCapabilityModelID
-	}
-	labels := []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"}
-	if len(cfg.Labels) > 0 {
-		if len(cfg.Labels) != len(labels) {
-			return nil, fmt.Errorf("capability labels differ from the pinned checkpoint")
-		}
-		for i, label := range labels {
-			if cfg.Labels[i] != label {
-				return nil, fmt.Errorf("capability labels differ from the pinned checkpoint; migrate the profile with the CLI")
-			}
-		}
-	}
-	order, err := capabilityLabelOrder(labels, capabilities)
-	if err != nil {
-		return nil, err
-	}
-	logging.Infof("[Brick2] initializing capability classifier: %s", modelPath)
-	if err := candle.InitModernBertClassifier(modelPath); err != nil {
-		return nil, fmt.Errorf("initialize capability classifier %q: %w", modelPath, err)
-	}
-	return &capabilityClassifier{modelPath: modelPath, labels: labels, order: order}, nil
-}
-
-// Model outputs follow checkpoint labels; routing vectors follow capabilities.
 func capabilityLabelOrder(labels, capabilities []string) ([]int, error) {
 	if len(labels) != len(capabilities) {
 		return nil, fmt.Errorf("capability labels and routing dimensions differ")
@@ -620,340 +242,4 @@ func capabilityLabelOrder(labels, capabilities []string) ([]int, error) {
 		delete(indices, capability)
 	}
 	return order, nil
-}
-
-func (c *capabilityClassifier) Classify(text string) ([]float64, error) {
-	result, err := candle.ClassifyModernBertTextWithProbabilities(text)
-	if err != nil {
-		return nil, fmt.Errorf("capability classification failed: %w", err)
-	}
-	if len(result.Probabilities) != len(c.labels) {
-		return nil, fmt.Errorf("capability classifier returned %d probabilities for %d labels", len(result.Probabilities), len(c.labels))
-	}
-	out := make([]float64, len(result.Probabilities))
-	for i, index := range c.order {
-		out[i] = float64(result.Probabilities[index])
-	}
-	return normalize(out), nil
-}
-
-// noLogprobWarn gates the "no usable logprobs" warning to once per process.
-// It is package-level rather than a complexityClient field because the client
-// is not always a long-lived singleton: ClassifyComplexityLabel (the Anthropic
-// passthrough model_map fallback) builds a fresh complexityClient per request,
-// so a per-instance sync.Once would never have fired and the warning would
-// flood the logs on every fallback classification.
-var noLogprobWarn sync.Once
-
-type complexityClient struct {
-	baseURL           string
-	bearerToken       string
-	credentialErr     error
-	useClientKey      bool
-	protocol          string
-	modelName         string
-	defaultConfidence float64
-	httpClient        *http.Client
-}
-
-type complexityResult struct {
-	label      string
-	confidence float64
-}
-
-func newComplexityClient(cfg *config.RouterConfig, skillCfg config.SkillRouterComplexityModelConfig) *complexityClient {
-	timeout := 5 * time.Second
-	if skillCfg.TimeoutSeconds > 0 {
-		timeout = time.Duration(skillCfg.TimeoutSeconds) * time.Second
-	} else if cfg.ComplexityService != nil && cfg.ComplexityService.TimeoutSeconds > 0 {
-		timeout = time.Duration(cfg.ComplexityService.TimeoutSeconds) * time.Second
-	}
-
-	baseURL := strings.TrimRight(skillCfg.BaseURL, "/")
-	if baseURL == "" && cfg.ComplexityService != nil {
-		baseURL = strings.TrimRight(cfg.ComplexityService.BaseURL, "/")
-
-	}
-
-	tokenConfig := &config.ComplexityServiceConfig{BearerToken: skillCfg.BearerToken, BearerTokenFile: skillCfg.BearerTokenFile}
-	if tokenConfig.BearerToken == "" && tokenConfig.BearerTokenFile == "" && cfg.ComplexityService != nil {
-		tokenConfig = cfg.ComplexityService
-	}
-	useClientKey := !cfg.CodexRouter.Enabled && (skillCfg.UseClientKey || (skillCfg.BaseURL == "" && cfg.ComplexityService.UsesClientKey()))
-	var token string
-	var credentialErr error
-	if !useClientKey {
-		token, credentialErr = tokenConfig.ResolveBearerToken()
-		if cfg.CodexRouter.Enabled && credentialErr == nil {
-			token, credentialErr = config.ValidateCredential(token)
-		}
-	}
-
-	if baseURL == "" {
-		credentialErr = fmt.Errorf("classifier API base_url is required")
-	}
-
-	// Protocol: skill-router value wins, else the ComplexityService value,
-	// else "brick" (the legacy custom /classify endpoint).
-	protocol := strings.ToLower(strings.TrimSpace(skillCfg.Protocol))
-	if protocol == "" && cfg.ComplexityService != nil {
-		protocol = strings.ToLower(strings.TrimSpace(cfg.ComplexityService.Protocol))
-	}
-	if protocol == "" {
-		protocol = "brick"
-	}
-
-	// ModelName (OpenAI protocol only): the name sent as the request "model"
-	// field to the classifier endpoint. Precedence is chosen so a stale profile
-	// self-heals instead of silently sending a name the endpoint rejects:
-	//   1. complexity_model.model_name  (explicit, authoritative)
-	//   2. complexity_service.model_name (top-level hosted-classifier name)
-	//   3. complexity_model.model_id with any "provider/" prefix stripped
-	// model_id (e.g. "regolo/brick-complexity-pro") is a download/registry
-	// coordinate, not an API model name: passing it verbatim made the hosted
-	// endpoint 400 on every call, silently degrading all routing to "medium".
-	// Preferring the service model_name and stripping the prefix both avoid that.
-	modelName := strings.TrimSpace(skillCfg.ModelName)
-	if modelName == "" && cfg.ComplexityService != nil {
-		modelName = strings.TrimSpace(cfg.ComplexityService.ModelName)
-	}
-	if modelName == "" {
-		modelName = stripProviderPrefix(strings.TrimSpace(skillCfg.ModelID))
-	}
-
-	// DefaultConfidence (OpenAI protocol, used only when the endpoint returns no
-	// usable logprobs): skill value wins, else ComplexityService, else 0.5.
-	defaultConfidence := defaultOpenAINoLogprobConfidence
-	if skillCfg.DefaultConfidence != nil {
-		defaultConfidence = *skillCfg.DefaultConfidence
-	} else if cfg.ComplexityService != nil && cfg.ComplexityService.DefaultConfidence != nil {
-		defaultConfidence = *cfg.ComplexityService.DefaultConfidence
-	}
-	if defaultConfidence < 0 {
-		defaultConfidence = 0
-	}
-	if defaultConfidence > 1 {
-		defaultConfidence = 1
-	}
-
-	return &complexityClient{
-		baseURL:           baseURL,
-		bearerToken:       token,
-		credentialErr:     credentialErr,
-		useClientKey:      useClientKey,
-		protocol:          protocol,
-		modelName:         modelName,
-		defaultConfidence: defaultConfidence,
-		httpClient:        &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }},
-	}
-}
-
-// Classify returns the complexity label ("easy"/"medium"/"hard") and a
-// confidence in [0,1]. It dispatches on the configured protocol and always
-// degrades to ("medium", 1.0) on any transport or decode error so routing
-// keeps working when the classifier is unavailable. Wall time of the call is
-// recorded into the brick_cc_classify_duration_seconds histogram (success and
-// fallback both count), which `brick claude status` reads for avg/p50/p95.
-func (c *complexityClient) Classify(ctx context.Context, text string) (string, float64) {
-	if c.useClientKey {
-		requestClient := *c
-		requestClient.bearerToken, requestClient.credentialErr = config.ValidateCredential(config.ClientAPIKey(ctx))
-		c = &requestClient
-	}
-	if c.credentialErr != nil {
-		logging.Warnf("Complexity classifier credential is unavailable")
-		return "medium", 1.0
-	}
-	start := time.Now()
-	defer func() { metrics.BrickCCClassifyDuration.WithLabelValues().Observe(time.Since(start).Seconds()) }()
-	if c.protocol == "openai" {
-		return c.classifyOpenAI(ctx, text)
-	}
-	return c.classifyBrick(ctx, text)
-}
-
-// ClassifyComplexityLabel builds a one-shot complexity classifier from cfg's
-// skill-router complexity_model config (with the same fallback to
-// complexity_service that the router core uses) and returns just the label
-// ("easy"/"medium"/"hard").
-//
-// It exists so callers outside the router core — notably the Anthropic
-// passthrough model_map fallback in pkg/proxy, which runs when the skill router
-// did not produce a label — share the exact protocol handling (brick /classify
-// vs OpenAI /v1/chat/completions), bearer-token expansion, and model-name
-// resolution as the skill router, instead of reimplementing a protocol-blind
-// POST /classify. Degrades to "medium" when cfg is nil or the classifier is
-// unavailable, so routing keeps working.
-func ClassifyComplexityLabel(ctx context.Context, cfg *config.RouterConfig, text string) string {
-	if cfg == nil {
-		return "medium"
-	}
-	c := newComplexityClient(cfg, cfg.SkillRouter.ComplexityModel)
-	label, _ := c.Classify(ctx, text)
-	return label
-}
-
-// classifyBrick calls the custom brick-complexity-server POST /classify endpoint
-// ({"text":...} -> {"label","confidence"}). Any failure (transport, non-200,
-// decode, or a label outside easy/medium/hard) is logged at Error level with
-// enough detail to diagnose it (status code + response body, or the raw label),
-// counted in metrics.BrickCCClassifyFallback, and degrades routing to "medium"
-// so the request itself never fails on a broken classifier.
-func (c *complexityClient) classifyBrick(ctx context.Context, text string) (string, float64) {
-	body, _ := json.Marshal(map[string]string{"text": text})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/classify", bytes.NewReader(body))
-	if err != nil {
-		logging.Errorf("[Brick2] complexity fallback: building request: %v", err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		logging.Errorf("[Brick2] complexity fallback: request to %s: %v", c.baseURL, err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		logging.Errorf("[Brick2] complexity fallback: %s returned status=%d body=%q", c.baseURL, resp.StatusCode, respBody)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	var decoded struct {
-		Label      string  `json:"label"`
-		Confidence float64 `json:"confidence"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		logging.Errorf("[Brick2] complexity fallback: decoding /classify response: %v", err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	label := strings.ToLower(strings.TrimSpace(decoded.Label))
-	if label != "easy" && label != "medium" && label != "hard" {
-		logging.Errorf("[Brick2] complexity fallback: /classify returned unrecognized label %q (want exactly easy/medium/hard)", decoded.Label)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	return label, decoded.Confidence
-}
-
-// classifyOpenAI calls an OpenAI-compatible POST /v1/chat/completions endpoint.
-// It sends the complexity SYSTEM_PROMPT plus the query, reads the label from the
-// first completion token, and derives confidence by softmaxing the easy/medium/
-// hard token logprobs when the server returns them (else 1.0). Any failure
-// (transport, non-200, decode, empty choices, or a label outside easy/medium/
-// hard) is logged at Error level with enough detail to diagnose it and counted
-// in metrics.BrickCCClassifyFallback; routing degrades to "medium" so the
-// request itself never fails on a broken classifier.
-func (c *complexityClient) classifyOpenAI(ctx context.Context, text string) (string, float64) {
-	reqBody := map[string]any{
-		"model": c.modelName,
-		"messages": []map[string]string{
-			{"role": "system", "content": complexitySystemPrompt},
-			{"role": "user", "content": "Classify: " + text},
-		},
-		"temperature":  0,
-		"logprobs":     true,
-		"top_logprobs": 20,
-	}
-	body, _ := json.Marshal(reqBody)
-	url := strings.TrimRight(c.baseURL, "/") + "/v1/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		logging.Errorf("[Brick2] complexity fallback: building request: %v", err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		logging.Errorf("[Brick2] complexity fallback: request to %s (model=%s): %v", url, c.modelName, err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned status=%d body=%q", url, c.modelName, resp.StatusCode, respBody)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-
-	var decoded struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-			Logprobs *struct {
-				Content []struct {
-					Token       string  `json:"token"`
-					Logprob     float64 `json:"logprob"`
-					TopLogprobs []struct {
-						Token   string  `json:"token"`
-						Logprob float64 `json:"logprob"`
-					} `json:"top_logprobs"`
-				} `json:"content"`
-			} `json:"logprobs"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		logging.Errorf("[Brick2] complexity fallback: decoding %s response: %v", url, err)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-	if len(decoded.Choices) == 0 {
-		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned no choices", url, c.modelName)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-
-	label, ok := normalizeComplexityLabel(decoded.Choices[0].Message.Content)
-	if !ok {
-		logging.Errorf("[Brick2] complexity fallback: %s (model=%s) returned unrecognized label %q (want exactly easy/medium/hard)",
-			url, c.modelName, decoded.Choices[0].Message.Content)
-		metrics.BrickCCClassifyFallback.WithLabelValues().Inc()
-		return "medium", 1.0
-	}
-
-	// Confidence from logprobs of the first generated token, when present.
-	if lp := decoded.Choices[0].Logprobs; lp != nil && len(lp.Content) > 0 {
-		alts := map[string]float64{}
-		// Include the chosen token itself plus its alternatives.
-		alts[lp.Content[0].Token] = lp.Content[0].Logprob
-		for _, t := range lp.Content[0].TopLogprobs {
-			if cur, ok := alts[t.Token]; !ok || t.Logprob > cur {
-				alts[t.Token] = t.Logprob
-			}
-		}
-		if conf, ok := confidenceFromLogprobs(label, alts); ok {
-			return label, conf
-		}
-	}
-	// No usable logprobs: the endpoint did not return per-label token logprobs,
-	// so we cannot derive a calibrated confidence. Fall back to the configured
-	// default_confidence (default 0.5) instead of assuming full certainty, and
-	// warn once so the operator can enable logprobs or tune the default.
-	c.noLogprobWarnDo()
-	return label, c.defaultConfidence
-}
-
-// noLogprobWarnDo emits the "no usable logprobs" warning at most once per
-// process (see the package-level noLogprobWarn).
-func (c *complexityClient) noLogprobWarnDo() {
-	noLogprobWarn.Do(func() {
-		logging.Warnf("[Brick2] complexity openai endpoint returned no usable logprobs; "+
-			"using default_confidence=%.2f for routing (enable logprobs/top_logprobs on the "+
-			"endpoint for calibrated confidence, or set complexity_service.default_confidence)",
-			c.defaultConfidence)
-	})
 }

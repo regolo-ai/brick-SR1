@@ -40,22 +40,9 @@ function addDefaultPool(cfg: any): boolean {
     { model: 'gpt-5.6-terra', skill_vector: [0.85, 0.85, 0.80, 0.88, 0.86, 0.88], use_reasoning: true },
   ];
   sr.enabled = sr.enabled !== false;
-  sr.dynamic_effort = sr.dynamic_effort !== false;
   sr.capabilities ??= ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'];
-  sr.capability_model ??= {
-    model_id: 'models/modernbert-capability-classifier',
-    labels: sr.capabilities,
-  };
-  sr.complexity_model ??= {
-    model_id: 'regolo/brick-complexity-pro',
-    base_url: 'https://api.regolo.ai',
-    protocol: 'openai',
-    model_name: 'brick-complexity-pro',
-    bearer_token: '${REGOLO_API_KEY}',
-    timeout_seconds: 8,
-  };
-  sr.math ??= { routing_preference: 0, tau: { easy: 0.55, medium: 0.72, hard: 0.88 } };
-  sr.keyword_rules ??= [];
+  sr.systemone ??= { local_path: 'models/systemone' };
+  sr.knob ??= 0;
   return true;
 }
 
@@ -82,7 +69,6 @@ export async function migrateCodexProfile(profile: string): Promise<{ changed: b
   if (cfg.default_model == null) { cfg.default_model = 'qwen3.5-122b'; changed = true; }
   if (cfg.auto_model_name == null) { cfg.auto_model_name = 'brick'; changed = true; }
   if (cfg.server_port == null) { cfg.server_port = 8000; changed = true; }
-  if (cfg.default_reasoning_effort == null) { cfg.default_reasoning_effort = 'medium'; changed = true; }
   cfg.providers = isObject(cfg.providers) ? cfg.providers : {};
   const needsOpenAIStarter = poolAdded || Object.keys(cfg.providers).length === 0;
   if (poolAdded && !cfg.providers.regolo) { cfg.providers.regolo = { base_url: 'https://api.regolo.ai/v1' }; changed = true; }
@@ -107,11 +93,6 @@ export async function migrateCodexProfile(profile: string): Promise<{ changed: b
   }
   if (!isObject(cfg.reasoning_families)) { cfg.reasoning_families = {}; changed = true; }
   if (needsOpenAIStarter && !cfg.reasoning_families.openai_reasoning) { cfg.reasoning_families.openai_reasoning = { parameter: 'reasoning_effort' }; changed = true; }
-  if (!isObject(cfg.complexity_service)) {
-    cfg.complexity_service = { enabled: true, protocol: 'openai', base_url: 'https://api.regolo.ai', model_name: 'brick-complexity-pro', bearer_token: '${REGOLO_API_KEY}', timeout_seconds: 8 };
-    changed = true;
-  }
-
   const effectivePool = isObject(cfg.skill_router) && Array.isArray(cfg.skill_router.models) ? cfg.skill_router.models : [];
   for (const item of effectivePool) {
     if (!isObject(item) || typeof item.model !== 'string') continue;
@@ -126,7 +107,6 @@ export async function migrateCodexProfile(profile: string): Promise<{ changed: b
   if (!isObject(cfg.brick)) { cfg.brick = {}; changed = true; }
   if (cfg.brick.enabled == null) { cfg.brick.enabled = true; changed = true; }
   if (cfg.brick.use_model_routing == null) { cfg.brick.use_model_routing = true; changed = true; }
-  if (cfg.brick.routing_mode == null) { cfg.brick.routing_mode = 'smartsqueeze'; changed = true; }
 
   const native = nativeCodexTransport(cfg);
   if (JSON.stringify(native) !== JSON.stringify(cfg)) { cfg = native; changed = true; }

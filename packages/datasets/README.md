@@ -44,7 +44,8 @@ pip install huggingface_hub
 
 Dependencies are resolved in the workspace `uv.lock`. The model downloader
 accepts only `--out` and verifies the revision and checksums from
-`apps/cli/assets/modernbert.json`. Complexity classification uses an API.
+`apps/cli/assets/systemone.json`. SystemOne inference uses the local
+PyTorch/Transformers worker.
 
 ## Dataset A structure (after download)
 

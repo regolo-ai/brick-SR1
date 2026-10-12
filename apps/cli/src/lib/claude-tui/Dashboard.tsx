@@ -94,7 +94,7 @@ export function Dashboard({
       <RoutingBox snap={snap} emptyRequestsLabel={emptyRequestsLabel} nativeLabel={nativeLabel} />
       <EconomyBox snap={snap} econ={econ} enabled={showEconomy} baselineModel={economyBaselineModel} />
       <ConnectionBox snap={snap} loading={loading} mode={mode} connectionLabel={connectionLabel} disconnectedLabel={disconnectedLabel} unattachedLabel={unattachedLabel} />
-      <ClassifierBox snap={snap} />
+      <SystemOneBox snap={snap} />
 
       <Box marginTop={1}>
         {confirmClear ? (
@@ -150,7 +150,7 @@ function ConnectionBox({
           </Row>
           <Row label="brick router">
             <Text color={snap?.health ? 'green' : 'red'}>
-              {snap?.baseUrl} {snap?.health ? '✓ healthy' : '✗ unreachable'}
+              {snap?.baseUrl} {snap?.health ? '✓ healthy' : '✗ unavailable'}
             </Text>
           </Row>
           {mode && (
@@ -162,22 +162,22 @@ function ConnectionBox({
   );
 }
 
-function ClassifierBox({ snap }: { snap: Snapshot | null }) {
+function SystemOneBox({ snap }: { snap: Snapshot | null }) {
   const d = snap?.diag;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} marginTop={1}>
-      <Text color={ACCENT} bold>◆ Classifier</Text>
+      <Text color={ACCENT} bold>◆ SystemOne</Text>
       {!d ? (
         <Text dimColor>no diagnostics</Text>
       ) : !d.enabled ? (
         <Text dimColor>disabled in config</Text>
-      ) : d.reachable ? (
+      ) : d.ready ? (
         <Row label="status">
           <Text color="green">✓ healthy</Text>
-          <Text dimColor>{`  ${d.device ?? '?'} · last ${d.latency_ms ?? '?'}ms · ${d.endpoint ?? ''}`}</Text>
+          <Text dimColor>{`  ${d.engine ?? 'pytorch-transformers'} · ${d.device ?? 'local'}`}</Text>
         </Row>
       ) : (
-        <Row label="status"><Text color="red">{`✗ unreachable${d.error ? ` — ${d.error}` : ''}`}</Text></Row>
+        <Row label="status"><Text color="red">{`✗ unavailable${d.error ? ` — ${d.error}` : ''}`}</Text></Row>
       )}
     </Box>
   );

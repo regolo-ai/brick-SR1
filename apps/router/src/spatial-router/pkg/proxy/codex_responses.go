@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -22,7 +23,10 @@ import (
 // durable call-history recorder.
 type statusWriter struct {
 	http.ResponseWriter
-	status int
+	status                    int
+	usageBuffer               bytes.Buffer
+	inputTokens, outputTokens *int64
+	cachedTokens              int64
 }
 
 func (w *statusWriter) WriteHeader(code int) {
@@ -35,11 +39,66 @@ func (w *statusWriter) Write(p []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(p)
+	n, err := w.ResponseWriter.Write(p)
+	if strings.Contains(w.Header().Get("Content-Type"), "text/event-stream") {
+		for _, chunk := range bytes.SplitAfter(p[:n], []byte("\n")) {
+			if w.usageBuffer.Len()+len(chunk) > 4*1024*1024 {
+				w.usageBuffer.Reset()
+				continue
+			}
+			w.usageBuffer.Write(chunk)
+			if bytes.HasSuffix(chunk, []byte("\n")) {
+				line := bytes.TrimSpace(w.usageBuffer.Bytes())
+				if bytes.HasPrefix(line, []byte("data:")) {
+					w.observeUsage(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:"))))
+				}
+				w.usageBuffer.Reset()
+			}
+		}
+	} else if w.usageBuffer.Len()+n <= 4*1024*1024 {
+		w.usageBuffer.Write(p[:n])
+	}
+	return n, err
 }
 func (w *statusWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
+	}
+}
+
+// observeUsage reads either a complete Responses object or its final SSE event.
+func (w *statusWriter) observeUsage(payload []byte) {
+	var envelope struct {
+		Usage    json.RawMessage `json:"usage"`
+		Response struct {
+			Usage json.RawMessage `json:"usage"`
+		} `json:"response"`
+	}
+	if json.Unmarshal(payload, &envelope) != nil {
+		return
+	}
+	raw := envelope.Usage
+	if len(raw) == 0 {
+		raw = envelope.Response.Usage
+	}
+	var usage struct {
+		Input        *int64 `json:"input_tokens"`
+		Output       *int64 `json:"output_tokens"`
+		InputDetails struct {
+			Cached int64 `json:"cached_tokens"`
+		} `json:"input_tokens_details"`
+	}
+	if json.Unmarshal(raw, &usage) != nil {
+		return
+	}
+	if usage.Input != nil {
+		value := max(0, *usage.Input)
+		w.inputTokens = &value
+		w.cachedTokens = max(0, min(value, usage.InputDetails.Cached))
+	}
+	if usage.Output != nil {
+		value := max(0, *usage.Output)
+		w.outputTokens = &value
 	}
 }
 
@@ -78,7 +137,6 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "model is required")
 		return
 	}
-	requestedModel := model
 	timeout := s.cfg.CodexRouter.TimeoutSeconds
 	if timeout <= 0 {
 		timeout = 600
@@ -93,6 +151,11 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 	destinations := map[string]config.CodexDestination{}
 	allow := map[string]bool{}
 	exclusions := []string{}
+	if model == "brick" && !s.cfg.Brick.ModelRoutingEnabled() {
+		model = s.cfg.Brick.EffectiveFixedModel(s.cfg.DefaultModel)
+		raw["model"], _ = json.Marshal(model)
+		body, _ = json.Marshal(raw)
+	}
 	candidates := []string{model}
 	if model == "brick" {
 		candidates = nil
@@ -161,7 +224,7 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "Codex routing is unavailable")
 			return
 		}
-		route, err = router.RouteWithCandidates(r.Context(), codextransport.RoutingText(body, codexRoutingWindow(s.cfg)), intersectAllow(allow, brickFixedModelAllow(s.cfg)))
+		route, err = router.RouteWithOptions(r.Context(), codextransport.RoutingText(body, codexRoutingWindow(s.cfg)), requestRoutingOptions(body, allow))
 		if err != nil {
 			writeError(w, 502, "Codex routing failed")
 			return
@@ -170,19 +233,6 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 		if !allow[model] {
 			writeError(w, 502, "router selected an incompatible backend")
 			return
-		}
-		if s.cfg.SkillRouter.DynamicEffort {
-			level := clampEffortLevelToAllowlist(autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, model), routingPreferenceOf(s.cfg)), model, s.cfg)
-			if level < 0 {
-				selectedEffort = "none"
-			} else {
-				selectedEffort = vocabAt(brickEffortVocab, level)
-			}
-			if reasoning == nil {
-				reasoning = map[string]json.RawMessage{}
-			}
-			reasoning["effort"], _ = json.Marshal(selectedEffort)
-			raw["reasoning"], _ = json.Marshal(reasoning)
 		}
 		raw["model"], _ = json.Marshal(destinations[model].UpstreamModel)
 		body, _ = json.Marshal(raw)
@@ -207,6 +257,8 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 502, "credential unavailable for provider "+d.Provider)
 		return
 	}
+	body = adaptClientReasoning(body, s.cfg, model)
+	selectedEffort = requestEffort(body)
 	w.Header().Set("X-Brick-Selected-Model", model)
 	w.Header().Set("X-Brick-Reasoning-Requested", requested)
 	w.Header().Set("X-Brick-Reasoning-Selected", selectedEffort)
@@ -218,14 +270,14 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, err.Error())
 			return
 		}
-		recordCodexForward(s.cfg, requestedModel, route, model, selectedEffort)
-		s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, requestedModel == "brick", route, func(sw http.ResponseWriter) {
+		recordCodexForward(route, model)
+		s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, route != nil, route, func(sw http.ResponseWriter) {
 			codextransport.ForwardChat(sw, r, &http.Client{}, d.URL, d.Provider, upstreamKey, adapted)
 		})
 		return
 	}
-	recordCodexForward(s.cfg, requestedModel, route, model, selectedEffort)
-	s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, requestedModel == "brick", route, func(sw http.ResponseWriter) {
+	recordCodexForward(route, model)
+	s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, route != nil, route, func(sw http.ResponseWriter) {
 		codextransport.Forward(sw, r, &http.Client{}, d.URL, d.Provider, upstreamKey, d.AuthSource == "codex_request", body)
 	})
 }
@@ -234,6 +286,24 @@ func (s *Server) forwardCodexWithHistory(w http.ResponseWriter, r *http.Request,
 	providerStarted := time.Now()
 	sw := &statusWriter{ResponseWriter: w}
 	forward(sw)
+	if !strings.Contains(sw.Header().Get("Content-Type"), "text/event-stream") {
+		sw.observeUsage(sw.usageBuffer.Bytes())
+	}
+	var input, output int64
+	if sw.inputTokens != nil {
+		input = *sw.inputTokens
+	}
+	if sw.outputTokens != nil {
+		output = *sw.outputTokens
+	}
+	cached := sw.cachedTokens
+	if cached < 0 {
+		cached = 0
+	}
+	if cached > input {
+		cached = input
+	}
+	s.recordEconomicsUsage(model, input-cached, 0, cached, output)
 	if s.callHistory == nil {
 		return
 	}
@@ -247,25 +317,25 @@ func (s *Server) forwardCodexWithHistory(w http.ResponseWriter, r *http.Request,
 	if routed {
 		source = "routed"
 	}
-	mode := "off"
-	if s.cfg != nil {
-		mode = s.cfg.Brick.EffectiveRoutingMode()
-	}
 	finished := time.Now().UTC()
 	providerMS, overallMS := time.Since(providerStarted).Milliseconds(), finished.Sub(started).Milliseconds()
-	record := callRecord{CallID: newBrickCallID(), StartedAt: started, FinishedAt: finished, Model: model, ReasoningMode: effort, RoutingMode: mode, RoutingSource: source, Status: status, Error: sanitizeCallError(cause), ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS}
+	record := callRecord{CallID: newBrickCallID(), StartedAt: started, FinishedAt: finished, Model: model, ReasoningMode: effort, RoutingSource: source, Status: status, Error: sanitizeCallError(cause), ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS, InputTokens: sw.inputTokens, OutputTokens: sw.outputTokens}
+	if route != nil {
+		routingMS := providerStarted.Sub(started).Milliseconds()
+		record.RoutingLatencyMS = &routingMS
+	}
 	applyRouteObservation(&record, route)
 	if err := s.callHistory.append(record); err != nil {
 		logging.Warnf("Call history: append failed: %v", err)
 	}
 }
 
-func recordCodexForward(cfg *config.RouterConfig, requestedModel string, route *brickrouting.Result, selectedModel, selectedEffort string) {
-	if requestedModel == "brick" {
-		recordBrickOpenAIRoute(cfg, route, selectedModel, selectedEffort)
-		return
+func recordCodexForward(route *brickrouting.Result, model string) {
+	source := "native"
+	if route != nil {
+		source = "routed"
 	}
-	metrics.BrickCCRequests.WithLabelValues("native", selectedModel).Inc()
+	metrics.BrickRequests.WithLabelValues(source, model).Inc()
 }
 
 func estimatedCodexInputTokens(body []byte) int {

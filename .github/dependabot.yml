@@ -46,14 +46,11 @@ updates:
       gomod-router:
         patterns: ["*"]
 
-  # CPU ModernBERT binding
-  - package-ecosystem: cargo
-    directory: "/apps/router/candle-binding"
+  # Local SystemOne inference requirements
+  - package-ecosystem: pip
+    directory: "/apps/router/systemone"
     target-branch: "dev"
     open-pull-requests-limit: 1
     schedule:
       interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-candle:
-        patterns: ["*"]
+    labels: ["dependencies", "python"]

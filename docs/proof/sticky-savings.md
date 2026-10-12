@@ -1,5 +1,10 @@
 # Proof: sticky routing measurably reduces cost
 
+> Historical pre-SystemOne research and evaluation. This document does not
+> describe the current runtime; see the repository README for current behavior.
+
+Historical source snapshot: `355bbaf90f4984cf155661dce9aa1110c9aa0f9a`.
+
 **Claim.** On real routed traffic (521 turns, 513 priced, measured 2026-07-13),
 Brick's
 sticky routing netted **−40.5M price-units versus a no-sticky counterfactual — a

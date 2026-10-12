@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
@@ -109,7 +110,7 @@ func TestForwardAnthropicRequest_RecordsNonStreamingUsage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"claude-haiku-4-5"}`))
 	w := httptest.NewRecorder()
 
-	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{"model":"claude-haiku-4-5"}`), "claude-haiku-4-5", "easy", "", false, false, "", false, nil)
+	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{"model":"claude-haiku-4-5"}`), "claude-haiku-4-5", "", false, nil, time.Now().UTC(), nil)
 
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
@@ -159,7 +160,7 @@ func TestForwardAnthropicRequest_RecordsStreamingUsage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"claude-sonnet-4-6","stream":true}`))
 	w := httptest.NewRecorder()
 
-	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{"model":"claude-sonnet-4-6","stream":true}`), "claude-sonnet-4-6", "medium", "", false, false, "", false, nil)
+	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{"model":"claude-sonnet-4-6","stream":true}`), "claude-sonnet-4-6", "", false, nil, time.Now().UTC(), nil)
 
 	body := w.Body.String()
 	if !strings.Contains(body, `"input_tokens":40`) {
@@ -196,7 +197,7 @@ func TestForwardAnthropicRequest_NoUsageNoRecord(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 
-	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{}`), "claude-haiku-4-5", "easy", "", false, false, "", false, nil) // must not panic
+	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{}`), "claude-haiku-4-5", "", false, nil, time.Now().UTC(), nil) // must not panic
 
 	if snap := store.Snapshot(); len(snap) != 0 {
 		t.Errorf("expected no usage recorded, got %+v", snap)
@@ -221,7 +222,7 @@ func TestForwardAnthropicRequest_NilEconomicsStoreDoesNotPanic(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 
-	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{}`), "claude-haiku-4-5", "easy", "", false, false, "", false, nil) // must not panic
+	srv.forwardAnthropicRequest(w, req, apCfg, []byte(`{}`), "claude-haiku-4-5", "", false, nil, time.Now().UTC(), nil) // must not panic
 }
 
 // testAnthropicPassthroughConfig builds a minimal, real

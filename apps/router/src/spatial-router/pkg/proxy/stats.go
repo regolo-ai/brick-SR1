@@ -27,21 +27,13 @@ type statsModel struct {
 	RoutedCalls    int64      `json:"routed_calls"`
 	NativeCalls    int64      `json:"native_calls"`
 	ReasoningModes []statMode `json:"reasoning_modes"`
-	RoutingModes   []statMode `json:"routing_modes"`
 	statCounts
 }
 type statsResponse struct {
-	SchemaVersion string          `json:"schema_version"`
-	Overall       statCounts      `json:"overall"`
-	Models        []statsModel    `json:"models"`
-	Difficulty    []statMode      `json:"difficulty"`
-	Classifier    classifierStats `json:"classifier"`
-	Latencies     latencyStats    `json:"latencies"`
-}
-type classifierStats struct {
-	Calls        int64   `json:"calls"`
-	Fallbacks    int64   `json:"fallbacks"`
-	FallbackRate float64 `json:"fallback_rate"`
+	SchemaVersion string       `json:"schema_version"`
+	Overall       statCounts   `json:"overall"`
+	Models        []statsModel `json:"models"`
+	Latencies     latencyStats `json:"latencies"`
 }
 type latencySummary struct {
 	AverageMS *float64 `json:"average_ms"`
@@ -179,8 +171,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	by := map[string]*statsModel{}
-	resp := statsResponse{SchemaVersion: "2.0"}
-	difficulty := map[string]*statCounts{}
+	resp := statsResponse{SchemaVersion: "3.0"}
 	var routingLatency, providerLatency, overallLatency []int64
 	for _, x := range all {
 		row := by[x.Model]
@@ -193,18 +184,6 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 			row.NativeCalls++
 		} else {
 			row.RoutedCalls++
-		}
-		if x.RoutingSource == "routed" && x.Difficulty != nil {
-			if difficulty[*x.Difficulty] == nil {
-				difficulty[*x.Difficulty] = &statCounts{}
-			}
-			addCounts(difficulty[*x.Difficulty], x)
-		}
-		if x.ClassifierFallback != nil {
-			resp.Classifier.Calls++
-			if *x.ClassifierFallback {
-				resp.Classifier.Fallbacks++
-			}
 		}
 		if x.RoutingLatencyMS != nil {
 			routingLatency = append(routingLatency, *x.RoutingLatencyMS)
@@ -225,28 +204,13 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 		addCounts(rm[x.ReasoningMode], x)
 		row.ReasoningModes = modes(rm)
-		xm := map[string]*statCounts{}
-		for _, v := range row.RoutingModes {
-			v := v
-			xm[v.Mode] = &v.statCounts
-		}
-		if xm[x.RoutingMode] == nil {
-			xm[x.RoutingMode] = &statCounts{}
-		}
-		addCounts(xm[x.RoutingMode], x)
-		row.RoutingModes = modes(xm)
+
 	}
 	for _, x := range all {
 		addCounts(&resp.Overall, x)
 	}
 	for _, row := range by {
 		resp.Models = append(resp.Models, *row)
-	}
-	for label, counts := range difficulty {
-		resp.Difficulty = append(resp.Difficulty, statMode{Mode: label, statCounts: *counts})
-	}
-	if resp.Classifier.Calls > 0 {
-		resp.Classifier.FallbackRate = float64(resp.Classifier.Fallbacks) / float64(resp.Classifier.Calls)
 	}
 	resp.Latencies = latencyStats{Routing: summarizeLatency(routingLatency), Provider: summarizeLatency(providerLatency), Overall: summarizeLatency(overallLatency)}
 	writeJSON(w, 200, resp)

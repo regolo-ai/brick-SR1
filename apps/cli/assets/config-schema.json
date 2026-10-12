@@ -2,12 +2,6 @@
   "fields": {
     "anthropic_passthrough": {
       "fields": {
-        "compact_keep_recent_turns": {
-          "scalar": true
-        },
-        "compact_shadow_only": {
-          "scalar": true
-        },
         "context_1m_threshold_bytes": {
           "scalar": true
         },
@@ -30,54 +24,13 @@
         "fixed_model": {
           "scalar": true
         },
-        "model_map": {
-          "fields": {
-            "easy": {
-              "scalar": true
-            },
-            "hard": {
-              "scalar": true
-            },
-            "medium": {
-              "scalar": true
-            }
-          }
-        },
-        "model_map_1m": {
-          "fields": {
-            "easy": {
-              "scalar": true
-            },
-            "hard": {
-              "scalar": true
-            },
-            "medium": {
-              "scalar": true
-            }
-          }
-        },
         "route_subagents": {
-          "scalar": true
-        },
-        "routing_mode": {
-          "scalar": true
-        },
-        "sticky_score_margin": {
-          "scalar": true
-        },
-        "sticky_ttl_seconds": {
           "scalar": true
         },
         "upstream_url": {
           "scalar": true
         },
         "use_model_routing": {
-          "scalar": true
-        },
-        "use_skill_router": {
-          "scalar": true
-        },
-        "use_thinking_routing": {
           "scalar": true
         }
       }
@@ -115,15 +68,6 @@
         "ocr_model": {
           "scalar": true
         },
-        "routing_mode": {
-          "scalar": true
-        },
-        "sticky_score_margin": {
-          "scalar": true
-        },
-        "sticky_ttl_seconds": {
-          "scalar": true
-        },
         "stt_endpoint": {
           "scalar": true
         },
@@ -154,44 +98,10 @@
         }
       }
     },
-    "complexity_service": {
-      "fields": {
-        "base_url": {
-          "scalar": true
-        },
-        "bearer_token": {
-          "scalar": true
-        },
-        "bearer_token_file": {
-          "scalar": true
-        },
-        "default_confidence": {
-          "scalar": true
-        },
-        "enabled": {
-          "scalar": true
-        },
-        "model_name": {
-          "scalar": true
-        },
-        "protocol": {
-          "scalar": true
-        },
-        "timeout_seconds": {
-          "scalar": true
-        },
-        "use_client_key": {
-          "scalar": true
-        }
-      }
-    },
     "config_version": {
       "scalar": true
     },
     "default_model": {
-      "scalar": true
-    },
-    "default_reasoning_effort": {
       "scalar": true
     },
     "include_config_models_in_list": {
@@ -361,154 +271,11 @@
             "scalar": true
           }
         },
-        "capability_model": {
-          "fields": {
-            "labels": {
-              "items": {
-                "scalar": true
-              }
-            },
-            "local_path": {
-              "scalar": true
-            },
-            "model_id": {
-              "scalar": true
-            }
-          }
-        },
-        "complexity_model": {
-          "fields": {
-            "base_url": {
-              "scalar": true
-            },
-            "bearer_token": {
-              "scalar": true
-            },
-            "bearer_token_file": {
-              "scalar": true
-            },
-            "default_confidence": {
-              "scalar": true
-            },
-            "model_id": {
-              "scalar": true
-            },
-            "model_name": {
-              "scalar": true
-            },
-            "protocol": {
-              "scalar": true
-            },
-            "timeout_seconds": {
-              "scalar": true
-            },
-            "use_client_key": {
-              "scalar": true
-            }
-          }
-        },
-        "dynamic_effort": {
-          "scalar": true
-        },
         "enabled": {
           "scalar": true
         },
-        "keyword_rules": {
-          "items": {
-            "fields": {
-              "bias": {
-                "values": {
-                  "scalar": true
-                }
-              },
-              "capability": {
-                "scalar": true
-              },
-              "case_sensitive": {
-                "scalar": true
-              },
-              "importance": {
-                "scalar": true
-              },
-              "keywords": {
-                "items": {
-                  "scalar": true
-                }
-              },
-              "mode": {
-                "scalar": true
-              },
-              "model": {
-                "scalar": true
-              },
-              "name": {
-                "scalar": true
-              },
-              "operator": {
-                "scalar": true
-              }
-            }
-          }
-        },
-        "math": {
-          "fields": {
-            "clip_max": {
-              "scalar": true
-            },
-            "clip_min": {
-              "scalar": true
-            },
-            "complexity_bias": {
-              "scalar": true
-            },
-            "complexity_mu": {
-              "scalar": true
-            },
-            "cost_penalty_beta": {
-              "scalar": true
-            },
-            "max_bias_shift": {
-              "scalar": true
-            },
-            "max_cost_relief": {
-              "scalar": true
-            },
-            "max_mu_multiplier": {
-              "scalar": true
-            },
-            "max_over_relief": {
-              "scalar": true
-            },
-            "min_bias_shift": {
-              "scalar": true
-            },
-            "min_cost_boost": {
-              "scalar": true
-            },
-            "min_mu_multiplier": {
-              "scalar": true
-            },
-            "min_over_boost": {
-              "scalar": true
-            },
-            "over_penalty_lambda": {
-              "scalar": true
-            },
-            "preference_power": {
-              "scalar": true
-            },
-            "routing_preference": {
-              "scalar": true
-            },
-            "tau": {
-              "values": {
-                "scalar": true
-              }
-            },
-            "tie_epsilon": {
-              "scalar": true
-            }
-          }
+        "knob": {
+          "scalar": true
         },
         "models": {
           "items": {
@@ -525,9 +292,6 @@
               "base_url": {
                 "scalar": true
               },
-              "cost_weight": {
-                "scalar": true
-              },
               "custom_params": {
                 "values": {
                   "any": true
@@ -539,13 +303,7 @@
               "handles_images": {
                 "scalar": true
               },
-              "latency_weight": {
-                "scalar": true
-              },
               "model": {
-                "scalar": true
-              },
-              "reasoning_effort": {
                 "scalar": true
               },
               "skill_vector": {
@@ -559,6 +317,13 @@
               "use_reasoning": {
                 "scalar": true
               }
+            }
+          }
+        },
+        "systemone": {
+          "fields": {
+            "local_path": {
+              "scalar": true
             }
           }
         }

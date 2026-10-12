@@ -28,14 +28,14 @@ const HEALTH = {
 
 const DIAG = {
   enabled: true,
-  reachable: true,
+  ready: true,
   device: 'cpu',
-  model: 'regolo/brick-capability',
+  model: 'massaindustries/brick-systemone-large-v2', engine: 'pytorch-transformers',
   latency_ms: 12,
 };
 
 const STATS = {
-  schema_version: '2.0',
+  schema_version: '3.0',
   overall: { calls: 3, completed_calls: 3, failed_calls: 0 },
   models: [
     {
@@ -43,14 +43,11 @@ const STATS = {
       routed_calls: 2,
       native_calls: 1,
       reasoning_modes: [{ mode: 'high', calls: 2 }],
-      routing_modes: [],
       calls: 3,
       completed_calls: 3,
       failed_calls: 0,
     },
   ],
-  difficulty: [],
-  classifier: { calls: 3, fallbacks: 0, fallback_rate: 0 },
   latencies: {
     routing: { average_ms: 40, p50_ms: 38, p95_ms: 61 },
     provider: { average_ms: 900, p50_ms: 880, p95_ms: 1200 },
@@ -85,10 +82,8 @@ function cfg(overrides: Record<string, unknown> = {}): BrickConfig {
   return ConfigSchema.parse({
     default_model: 'claude-sonnet',
     skill_router: {
-      capabilities: ['coding'],
-      capability_model: {},
-      complexity_model: {},
-      math: {},
+      capabilities: ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'],
+      systemone: { local_path: 'models/systemone' }, knob: 0,
       models: [
         { model: 'claude-sonnet', skill_vector: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] },
         { model: 'gpt-5.6-sol', skill_vector: [0.6, 0.5, 0.4, 0.3, 0.2, 0.1] },
@@ -115,7 +110,7 @@ function stubDown() {
 function wireHappyPath() {
   stubFetch({
     '/health': HEALTH,
-    '/api/v1/diag/classifier': DIAG,
+    '/api/v1/diag/systemone': DIAG,
     '/api/v1/stats': STATS,
     '/api/v1/economics': ECON,
   });
@@ -157,8 +152,8 @@ describe('buildAgentReport', () => {
     const report = await buildAgentReport('default', cfg());
 
     expect(Object.keys(report).sort()).toEqual([
-      'classifier', 'context_discovery', 'economy', 'harness', 'port',
-      'profile', 'router', 'runtime', 'schema_version', 'selection', 'stats',
+      'context_discovery', 'economy', 'harness', 'port',
+      'profile', 'router', 'runtime', 'schema_version', 'selection', 'stats', 'systemone',
     ]);
     expect(report.schema_version).toBe(AGENT_REPORT_SCHEMA_VERSION);
     expect(report.profile).toBe('default');
@@ -197,12 +192,12 @@ describe('buildAgentReport', () => {
     expect(report.router).toEqual(HEALTH);
   });
 
-  it('passes through classifier, stats, harness and context discovery verbatim', async () => {
+  it('passes through systemone, stats, harness and context discovery verbatim', async () => {
     wireHappyPath();
 
     const report = await buildAgentReport('default', cfg());
 
-    expect(report.classifier).toEqual(DIAG);
+    expect(report.systemone).toEqual(DIAG);
     expect(report.stats).toEqual(STATS);
     expect(report.harness).toEqual({
       url: 'http://127.0.0.1:8000',
@@ -240,7 +235,7 @@ describe('buildAgentReport', () => {
 
     expect(report.router).toBeNull();
     expect(report.runtime).toBeNull();
-    expect(report.classifier).toBeNull();
+    expect(report.systemone).toBeNull();
     expect(report.stats).toBeNull();
     expect(report.context_discovery).toEqual([]);
     expect(report.economy.source).toBe('unavailable');
@@ -252,10 +247,8 @@ describe('buildAgentReport', () => {
 
     const report = await buildAgentReport('default', cfg({
       skill_router: {
-        capabilities: ['coding'],
-        capability_model: {},
-        complexity_model: {},
-        math: {},
+        capabilities: ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'],
+        systemone: { local_path: 'models/systemone' }, knob: 0,
         models: [{ model: 'claude-sonnet', skill_vector: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] }],
       },
     }));
@@ -268,7 +261,7 @@ describe('buildAgentReport', () => {
     wireHappyPath();
     stubFetch({
       '/health': HEALTH,
-      '/api/v1/diag/classifier': DIAG,
+      '/api/v1/diag/systemone': DIAG,
       '/api/v1/stats': STATS,
       '/api/v1/economics': { ...ECON, pricing_available: false, note: 'pricing table not available' },
     });

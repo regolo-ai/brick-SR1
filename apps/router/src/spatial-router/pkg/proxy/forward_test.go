@@ -8,10 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/sticky"
 )
 
 // TestInjectStreamUsageOption covers the request-body mutation that is the
@@ -89,8 +87,7 @@ func TestForwardToBackend_RecordsNonStreamingUsage(t *testing.T) {
 	defer fake.Close()
 
 	store := economics.NewStore()
-	stickyStore := sticky.New(6 * time.Minute)
-	srv := &Server{economicsStore: store, stickyStore: stickyStore}
+	srv := &Server{economicsStore: store}
 
 	result := &RoutingResult{
 		ForwardBody:     []byte(`{"model":"test-model","messages":[{"role":"user","content":"hi"}]}`),
@@ -99,7 +96,6 @@ func TestForwardToBackend_RecordsNonStreamingUsage(t *testing.T) {
 		ForwardHeaders:  map[string]string{"Authorization": "Bearer test"},
 		IsStreaming:     false,
 		Model:           "test-model",
-		StickyKey:       "conversation-1",
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(result.ForwardBody)))
@@ -125,13 +121,7 @@ func TestForwardToBackend_RecordsNonStreamingUsage(t *testing.T) {
 	if snap[0].Model != "test-model" || snap[0].InputTokens != 7 || snap[0].CacheReadInputTokens != 5 || snap[0].OutputTokens != 7 {
 		t.Errorf("unexpected usage entry: %+v", snap[0])
 	}
-	stickyEntry, ok := stickyStore.GetAt("conversation-1", time.Now())
-	if !ok {
-		t.Fatal("expected successful OpenAI response to update sticky state")
-	}
-	if stickyEntry.LastModel != "test-model" || stickyEntry.LastContextTokens != 12 {
-		t.Errorf("unexpected sticky entry: %+v", stickyEntry)
-	}
+
 }
 
 // TestForwardToBackend_RecordsStreamingUsage verifies that a streaming SSE

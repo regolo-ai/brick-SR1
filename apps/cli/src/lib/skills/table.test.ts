@@ -19,8 +19,11 @@ describe('skill table CSV validation', () => {
     ['duplicate id', `${header}\n${row}\n${row}`],
     ['incomplete row', `${header}\nModel-A,0.1`],
     ['NaN', `${header}\nModel-A,NaN,0.2,0.3,0.4,0.5,0.6`],
-    ['zero', `${header}\nModel-A,0,0.2,0.3,0.4,0.5,0.6`],
-    ['one', `${header}\nModel-A,1,0.2,0.3,0.4,0.5,0.6`],
     ['out of range', `${header}\nModel-A,-0.1,0.2,0.3,0.4,0.5,0.6`],
   ])('rejects %s', (_name, csv) => expect(() => parseSkillTableCsv(csv)).toThrow());
+});
+
+it('accepts independent sigmoid-vector endpoints without normalization', () => {
+  const csv = `${SKILL_TABLE_HEADER.join(',')}\nendpoint,0,1,1,0,0.5,0.5`;
+  expect(parseSkillTableCsv(csv).get('endpoint')?.skill_vector).toEqual([0,1,1,0,0.5,0.5]);
 });

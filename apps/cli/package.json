@@ -28,7 +28,7 @@
     "/bin/run.js",
     "/dist",
     "/templates/*.config.yaml",
-    "/assets/modernbert.json",
+    "/assets/systemone.json",
     "/oclif.manifest.json",
     "/scripts/runtime-install.cjs",
     "/assets/config-schema.json",

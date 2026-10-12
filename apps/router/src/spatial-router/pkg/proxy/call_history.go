@@ -20,69 +20,24 @@ import (
 )
 
 type callRecord struct {
-	CallID               string             `json:"call_id"`
-	StartedAt            time.Time          `json:"started_at"`
-	FinishedAt           time.Time          `json:"finished_at"`
-	Model                string             `json:"model"`
-	ReasoningMode        string             `json:"reasoning_mode"`
-	RoutingMode          string             `json:"routing_mode"`
-	RoutingSource        string             `json:"routing_source"`
-	Status               string             `json:"status"`
-	Error                string             `json:"error,omitempty"`
-	InputTokens          *int64             `json:"input_tokens"`
-	OutputTokens         *int64             `json:"output_tokens"`
-	Difficulty           *string            `json:"difficulty"`
-	DifficultyConfidence *float64           `json:"difficulty_confidence"`
-	RoutingParameters    *routingParameters `json:"routing_parameters"`
-	RoutingLatencyMS     *int64             `json:"routing_latency_ms"`
-	ProviderLatencyMS    *int64             `json:"provider_latency_ms"`
-	OverallLatencyMS     *int64             `json:"overall_latency_ms"`
-	ClassifierFallback   *bool              `json:"classifier_fallback"`
+	CallID            string               `json:"call_id"`
+	StartedAt         time.Time            `json:"started_at"`
+	FinishedAt        time.Time            `json:"finished_at"`
+	Model             string               `json:"model"`
+	ReasoningMode     string               `json:"reasoning_mode"`
+	RoutingSource     string               `json:"routing_source"`
+	Status            string               `json:"status"`
+	Error             string               `json:"error,omitempty"`
+	InputTokens       *int64               `json:"input_tokens"`
+	OutputTokens      *int64               `json:"output_tokens"`
+	RoutingParameters *brickrouting.Result `json:"routing_parameters"`
+	RoutingLatencyMS  *int64               `json:"routing_latency_ms"`
+	ProviderLatencyMS *int64               `json:"provider_latency_ms"`
+	OverallLatencyMS  *int64               `json:"overall_latency_ms"`
 }
 
-func applyRouteObservation(r *callRecord, route *brickrouting.Result) {
-	if route == nil {
-		return
-	}
-	// The current in-process router exposes an error as a failed route rather
-	// than silently selecting a fallback. Persist an explicit false so stats can
-	// distinguish a successful classifier decision from a skipped/native call.
-	fallback := false
-	r.ClassifierFallback = &fallback
-	difficulty := route.ComplexityLabel
-	if difficulty != "" {
-		r.Difficulty = &difficulty
-	}
-	confidence := route.ComplexityConfidence
-	r.DifficultyConfidence = &confidence
-	tau := route.TauQuery
-	p := &routingParameters{CategoryProbabilities: route.Capability, TauQuery: &tau, MatchedRule: route.MatchedKeyword, Reason: route.Reason}
-	for _, score := range route.Scores {
-		p.CandidateScores = append(p.CandidateScores, candidateScore{Model: score.Model, Score: score.Score, ExpectedSuccess: score.ExpectedSuccess, Distance: score.Distance, UnderCapacity: score.UnderCapacity})
-		if score.Model == r.Model {
-			selected := score.ExpectedSuccess
-			p.SelectedProbability = &selected
-		}
-	}
-	r.RoutingParameters = p
-}
-
-// routingParameters is deliberately limited to routing decisions, never prompt
-// content or provider payloads. Values are stored at their native precision.
-type routingParameters struct {
-	CategoryProbabilities map[string]float64 `json:"category_probabilities,omitempty"`
-	TauQuery              *float64           `json:"tau_query"`
-	MatchedRule           string             `json:"matched_rule,omitempty"`
-	Reason                string             `json:"reason,omitempty"`
-	CandidateScores       []candidateScore   `json:"candidate_scores,omitempty"`
-	SelectedProbability   *float64           `json:"selected_model_probability"`
-}
-type candidateScore struct {
-	Model           string  `json:"model"`
-	Score           float64 `json:"score"`
-	ExpectedSuccess float64 `json:"expected_success"`
-	Distance        float64 `json:"distance"`
-	UnderCapacity   float64 `json:"under_capacity"`
+func applyRouteObservation(record *callRecord, route *brickrouting.Result) {
+	record.RoutingParameters = route
 }
 
 type callHistory struct {

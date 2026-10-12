@@ -35,14 +35,6 @@ func Parse(configPath string) (*RouterConfig, error) {
 		return nil, fmt.Errorf("failed to parse config file: invalid YAML or field type")
 	}
 
-	// Optional explicit override for the classifier API endpoint.
-	if envURL := strings.TrimSpace(os.Getenv("BRICK_CLASSIFIER_URL")); envURL != "" {
-		if cfg.ComplexityService == nil {
-			cfg.ComplexityService = &ComplexityServiceConfig{Enabled: true}
-		}
-		cfg.ComplexityService.BaseURL = envURL
-	}
-
 	// Validation after parsing
 	if err := validateConfigStructure(cfg); err != nil {
 		return nil, err
@@ -50,14 +42,6 @@ func Parse(configPath string) (*RouterConfig, error) {
 
 	if err := validateCredentials(cfg); err != nil {
 		return nil, err
-	}
-
-	if cfg.SkillRouter.Enabled && strings.TrimSpace(cfg.SkillRouter.ComplexityModel.BaseURL) == "" &&
-		(cfg.ComplexityService == nil || strings.TrimSpace(cfg.ComplexityService.BaseURL) == "") {
-		return nil, fmt.Errorf("skill_router requires a classifier API base_url; the local complexity server was retired")
-	}
-	if cfg.ComplexityService != nil && cfg.ComplexityService.Enabled && strings.TrimSpace(cfg.ComplexityService.BaseURL) == "" {
-		return nil, fmt.Errorf("complexity_service.base_url is required; configure the classifier API")
 	}
 
 	return cfg, nil

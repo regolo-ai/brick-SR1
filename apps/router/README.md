@@ -1,39 +1,28 @@
-# Brick CPU runtime
+# Brick local runtime
 
-The Go HTTP runtime hosts routing, protocol adapters, streaming, tool transport,
-sticky conversations, compaction, history and statistics. The small Candle
-binding loads the pinned ModernBERT checkpoint and returns six probabilities.
-Complexity classification and final generation use configured remote APIs.
+The Go gateway hosts SystemOne routing, protocol adapters, streaming, tools,
+multimodal transport, history, and token/cost accounting. The
+[SystemOne module](systemone/README.md) runs a persistent local
+PyTorch/Transformers worker and verifies the pinned checkpoint assets.
+Generation uses the selected provider. Native provider compaction remains part
+of the transport; local compaction and conversation routing state are absent.
 
 From the repository root:
 
 ```bash
-python3 scripts/build_runtime.py
 make test-router
-make test-rust
+python3 scripts/build_runtime.py
 ```
 
-The build uses the Cargo and Go lockfiles and writes a target-specific npm
-runtime package under `dist/runtime-<platform>-<arch>`. The shared inference
-library sits beside the executable, with a relative loader search path.
+The build uses the Go lockfile and writes a target-specific runtime bundle to
+`dist/runtime-<platform>-<arch>`. It contains the gateway and Python requirements.
+Set `BRICK_SYSTEMONE_PYTHON` to an interpreter with those dependencies installed.
 
 Runtime controls include `--config`, `--data-dir`, `--model-dir`, `--port`,
-`--instance-id` and `--profile`. `--validate-config` parses and validates a
-configuration without contacting providers; `--check-model` loads the local
-checkpoint and runs real inference. No model download or subprocess classifier
-runs during startup.
+`--instance-id`, and `--profile`. `--validate-config` validates without contacting
+providers. `--check-model` verifies assets and performs local inference.
+`--route-test` returns the query vector, scaled vector, knob, distances, and
+selected model. `--route-candidates` restricts that diagnostic's candidates.
 
-See [local lifecycle](../../docs/quickstart/serve.md) for installation and
-profile management. The separate deployment service is outside this refactoring.
-
-## Checkpoint label compatibility
-
-The pinned checkpoint emits instruction following, coding, math reasoning,
-world knowledge, agentic planning and creative synthesis, in that order.
-Routing skill vectors can use a different configured order; the router maps
-between the two explicitly. Earlier templates incorrectly declared alphabetical
-checkpoint labels. The CLI repairs that known declaration with a backup while
-preserving skill-vector order and values. Unknown label declarations are rejected.
-This separate compatibility correction can change model choices for affected
-profiles. The checkpoint, six raw probabilities and historical softmax algorithm
-are unchanged and remain covered by the pre-refactoring numerical corpus.
+See [local lifecycle](../../docs/quickstart/serve.md) for installation and profile
+management. Training and evaluation workspaces remain separate from this runtime.

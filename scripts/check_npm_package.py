@@ -16,10 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CLI_NAME = "@regoloai/brick"
 TARGETS = {
-    "linux-x64": ("linux", "x64", b"$ORIGIN"),
-    "linux-arm64": ("linux", "arm64", b"$ORIGIN"),
-    "darwin-x64": ("darwin", "x64", b"@loader_path"),
-    "darwin-arm64": ("darwin", "arm64", b"@loader_path"),
+    "linux-x64": ("linux", "x64"),
+    "linux-arm64": ("linux", "arm64"),
+    "darwin-x64": ("darwin", "x64"),
+    "darwin-arm64": ("darwin", "arm64"),
 }
 EXPECTED_COMMANDS = {
     "start",
@@ -67,7 +67,7 @@ def validate_filename(path: Path, package: dict) -> None:
 
 
 def validate_runtime_manifest(manifest: dict, target: str, version: str) -> None:
-    system, arch, _ = TARGETS[target]
+    system, arch = TARGETS[target]
     expected_name = f"@regoloai/brick-runtime-{target}"
     if manifest.get("name") != expected_name:
         fail(f"Runtime name for {target} must be {expected_name}")
@@ -83,10 +83,7 @@ def native_target() -> str | None:
     return f"{system}-{arch}" if system and arch else None
 
 
-def validate_loader_path(binary: bytes, target: str) -> None:
-    marker = TARGETS[target][2]
-    if marker not in binary:
-        fail(f"Runtime {target} does not contain the required relative loader path {marker.decode()}")
+def validate_binary_paths(binary: bytes, target: str) -> None:
     forbidden = (b"/app:", b"/app/", b"/home/runner/work/", b"/private/var/folders/")
     if any(value in binary for value in forbidden):
         fail(f"Runtime {target} contains an absolute build or deployment path")
@@ -114,7 +111,12 @@ def validate_runtime(archive: tarfile.TarFile, prefix: str, target: str, version
     member = archive.extractfile(binary_name)
     if member is None:
         fail(f"Runtime {target} is missing bin/brick-runtime")
-    validate_loader_path(member.read(), target)
+    engine = manifest.get("inference_engine")
+    if engine != "pytorch-transformers":
+        fail(f"Unknown inference engine: {engine}")
+    if f"{prefix}requirements.txt" not in archive.getnames():
+        fail("PyTorch runtime is missing requirements.txt")
+    validate_binary_paths(member.read(), target)
     if execute and target == native_target():
         execute_version(archive, binary_name, version)
 

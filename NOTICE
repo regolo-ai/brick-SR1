@@ -6,14 +6,10 @@ This product includes software derived from the vLLM Semantic Router project
 Semantic Router authors, licensed under the Apache License, Version 2.0
 (http://www.apache.org/licenses/LICENSE-2.0).
 
-Brick is a fork of the upstream project as of mid-2026 (after the v0.3.0
-release). The Go router now lives under apps/router/src/spatial-router, and
-the retained CPU inference binding under apps/router/candle-binding.
-Unused ML/NLP bindings and generic router subsystems were removed. Go module paths and crate names were rebranded
-(e.g. github.com/vllm-project/semantic-router/src/semantic-router ->
-github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router;
-candle-semantic-router -> candle-spatial-router), runtime branding was changed
-to Brick/Regolo, and additional components were added on top (CLI, economics,
-sticky routing, multimodal gateway). Modified files carry notices as required
-by Section 4(b) of the Apache License; this notice preserves upstream
-attribution separately from product identity.
+Brick is a fork of the upstream project as of mid-2026. The Go gateway lives
+under apps/router/src/spatial-router. Local SystemOne inference uses the
+PyTorch/Transformers worker under apps/router/systemone. Retired ML bindings,
+calibrated routing, conversation hysteresis and local compaction were removed.
+Additional maintained components include the CLI, protocol adapters, economics
+and multimodal gateway. This notice preserves upstream attribution separately
+from product identity, as required by Section 4 of the Apache License.

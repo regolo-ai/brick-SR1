@@ -30,17 +30,14 @@ build-cli:
 build-router:
 	python3 scripts/build_runtime.py
 
-test: test-cli test-router test-python test-rust
+test: test-cli test-router test-python
 
 test-cli:
 	cd apps/cli && npm test
 
 test-router:
-	cd apps/router/candle-binding && cargo build --locked --release --no-default-features
-	cd apps/router/src/spatial-router && LD_LIBRARY_PATH=$(CURDIR)/apps/router/candle-binding/target/release go test ./...
-
-test-rust:
-	cd apps/router/candle-binding && cargo test --locked --no-default-features
+	cd apps/router/systemone && go test ./...
+	cd apps/router/src/spatial-router && CGO_ENABLED=0 go test ./...
 
 test-python:
 	uv run --frozen python -m pytest packages/evals/tests packages/training/tests scripts/test_fetch_pricing.py scripts/test_check_npm_package.py -q

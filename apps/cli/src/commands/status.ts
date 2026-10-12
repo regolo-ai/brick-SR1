@@ -116,12 +116,10 @@ export default class Status extends Command {
         const avg = stats.latencies?.routing.average_ms == null ? null : stats.latencies.routing.average_ms / 1000;
         const p50 = stats.latencies?.routing.p50_ms == null ? null : stats.latencies.routing.p50_ms / 1000;
         const p95 = stats.latencies?.routing.p95_ms == null ? null : stats.latencies.routing.p95_ms / 1000;
-        info('latency (classifier):');
+        info('latency (routing):');
         if (avg !== null) print(`avg: ${formatLatency(avg)}`);
         if (p50 !== null) print(`p50: ${formatLatency(p50)}`);
         if (p95 !== null) print(`p95: ${formatLatency(p95)}`);
-        const fp = (stats.classifier?.fallback_rate ?? 0) * 100;
-        print(`fallback rate: ${fp.toFixed(1)}%  (${stats.classifier?.fallbacks ?? 0} fallbacks)`);
       } else if (stats) {
         info('latency: no requests yet');
       } else {

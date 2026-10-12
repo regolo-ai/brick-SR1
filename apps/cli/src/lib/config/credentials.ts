@@ -59,16 +59,16 @@ export async function validateCredential(
 }
 
 export async function saveCredential(
-  profile: string, envKey: string, token: string, baseUrl: string, provider: CredentialProvider = 'openai', model = 'brick-complexity-pro',
+  profile: string, envKey: string, token: string, baseUrl: string, provider: CredentialProvider = 'openai', model?: string,
 ): Promise<void> {
-  await validateCredential(baseUrl, token, provider, model);
+  if (!isRegoloEndpoint(baseUrl) || model) await validateCredential(baseUrl, token, provider, model);
   const env = paths(profile).env;
   await upsertEnvValues(env, { [envKey]: token });
   // writeFile's mode is affected by an existing permissive file.
   await chmod(env, 0o600);
 }
 
-const INTERNAL = new Set(['CODEX_FLAT_BRIDGE_TOKEN', 'BRICK_CLASSIFIER_TOKEN']);
+const INTERNAL = new Set(['BRICK_CODEX_LOCAL_KEY']);
 function isReference(value: unknown): boolean { return typeof value === 'string' && /^\$\{[A-Z_][A-Z0-9_]*\}$/.test(value); }
 function keyFor(path: string[], value: string, used: Map<string, string>): string {
   const context = path.join('_').toUpperCase();
@@ -103,7 +103,7 @@ export async function extractLiteralCredentials(profile: string, obj: any): Prom
   return values;
 }
 
-/** Read the active pool and hosted classifier and validate every required key. */
+/** Read the active pool and validate every required key. */
 export async function validateProfileCredentials(profile: string, cfg: any, pending: Record<string, string> = {}): Promise<void> {
   const seen = new Set<string>();
   const check = async (baseUrl: string, envKey: string, provider: CredentialProvider = 'openai', model?: string) => {
@@ -115,12 +115,6 @@ export async function validateProfileCredentials(profile: string, cfg: any, pend
   };
   const active = new Set<string>(cfg.skill_router?.active_models?.length ? cfg.skill_router.active_models : (cfg.skill_router?.models ?? []).map((m: any) => m.model));
   for (const model of cfg.skill_router?.models ?? []) if (active.has(model.model) && model.api_key_env) await check(model.base_url, model.api_key_env, /anthropic/i.test(model.base_url || '') ? 'anthropic' : 'openai', model.model);
-  for (const cs of [cfg.complexity_service, cfg.skill_router?.complexity_model]) {
-    const key = typeof cs?.bearer_token === 'string' && /^\$\{(.+)\}$/.exec(cs.bearer_token)?.[1];
-    if (cs && cs.enabled !== false && key && !INTERNAL.has(key) && /^https?:/.test(cs.base_url || '')) {
-      await check(cs.base_url, key, /anthropic/i.test(cs.base_url) ? 'anthropic' : 'openai', cs.model_name ?? cfg.complexity_service?.model_name);
-    }
-  }
   // Edited provider keys must be checked even before their models are active.
   for (const [id, provider] of Object.entries(cfg.providers ?? {}) as Array<[string, any]>) {
     const known: any = (catalog as any)[id];
@@ -128,8 +122,7 @@ export async function validateProfileCredentials(profile: string, cfg: any, pend
     const envKey = isRegoloEndpoint(provider.base_url ?? '') ? 'REGOLO_API_KEY' :
       known?.env_key ?? `${id.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}_API_KEY`;
     if (!(envKey in pending)) continue;
-    const model = (cfg.skill_router?.models ?? []).find((m: any) => m.api_key_env === envKey)?.model ??
-      (isRegoloEndpoint(cfg.complexity_service?.base_url ?? '') ? cfg.complexity_service.model_name : undefined);
+    const model = (cfg.skill_router?.models ?? []).find((m: any) => m.api_key_env === envKey)?.model;
     await check(provider.base_url, envKey, /anthropic/i.test(provider.base_url ?? '') ? 'anthropic' : 'openai', model);
   }
 }

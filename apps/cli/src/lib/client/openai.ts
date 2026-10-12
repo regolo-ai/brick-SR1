@@ -50,7 +50,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-export type ThinkingMode = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto';
+export type ThinkingMode = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export async function* chatCompletionStream(opts: {
   baseUrl?: string;
@@ -74,7 +74,6 @@ export async function* chatCompletionStream(opts: {
       Accept: 'text/event-stream',
       Authorization: `Bearer ${key}`,
     };
-    if (opts.thinking) headers['X-Brick-Thinking'] = opts.thinking;
     if (opts.selectedModel) headers['x-selected-model'] = opts.selectedModel;
     const res = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -84,6 +83,8 @@ export async function* chatCompletionStream(opts: {
         messages: opts.messages,
         max_tokens: opts.maxTokens ?? 4096,
         stream: true,
+        ...(opts.thinking && opts.thinking !== 'off' ? { reasoning_effort: opts.thinking } : {}),
+        ...(opts.thinking === 'off' ? { thinking: false } : {}),
       }),
       signal: externalSignal ?? ctrl!.signal,
     });
@@ -92,7 +93,7 @@ export async function* chatCompletionStream(opts: {
       res.headers.get('x-selected-model') ??
       res.headers.get('x-litellm-model-group') ??
       undefined;
-    const thinkingApplied = res.headers.get('x-brick-thinking-mode') ?? undefined;
+    const thinkingApplied = res.headers.get('x-brick-effort') ?? undefined;
     yield { type: 'meta', selectedModel, status: res.status, thinkingApplied };
     if (!res.ok || !res.body) {
       const errText = await res.text().catch(() => '');
@@ -180,13 +181,14 @@ export async function chatCompletion(opts: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${key}`,
     };
-    if (opts.thinking) headers['X-Brick-Thinking'] = opts.thinking;
     const body: any = {
       model: opts.model ?? 'brick',
       messages: opts.messages,
       max_tokens: opts.maxTokens ?? 512,
       stream: false,
     };
+    if (opts.thinking && opts.thinking !== 'off') body.reasoning_effort = opts.thinking;
+    if (opts.thinking === 'off') body.thinking = false;
     if (opts.tools && opts.tools.length) {
       body.tools = opts.tools;
       body.tool_choice = opts.toolChoice ?? 'auto';
@@ -202,7 +204,7 @@ export async function chatCompletion(opts: {
       res.headers.get('x-selected-model') ??
       res.headers.get('x-litellm-model-group') ??
       undefined;
-    const thinkingApplied = res.headers.get('x-brick-thinking-mode') ?? undefined;
+    const thinkingApplied = res.headers.get('x-brick-effort') ?? undefined;
     const status = res.status;
     const json: any = await res.json().catch(() => ({}));
     const msg = json?.choices?.[0]?.message ?? {};

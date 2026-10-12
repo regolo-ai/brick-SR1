@@ -45,7 +45,7 @@ describe('Codex profile migration', () => {
 
   it('rejects an ambiguous legacy pool without deleting it', async () => {
     const dir = join(home, 'profiles', 'codex');
-    const original = yaml.dump({ skill_router: { models: [{ model: 'gpt-5.4', skill_vector: [0.1] }] } });
+    const original = yaml.dump({ skill_router: { models: [{ model: 'gpt-5.4', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] }] } });
     await writeFile(join(dir, 'config.yaml'), original);
     await expect(migrateCodexProfile('codex')).rejects.toThrow('authoritative endpoint');
     expect(await readFile(join(dir, 'config.yaml'), 'utf8')).toBe(original);
@@ -60,7 +60,7 @@ describe('Codex profile migration', () => {
       provider_endpoints: [{ name: 'custom', provider_profile: 'custom' }],
       model_config: { 'my-model': { preferred_endpoints: ['custom'], context_window_size: 64000 } },
       providers: { custom: { type: 'openai_compatible', base_url: 'https://example.com/v1' } },
-      skill_router: { models: [{ model: 'my-model', skill_vector: [0.1, 0.2], cost_weight: 0.7 }] },
+      skill_router: { models: [{ model: 'my-model', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6], cost_weight: 0.7 }] },
     }));
     await writeFile(join(dir, 'docker-compose.yml'), 'services:\n  router:\n    image: docker.io/regolo/brick:latest\n');
 
@@ -81,7 +81,7 @@ describe('Codex profile migration', () => {
       provider_profiles: { regolo: { type: 'openai_compatible', base_url: 'https://api.regolo.ai/v1' } },
       provider_endpoints: [{ name: 'regolo', provider_profile: 'regolo', weight: 1 }],
       model_config: { 'gpt-oss-20b': { preferred_endpoints: ['regolo'], context_window_size: 128000 } },
-      skill_router: { models: [{ model: 'gpt-oss-20b', skill_vector: [0.1, 0.2] }] },
+      skill_router: { models: [{ model: 'gpt-oss-20b', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] }] },
     }));
     await writeFile(join(dir, 'docker-compose.yml'), 'services:\n  router:\n    image: docker.io/regolo/brick:latest\n');
 
@@ -114,7 +114,7 @@ describe('Codex profile migration', () => {
       provider_profiles: { 'openai-codex': { type: 'openai_compatible', base_url: 'https://api.openai.com/v1' } },
       provider_endpoints: [{ name: 'openai-codex', provider_profile: 'openai-codex', weight: 1 }],
       model_config: { 'gpt-5.6-terra': { preferred_endpoints: ['openai-codex'], context_window_size: 272000 } },
-      skill_router: { models: [{ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2] }] },
+      skill_router: { models: [{ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] }] },
     }));
     await writeFile(join(dir, 'docker-compose.yml'), 'services:\n  router:\n    image: docker.io/regolo/brick:latest\n');
 
@@ -122,7 +122,7 @@ describe('Codex profile migration', () => {
     const firstText = await readFile(join(dir, 'config.yaml'), 'utf8');
     const cfg = yaml.load(firstText) as any;
     expect(first.changed).toBe(true);
-    expect(cfg.skill_router.models[0]).toEqual({ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2] });
+    expect(cfg.skill_router.models[0]).toEqual({ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] });
     const second = await migrateCodexProfile('codex');
     expect(second.changed).toBe(false);
     expect(await readFile(join(dir, 'config.yaml'), 'utf8')).toBe(firstText);
@@ -136,7 +136,7 @@ describe('Codex profile migration', () => {
       provider_profiles: { 'openai-codex': { type: 'openai_compatible', base_url: 'https://api.openai.com/v1' } },
       provider_endpoints: [{ name: 'openai-codex', provider_profile: 'openai-codex', weight: 1 }],
       model_config: { 'gpt-5.6-terra': { preferred_endpoints: ['openai-codex'], param_size: 'unknown', reasoning_family: 'openai_reasoning', context_window_size: 272000 } },
-      skill_router: { models: [{ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2] }] },
+      skill_router: { models: [{ model: 'gpt-5.6-terra', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] }] },
     }));
     await writeFile(join(dir, 'docker-compose.yml'), 'services:\n  router:\n    image: docker.io/regolo/brick:latest\n');
 
@@ -167,8 +167,8 @@ describe('Codex profile migration', () => {
       },
       skill_router: {
         models: [
-          { model: 'glm5.2', skill_vector: [0.1, 0.2] },
-          { model: 'gpt-5.6-luna', skill_vector: [0.1, 0.2] },
+          { model: 'glm5.2', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] },
+          { model: 'gpt-5.6-luna', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] },
         ],
         active_models: ['glm5.2', 'gpt-5.6-luna'],
       },

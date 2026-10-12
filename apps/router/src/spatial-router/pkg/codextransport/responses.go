@@ -139,9 +139,45 @@ func RoutingText(body []byte, window int) string {
 	if window > 0 && len(items) > window {
 		items = items[len(items)-window:]
 	}
-	parts := make([]string, len(items))
-	for i, item := range items {
-		parts[i] = string(item)
+	var instructions string
+	_ = json.Unmarshal(raw["instructions"], &instructions)
+	var parts []string
+	if instructions != "" {
+		parts = append(parts, instructions)
+	}
+	for _, item := range items {
+		var message struct {
+			Role    string          `json:"role"`
+			Type    string          `json:"type"`
+			Content json.RawMessage `json:"content"`
+		}
+		_ = json.Unmarshal(item, &message)
+		if message.Role != "" && (message.Type == "" || message.Type == "message") {
+			var text string
+			if json.Unmarshal(message.Content, &text) != nil {
+				var blocks []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				}
+				_ = json.Unmarshal(message.Content, &blocks)
+				var content []string
+				for _, block := range blocks {
+					if block.Type == "input_text" || block.Type == "output_text" || block.Type == "text" {
+						content = append(content, block.Text)
+					}
+				}
+				text = strings.Join(content, "\n")
+			}
+			if text != "" {
+				if window > 0 && (message.Role == "user" || message.Role == "assistant") {
+					text = message.Role + ": " + text
+				}
+				parts = append(parts, text)
+				continue
+			}
+		}
+		// Non-text tool, reasoning and compaction items retain their routing signal.
+		parts = append(parts, string(item))
 	}
 	return strings.Join(parts, "\n")
 }

@@ -14,7 +14,7 @@ async function fixture(run) {
     fs.copyFileSync(path.join(__dirname, '../scripts/runtime-install.cjs'), path.join(root, 'scripts/runtime-install.cjs'));
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1.0.0' }));
     const content = Buffer.from('test-asset');
-    fs.writeFileSync(path.join(root, 'assets/modernbert.json'), JSON.stringify({ repository: 'test/model', revision: 'pinned', files: { 'config.json': { bytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') } } }));
+    fs.writeFileSync(path.join(root, 'assets/systemone.json'), JSON.stringify({ repository: 'test/model', revision: 'pinned', files: { 'config.json': { bytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') } } }));
     const runtime = path.join(root, 'runtimes', `${process.platform}-${process.arch}`);
     fs.mkdirSync(path.join(runtime, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({ version: '1.0.0' }));
@@ -79,4 +79,38 @@ test('an incompatible executable fails before downloading any assets', () => fix
   fs.writeFileSync(path.join(runtime, 'bin/brick-runtime'), '#!/bin/sh\necho incompatible >&2\nexit 1\n', { mode: 0o755 });
   await assert.rejects(installer.install(), /cannot execute/);
   assert.equal(downloads, 0);
+}));
+
+test('private checkpoint authentication is sent without persisting the token', () => fixture(async ({ installer, content }) => {
+  const previous = process.env.HF_TOKEN;
+  process.env.HF_TOKEN = 'test-private-token';
+  try {
+    global.fetch = async (url, options) => {
+      assert.match(url, /\/resolve\/pinned\/config.json$/);
+      assert.equal(options.headers.Authorization, 'Bearer test-private-token');
+      return new Response(content);
+    };
+    await installer.install();
+    const marker = fs.readFileSync(path.join(installer.installedRuntime().models, '.complete.json'), 'utf8');
+    assert.equal(marker.includes(process.env.HF_TOKEN), false);
+  } finally {
+    if (previous === undefined) delete process.env.HF_TOKEN;
+    else process.env.HF_TOKEN = previous;
+  }
+}));
+
+test('local checkpoint assets are verified without downloading', () => fixture(async ({ installer, root, content }) => {
+  const previous = process.env.BRICK_MODEL_ASSETS;
+  const local = path.join(root, 'local-assets');
+  fs.mkdirSync(local);
+  fs.writeFileSync(path.join(local, 'config.json'), content);
+  process.env.BRICK_MODEL_ASSETS = local;
+  try {
+    global.fetch = async () => { throw new Error('unexpected network call'); };
+    await installer.install();
+    assert.equal(fs.readFileSync(path.join(installer.installedRuntime().models, 'config.json'), 'utf8'), content.toString());
+  } finally {
+    if (previous === undefined) delete process.env.BRICK_MODEL_ASSETS;
+    else process.env.BRICK_MODEL_ASSETS = previous;
+  }
 }));

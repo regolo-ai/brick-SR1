@@ -32,21 +32,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## ModernBERT model assets
+## SystemOne model assets
 
-The installer retrieves `regolo/modernbert-capability-classifier` at revision
-`117a42479a0dd8c126cfb0d02eec0719468e4027`, fine-tuned from
-`answerdotai/ModernBERT-base`. The pinned model card declares Apache-2.0.
-The model card is downloaded and checksum-verified with the weights.
-The runtime preserves Brick's established softmax normalization; the model
-card's sigmoid description is not a claim about this runtime's algorithm.
+The installer retrieves `massaindustries/brick-systemone-large-v2` at revision
+`f6375c086ab5901631f80f3be442a41fb70b3386`, verifies the asset checksums, and stores
+weights outside the source repository. Model access and licensing follow its
+Hub metadata and upstream model terms. The npm gateway contains no model weights.
 
-## Native dependency licenses
+## Runtime dependencies
 
-Each runtime package includes `THIRD_PARTY_LICENSES.txt`, assembled from its
-locked Cargo and Go source dependencies. The ug 0.5.0 source archive omits
-license files; copies from its recorded upstream commit are retained under
-`licenses/ug-0.5.0` for this purpose.
+Each runtime package includes `THIRD_PARTY_LICENSES.txt`, assembled from the
+locked Go dependency sources. Python, PyTorch, Transformers and optional
+FlashAttention are installed in the selected Python environment and retain their
+own distribution licenses.
 
 ## Evaluation-only instruction graders
 

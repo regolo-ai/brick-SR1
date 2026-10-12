@@ -113,13 +113,9 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 		if reasoning == "" {
 			reasoning = "default"
 		}
-		mode := result.RoutingMode
-		if mode == "" {
-			mode = "off"
-		}
 		finished := time.Now().UTC()
 		providerMS, overallMS := time.Since(providerStarted).Milliseconds(), finished.Sub(started).Milliseconds()
-		record := callRecord{CallID: newBrickCallID(), StartedAt: started, FinishedAt: finished, Model: result.Model, ReasoningMode: reasoning, RoutingMode: mode, RoutingSource: source, Status: status, Error: sanitizeCallError(cause), InputTokens: input, OutputTokens: output, RoutingLatencyMS: result.RoutingLatencyMS, ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS}
+		record := callRecord{CallID: newBrickCallID(), StartedAt: started, FinishedAt: finished, Model: result.Model, ReasoningMode: reasoning, RoutingSource: source, Status: status, Error: sanitizeCallError(cause), InputTokens: input, OutputTokens: output, RoutingLatencyMS: result.RoutingLatencyMS, ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS}
 		applyRouteObservation(&record, result.Route)
 		if err := s.callHistory.append(record); err != nil {
 			logging.Warnf("Call history: append failed: %v", err)
@@ -253,13 +249,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	}
 	if upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300 {
 		finish("completed", nil, input, output)
-		if s.stickyStore != nil && result.StickyKey != "" {
-			var tokens int64
-			if input != nil {
-				tokens = *input
-			}
-			s.stickyStore.Record(result.StickyKey, result.Model, tokens, result.Compacted, time.Now())
-		}
+
 	} else {
 		finish("failed", fmt.Errorf("upstream returned status %d", upstreamResp.StatusCode), input, output)
 	}

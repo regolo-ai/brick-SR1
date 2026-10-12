@@ -1,12 +1,26 @@
 # Run Brick locally
 
-The native npm bundle contains the CPU runtime. It requires Node.js 20 or 22+;
-users do not need Docker, Python, Go, Rust, or a compiler. Linux x64 is the
-current verification target: Ubuntu 24.04, glibc 2.39 or newer. The Linux
-Candle library requires glibc 2.39; musl/Alpine and older glibc distributions
-are not supported by this artifact. The installer checks that the executable
-loads before downloading weights. Other platform packages require execution
-testing before publication.
+The npm bundle contains the Go gateway and an embedded local SystemOne worker.
+It requires Node.js 20 or 22+, Python, PyTorch, and Hugging Face Transformers.
+Inference follows the SystemOne reference stack: FP32 on CPU, BF16 on CUDA,
+FlashAttention 2 when available on CUDA, and SDPA otherwise. Candle is not linked
+into the production gateway. Linux x64 is the current verification target;
+other platform packages require execution testing before publication.
+
+Before installation, prepare the Python environment and export its interpreter:
+
+```bash
+python3 -m venv /path/to/systemone-env
+/path/to/systemone-env/bin/python -m pip install -r apps/router/systemone/requirements.txt
+export BRICK_SYSTEMONE_PYTHON=/path/to/systemone-env/bin/python
+export HF_TOKEN=your_hugging_face_token
+```
+
+Keep `BRICK_SYSTEMONE_PYTHON` set when installing and starting Brick. Without it,
+the runtime uses `python3` on PATH. The installer uses `HF_TOKEN` for private
+checkpoint access without writing the token to its completion marker. To install
+without downloading, set `BRICK_MODEL_ASSETS` to a directory containing the exact
+pinned assets; checksums are still verified.
 
 ```bash
 npm install --global ./regoloai-brick-runtime-linux-x64-3.1.1.tgz \
@@ -20,7 +34,7 @@ brick restart work
 brick stop work
 ```
 
-Installation downloads the pinned ModernBERT assets, verifies SHA-256 checksums,
+Installation downloads the pinned SystemOne v2 assets, verifies SHA-256 checksums,
 and checks real inference before completing. Installation requires network
 access and approximately 0.8 GB for model assets. The assets belong to the npm
 installation and are shared across profiles. An installation made with lifecycle
@@ -57,16 +71,23 @@ Configuration, credentials and persistent history remain. `brick stop codex`
 detaches future Codex launches but keeps the runtime for open sessions;
 `brick clear codex` also stops that runtime.
 
-The complexity classifier and final models use configured APIs. Classifier,
-local harness and provider credentials are separate. `use_client_key: true`
-selects the current request credential explicitly and never falls back to a
-server key. Endpoint domains do not select an authentication mode.
+SystemOne runs locally. Generation providers use configured credentials.
+`use_client_key: true` selects the current request credential explicitly and never
+falls back to a server key. Endpoint domains do not select an authentication mode.
 
-Legacy profiles receive a versioned migration with backups. Profiles that need
-the retired local complexity server must first be configured with an API
-endpoint
-and credential. Unknown fields produce an error before the configuration is
-modified. Existing legacy containers are not managed by the native runtime.
+Legacy profiles migrate to `config_version: 2` with exact backups and atomic
+replacement. Provider credentials, pools and skill vectors retain their values
+and order; the numeric routing preference becomes `skill_router.knob`.
+Obsolete difficulty, calibrated-math, keyword, automatic-effort and local
+cache-management settings are removed. Incompatible vectors stop migration before
+writing files. Repeating migration is a no-op. Existing legacy containers remain
+outside the native runtime's lifecycle.
+
+`brick route "your query" --json` returns local vectors, knob, distances and selected
+model without generation. `--effort low|medium|high|xhigh|max` overrides the profile
+knob for that diagnostic. `/api/v1/diag/systemone` reports engine readiness and the
+pinned model identity. Token usage, costs and routing/provider/overall latencies
+remain available through the statistics APIs.
 
 ## Update and restore
 

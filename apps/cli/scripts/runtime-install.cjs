@@ -8,7 +8,7 @@ const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
-const manifest = require('../assets/modernbert.json');
+const manifest = require('../assets/systemone.json');
 const version = require('../package.json').version;
 function runtimeBundle() {
   if (!['linux', 'darwin'].includes(process.platform) || !['x64', 'arm64'].includes(process.arch)) throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
@@ -63,7 +63,12 @@ async function install() {
       await fsp.chmod(temporary, 0o755);
       for (const [name, expected] of Object.entries(manifest.files)) {
         const url = `https://huggingface.co/${manifest.repository}/resolve/${manifest.revision}/${name}`;
-        const response = await fetch(url, { signal: AbortSignal.timeout(600000) });
+        if (process.env.BRICK_MODEL_ASSETS) {
+          await fsp.copyFile(path.join(process.env.BRICK_MODEL_ASSETS, name), path.join(temporary, name), fs.constants.COPYFILE_EXCL);
+          continue;
+        }
+        const headers = process.env.HF_TOKEN ? { Authorization: `Bearer ${process.env.HF_TOKEN}` } : {};
+        const response = await fetch(url, { headers, signal: AbortSignal.timeout(600000) });
         if (!response.ok || !response.body) throw new Error(`Model download failed: ${name} (HTTP ${response.status})`);
         let bytes = 0;
         const limit = new Transform({ transform(chunk, encoding, callback) { bytes += chunk.length; callback(bytes > expected.bytes ? new Error(`Oversized model asset: ${name}`) : null, chunk); } });

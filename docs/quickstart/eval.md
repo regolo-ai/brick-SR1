@@ -23,13 +23,13 @@ inputs fail that target.
 
 ```bash
 uv run --frozen python packages/datasets/scripts/download_dataset_a.py --out ./data/dataset_a
-uv run --frozen python packages/datasets/scripts/download_models.py --out ./models
+uv run --frozen python packages/datasets/scripts/download_models.py --out ~/.cache/brick/models
 ```
 
-The model command installs only the pinned ModernBERT capability checkpoint
-under `models/modernbert-capability-classifier`. The complexity classifier is
-an API endpoint configured in the Brick profile. npm users already receive
-ModernBERT during installation.
+The model command installs the pinned SystemOne v2 assets with checksum
+verification. Set `HF_TOKEN` for private Hub access. npm users receive the same
+verified assets during installation. Inference uses local PyTorch/Transformers;
+provider credentials are needed only for generation and judging.
 
 ## Run inference
 

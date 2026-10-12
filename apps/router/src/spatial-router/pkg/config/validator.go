@@ -2,11 +2,12 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
 func validateConfigStructure(cfg *RouterConfig) error {
-	if cfg.ConfigVersion != 0 && cfg.ConfigVersion != 1 {
+	if cfg.ConfigVersion != 0 && cfg.ConfigVersion != 2 {
 		return fmt.Errorf("unsupported config_version: %d", cfg.ConfigVersion)
 	}
 	if err := validateSkillRouterConfig(cfg); err != nil {
@@ -70,136 +71,49 @@ func validateSkillRouterConfig(cfg *RouterConfig) error {
 	if !sr.Enabled {
 		return nil
 	}
-
-	if len(sr.Capabilities) == 0 {
-		return fmt.Errorf("skill_router.enabled=true requires skill_router.capabilities")
+	if math.IsNaN(sr.Knob) || math.IsInf(sr.Knob, 0) || sr.Knob < -1 || sr.Knob > 1 {
+		return fmt.Errorf("skill_router.knob must be finite and in [-1, 1]")
 	}
-
-	seenCaps := map[string]bool{}
-	for _, capName := range sr.Capabilities {
-		if strings.TrimSpace(capName) == "" {
-			return fmt.Errorf("skill_router.capabilities cannot contain empty names")
+	expected := map[string]bool{"instruction_following": true, "coding": true, "math_reasoning": true, "world_knowledge": true, "planning_agentic": true, "creative_synthesis": true}
+	if len(sr.Capabilities) != 6 {
+		return fmt.Errorf("skill_router.capabilities must declare the six SystemOne dimensions")
+	}
+	for _, name := range sr.Capabilities {
+		if !expected[name] {
+			return fmt.Errorf("invalid or duplicate SystemOne capability %q", name)
 		}
-		if seenCaps[capName] {
-			return fmt.Errorf("skill_router.capabilities contains duplicate %q", capName)
-		}
-		seenCaps[capName] = true
+		delete(expected, name)
 	}
-
-	if sr.CapabilityModel.ModelID == "" && sr.CapabilityModel.LocalPath == "" {
-		return fmt.Errorf("skill_router.capability_model requires model_id or local_path")
+	if sr.SystemOne.LocalPath == "" {
+		return fmt.Errorf("skill_router.systemone.local_path is required")
 	}
-
-	if len(sr.CapabilityModel.Labels) > 0 && len(sr.CapabilityModel.Labels) != len(sr.Capabilities) {
-		return fmt.Errorf("skill_router.capability_model.labels length must match skill_router.capabilities")
-	}
-
 	if len(sr.Models) == 0 {
-		return fmt.Errorf("skill_router.enabled=true requires at least one skill_router.models entry")
+		return fmt.Errorf("skill_router.models must contain at least one candidate")
 	}
-
-	modelSeen := map[string]bool{}
+	seen := map[string]bool{}
 	for i, model := range sr.Models {
-		if model.Model == "" {
-			return fmt.Errorf("skill_router.models[%d].model cannot be empty", i)
+		if model.Model == "" || seen[model.Model] {
+			return fmt.Errorf("invalid or duplicate skill_router.models[%d].model", i)
 		}
-		if modelSeen[model.Model] {
-			return fmt.Errorf("skill_router.models contains duplicate model %q", model.Model)
-		}
-		modelSeen[model.Model] = true
+		seen[model.Model] = true
 		if _, ok := cfg.ModelConfig[model.Model]; !ok {
-			return fmt.Errorf("skill_router.models[%d].model %q is not defined in model_config", i, model.Model)
+			return fmt.Errorf("skill_router model %q is not defined in model_config", model.Model)
 		}
-		if len(model.SkillVector) != len(sr.Capabilities) {
-			return fmt.Errorf("skill_router.models[%d].skill_vector length must match skill_router.capabilities", i)
+		if len(model.SkillVector) != 6 {
+			return fmt.Errorf("model %s skill_vector must have six dimensions", model.Model)
 		}
-		for j, value := range model.SkillVector {
-			if value <= 0 || value >= 1 {
-				return fmt.Errorf("skill_router.models[%d].skill_vector[%d] must be in (0,1)", i, j)
+		for _, value := range model.SkillVector {
+			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+				return fmt.Errorf("model %s skill_vector must be finite and in [0, 1]", model.Model)
 			}
 		}
 	}
-
-	// active_models, when present, must reference models declared in
-	// skill_router.models (no duplicates). Empty is allowed and means "all
-	// models are candidates" (backward compatible).
-	if len(sr.ActiveModels) > 0 {
-		activeSeen := map[string]bool{}
-		for i, m := range sr.ActiveModels {
-			if !modelSeen[m] {
-				return fmt.Errorf("skill_router.active_models[%d] %q is not defined in skill_router.models", i, m)
-			}
-			if activeSeen[m] {
-				return fmt.Errorf("skill_router.active_models contains duplicate model %q", m)
-			}
-			activeSeen[m] = true
+	active := map[string]bool{}
+	for _, name := range sr.ActiveModels {
+		if !seen[name] || active[name] {
+			return fmt.Errorf("invalid or duplicate active model %q", name)
 		}
+		active[name] = true
 	}
-
-	// Preference-knob math constraints (paper sec. brick-knob). Zero values mean
-	// "absent" and resolve to the locked production defaults at runtime.
-	m := sr.Math
-	if m.RoutingPreference != nil && (*m.RoutingPreference < -1 || *m.RoutingPreference > 1) {
-		return fmt.Errorf("skill_router.math.routing_preference must be in [-1, 1]")
-	}
-	if m.PreferencePower < 0 {
-		return fmt.Errorf("skill_router.math.preference_power must be > 0 (0 means use the default)")
-	}
-	for name, v := range map[string]float64{
-		"complexity_mu":       m.ComplexityMu,
-		"cost_penalty_beta":   m.CostPenaltyBeta,
-		"over_penalty_lambda": m.OverPenaltyLambda,
-		"max_mu_multiplier":   m.MaxMuMultiplier,
-		"max_cost_relief":     m.MaxCostRelief,
-		"max_over_relief":     m.MaxOverRelief,
-		"min_mu_multiplier":   m.MinMuMultiplier,
-		"min_cost_boost":      m.MinCostBoost,
-		"min_over_boost":      m.MinOverBoost,
-	} {
-		if v < 0 {
-			return fmt.Errorf("skill_router.math.%s must be >= 0 (0 means use the default)", name)
-		}
-	}
-
-	for i, rule := range sr.KeywordRules {
-		mode := strings.ToLower(strings.TrimSpace(rule.Mode))
-		if mode == "" {
-			mode = "bias"
-		}
-		if mode != "override" && mode != "bias" {
-			return fmt.Errorf("skill_router.keyword_rules[%d].mode must be override or bias", i)
-		}
-		if rule.Name == "" {
-			return fmt.Errorf("skill_router.keyword_rules[%d].name cannot be empty", i)
-		}
-		if len(rule.Keywords) == 0 {
-			return fmt.Errorf("skill_router.keyword_rules[%d].keywords cannot be empty", i)
-		}
-		if rule.Importance < 0 || rule.Importance > 10 {
-			return fmt.Errorf("skill_router.keyword_rules[%d].importance must be between 0 and 10; 0 uses the default importance", i)
-		}
-		if mode == "override" {
-			if rule.Model == "" {
-				return fmt.Errorf("skill_router.keyword_rules[%d] mode=override requires model", i)
-			}
-			if !modelSeen[rule.Model] {
-				return fmt.Errorf("skill_router.keyword_rules[%d].model %q is not listed in skill_router.models", i, rule.Model)
-			}
-		}
-		if mode == "bias" {
-			if rule.Capability == "" && len(rule.Bias) == 0 {
-				return fmt.Errorf("skill_router.keyword_rules[%d] mode=bias requires capability or bias", i)
-			}
-			if rule.Capability != "" && !seenCaps[rule.Capability] {
-				return fmt.Errorf("skill_router.keyword_rules[%d].capability %q is not in skill_router.capabilities", i, rule.Capability)
-			}
-			for capName := range rule.Bias {
-				if !seenCaps[capName] {
-					return fmt.Errorf("skill_router.keyword_rules[%d].bias capability %q is not in skill_router.capabilities", i, capName)
-				}
-			}
-		}
-	}
-
 	return nil
 }

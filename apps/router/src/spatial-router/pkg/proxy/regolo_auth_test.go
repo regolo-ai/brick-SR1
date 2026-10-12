@@ -15,18 +15,15 @@ import (
 
 type fixedAuthTestRouter struct{}
 
-func (fixedAuthTestRouter) RouteWithCandidates(ctx context.Context, _ string, allowed map[string]bool) (*brickrouting.Result, error) {
+func (fixedAuthTestRouter) RouteWithOptions(ctx context.Context, _ string, options brickrouting.RoutingOptions) (*brickrouting.Result, error) {
+	allowed := options.Candidates
 	if config.ClientAPIKey(ctx) == "" {
 		return nil, fmt.Errorf("request credential was not propagated to routing")
 	}
 	if allowed != nil && !allowed["qwen3.5-9b"] {
 		return nil, fmt.Errorf("test model is outside candidate pool")
 	}
-	return &brickrouting.Result{Model: "qwen3.5-9b", Reason: "test", ComplexityLabel: "medium"}, nil
-}
-
-func (r fixedAuthTestRouter) RouteWithPreference(ctx context.Context, text string, _ float64) (*brickrouting.Result, error) {
-	return r.RouteWithCandidates(ctx, text, nil)
+	return &brickrouting.Result{Model: "qwen3.5-9b"}, nil
 }
 
 func TestRegoloAuthorizationThroughHandlers(t *testing.T) {
@@ -125,75 +122,5 @@ func TestRegoloWithoutServerCredentialUsesClient(t *testing.T) {
 				t.Fatal("Regolo must use the client key without a server credential")
 			}
 		}
-	}
-}
-
-func TestClassifierProbeRejectsUnresolvedCredential(t *testing.T) {
-	t.Setenv("REGOLO_API_KEY", "${REGOLO_API_KEY}")
-	var calls atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	cfg := &config.RouterConfig{}
-	cfg.ComplexityService = &config.ComplexityServiceConfig{
-		Enabled: true, Protocol: "openai", BaseURL: upstream.URL, BearerToken: "${REGOLO_API_KEY}",
-	}
-	w := httptest.NewRecorder()
-	(&Server{cfg: cfg}).handleDiagClassifier(w, httptest.NewRequest(http.MethodGet, "/diag/classifier", nil))
-	if calls.Load() != 0 || !strings.Contains(w.Body.String(), `"reachable":false`) {
-		t.Fatalf("probe must reject invalid credentials before contacting upstream: %s", w.Body.String())
-	}
-}
-
-func TestClassifierProbeUsesClientCredential(t *testing.T) {
-	for _, key := range []string{"client-key", ""} {
-		t.Run(key, func(t *testing.T) {
-			var calls atomic.Int32
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				calls.Add(1)
-				if r.Header.Get("Authorization") != "Bearer client-key" {
-					t.Error("probe must use caller credential")
-				}
-				fmt.Fprint(w, `{"data":[]}`)
-			}))
-			defer upstream.Close()
-			cfg := &config.RouterConfig{}
-			cfg.ComplexityService = &config.ComplexityServiceConfig{
-				Enabled: true, Protocol: "openai", BaseURL: upstream.URL, UseClientKey: true, BearerToken: "server-key",
-			}
-			req := httptest.NewRequest(http.MethodGet, "/diag/classifier", nil)
-			req.Header.Set("Authorization", "Bearer "+key)
-			w := httptest.NewRecorder()
-			(&Server{cfg: cfg}).handleDiagClassifier(w, req)
-			if key != "" && (calls.Load() != 1 || !strings.Contains(w.Body.String(), `"reachable":true`)) {
-				t.Fatal("authenticated probe did not reach upstream")
-			}
-			if key == "" && calls.Load() != 0 {
-				t.Fatal("probe must not substitute the server credential")
-			}
-		})
-	}
-}
-
-func TestCodexClassifierProbeUsesConfiguredCredential(t *testing.T) {
-	var calls atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer server-key" {
-			t.Error("Codex classifier probe must use the configured credential")
-		}
-		fmt.Fprint(w, `{"data":[]}`)
-	}))
-	defer upstream.Close()
-	cfg := &config.RouterConfig{CodexRouter: config.CodexRouterConfig{Enabled: true}}
-	cfg.ComplexityService = &config.ComplexityServiceConfig{
-		Enabled: true, Protocol: "openai", BaseURL: upstream.URL, UseClientKey: true, BearerToken: "server-key",
-	}
-	w := httptest.NewRecorder()
-	(&Server{cfg: cfg}).handleDiagClassifier(w, httptest.NewRequest(http.MethodGet, "/diag/classifier", nil))
-	if calls.Load() != 1 || !strings.Contains(w.Body.String(), `"reachable":true`) {
-		t.Fatalf("Codex classifier probe did not use the configured credential: %s", w.Body.String())
 	}
 }

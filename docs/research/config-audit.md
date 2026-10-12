@@ -1,5 +1,10 @@
 # Brick config.yaml Audit — Condensed English Version
 
+> Historical pre-SystemOne research and evaluation. This document does not
+> describe the current runtime; see the repository README for current behavior.
+
+Historical source snapshot: `355bbaf90f4984cf155661dce9aa1110c9aa0f9a`.
+
 > Source: `brick-config-audit.md` (Italian, 637 lines), full audit of the Brick
 > `config.yaml` dated **19 March 2026**.
 > This is a condensed English translation. All numbers, parameter names, values,

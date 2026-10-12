@@ -1,0 +1,30 @@
+{
+  "repository": "massaindustries/brick-systemone-large-v2",
+  "revision": "f6375c086ab5901631f80f3be442a41fb70b3386",
+  "labels": [
+    "instruction_following",
+    "coding",
+    "math_reasoning",
+    "world_knowledge",
+    "planning_agentic",
+    "creative_synthesis"
+  ],
+  "files": {
+    "config.json": {
+      "sha256": "89b6efc4c149e537bbbc48cc614f1b031b2abcf9ab7ce30bbf2393e36c661ede",
+      "bytes": 2498
+    },
+    "model.safetensors": {
+      "sha256": "bb3d36f75c71e63263cca0d34e5bb9a92145dbbccae9d4ad6e42e1248fd43c35",
+      "bytes": 791693180
+    },
+    "tokenizer.json": {
+      "sha256": "874b48dbc3ec9249ab7b5da746aeb46243b3083ddb9c304bfca91e5afe42c687",
+      "bytes": 3583327
+    },
+    "tokenizer_config.json": {
+      "sha256": "fb54f027372062b2ca52282efb04d178a8b57167a00cd8f4e816515823a2c016",
+      "bytes": 380
+    }
+  }
+}

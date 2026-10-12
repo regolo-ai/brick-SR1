@@ -14,8 +14,6 @@ const maxRequestBodySize = 10 << 20
 
 // RoutingResult represents the outcome of running the routing pipeline.
 type RoutingResult struct {
-	StickyKey string // Conversation identity for cache-aware routing.
-	Compacted bool   // Whether this request used a compacted prompt.
 	// Direct means the pipeline produced a direct response (cache hit, error, block).
 	// If true, StatusCode and Body are set; the proxy writes them directly to the client.
 	Direct     bool
@@ -34,7 +32,6 @@ type RoutingResult struct {
 	Model           string            // selected model name, used for economics tracking
 	RoutingSource   string            // "routed" or "native", for durable call history
 	ReasoningMode   string
-	RoutingMode     string
 	// AcceptedAt starts the end-to-end clock at request acceptance. Route is
 	// retained only as privacy-safe routing metadata for durable history.
 	AcceptedAt       time.Time

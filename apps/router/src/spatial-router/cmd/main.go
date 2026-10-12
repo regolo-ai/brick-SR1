@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	candle "github.com/regolo-ai/brick-SR1/candle-binding"
+	systemone "github.com/regolo-ai/brick-SR1/systemone"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,16 +49,16 @@ func main() {
 		return
 	}
 	if *modelCheck != "" {
-		if err := candle.InitModernBertClassifier(*modelCheck); err != nil {
+		if err := systemone.Init(*modelCheck); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		result, err := candle.ClassifyModernBertTextWithProbabilities("Hello.")
-		if err != nil || len(result.Probabilities) != 6 {
+		result, err := systemone.Classify("Hello.")
+		if err != nil || len(result) != 6 {
 			fmt.Fprintln(os.Stderr, "model verification failed", err)
 			os.Exit(1)
 		}
-		body, _ := json.Marshal(result.Probabilities)
+		body, _ := json.Marshal(result)
 		fmt.Println(string(body))
 		return
 	}
@@ -96,7 +96,7 @@ func main() {
 		if !filepath.IsAbs(*modelDir) {
 			logging.Fatalf("model-dir must be absolute")
 		}
-		cfg.SkillRouter.CapabilityModel.LocalPath = *modelDir
+		cfg.SkillRouter.SystemOne.LocalPath = *modelDir
 	}
 	if *validateOnly {
 		return
@@ -143,7 +143,7 @@ func runRouteTest(ctx context.Context, cfg *config.RouterConfig, message, candid
 				allow[c] = true
 			}
 		}
-		route, err = router.RouteWithCandidates(ctx, message, allow)
+		route, err = router.RouteWithOptions(ctx, message, brickrouting.RoutingOptions{Candidates: allow})
 	} else {
 		route, err = router.Route(ctx, message)
 	}

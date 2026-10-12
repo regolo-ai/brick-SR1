@@ -36,7 +36,7 @@ function profileConfig(): any {
     default_reasoning_effort: 'medium',
     skill_router: {
       enabled: true,
-      capabilities: ['coding'],
+      capabilities: ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'],
       capability_model: { model_id: "installed" },
       complexity_model: {},
       math: {},

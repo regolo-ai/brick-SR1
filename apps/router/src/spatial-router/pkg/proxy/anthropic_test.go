@@ -73,11 +73,11 @@ func TestExtractAnthropicContextText_FallsBackForSmallK(t *testing.T) {
 }
 
 func TestExtractAnthropicContextText_TruncatesTail(t *testing.T) {
-	long := strings.Repeat("x", maxContextClassifyChars+5000)
+	long := strings.Repeat("x", 21000)
 	body := []byte(`{"messages":[{"role":"user","content":"` + long + `"},{"role":"user","content":"tail-marker"}]}`)
 	got := extractAnthropicContextText(body, 4)
-	if len([]rune(got)) > maxContextClassifyChars {
-		t.Fatalf("context window not truncated: %d runes", len([]rune(got)))
+	if !strings.Contains(got, long) {
+		t.Fatalf("context was truncated before tokenization: %d runes", len([]rune(got)))
 	}
 	if !strings.Contains(got, "tail-marker") {
 		t.Fatalf("truncation should keep the trailing (most recent) text, got tail missing")

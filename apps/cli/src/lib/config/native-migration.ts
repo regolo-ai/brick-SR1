@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { readFile, writeFile, mkdir, rename, rm, copyFile, access } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, rm, copyFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
@@ -25,50 +25,58 @@ function validateFields(value: any, schema: any, path = 'config'): void {
   }
 }
 
-// These fields belonged to components never called by the Brick HTTP runtime.
 const retired = ['model', 'config_source', 'mom_registry', 'external_models', 'semantic_cache', 'memory', 'vector_store', 'response_api', 'router_replay', 'looper', 'api', 'clear_route_cache', 'authz', 'ratelimit', 'embedding_models', 'bert_model', 'classifier', 'prompt_guard', 'hallucination_mitigation', 'feedback_detector', 'modality_detector', 'decisions', 'strategy', 'model_selection', 'keyword_rules', 'embedding_rules', 'categories', 'fact_check_rules', 'user_feedback_rules', 'preference_rules', 'language_rules', 'context_rules', 'modality_rules', 'role_bindings', 'tools', 'plugins', 'image_gen_backends', 'modality_routes', 'text_routes'];
-const spawnFields = ['auto_spawn', 'script_path', 'device', 'base_model_id'];
 
-// Physical output order of the pinned checkpoint, distinct from routing-vector order.
-const checkpointLabels = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'];
-function migrateCapabilityLabels(obj: any): void {
-  const model = obj.skill_router?.capability_model;
-  if (!model) return;
-  const declared = model.labels;
-  if (declared !== undefined && !(Array.isArray(declared) && declared.length === 0) && JSON.stringify(declared) !== JSON.stringify(checkpointLabels) &&
-      JSON.stringify(declared) !== JSON.stringify([...checkpointLabels].sort())) {
-    throw new Error('Capability labels do not match the pinned checkpoint or the known legacy template order; files were not changed.');
+const dimensions = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'];
+const obsoleteRouting = ['routing_mode', 'sticky_ttl_seconds', 'sticky_score_margin', 'compact_keep_recent_turns', 'compact_shadow_only', 'use_thinking_routing', 'use_skill_router', 'model_map', 'model_map_1m'];
+
+function validateVectors(obj: any): void {
+  const sr = obj.skill_router;
+  if (!sr) return;
+  const names = sr.capabilities;
+  if (!Array.isArray(names) || names.length !== 6 || new Set(names).size !== 6 || names.some((name: string) => !dimensions.includes(name)))
+    throw new Error('SystemOne requires the six named capabilities; files were not changed.');
+  if (!Number.isFinite(sr.knob ?? 0) || (sr.knob ?? 0) < -1 || (sr.knob ?? 0) > 1)
+    throw new Error('Routing knob must be a number in [-1, 1]; files were not changed.');
+  for (const model of sr.models ?? []) {
+    if (!Array.isArray(model.skill_vector) || model.skill_vector.length !== 6 || model.skill_vector.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1))
+      throw new Error(`Incompatible skill vector for ${model.model}; files were not changed.`);
   }
-  model.labels = [...checkpointLabels];
 }
 
-/** Pure, deterministic migration. Inspect every incompatible value before writing. */
+/** Migrate legacy profiles without changing provider credentials, model priority or vector order. */
 export function nativeConfig(input: any): any {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Profile must contain a YAML object.');
-  if (input.config_version !== undefined && input.config_version !== 1) throw new Error(`Unsupported profile config_version: ${input.config_version}`);
+  if (input.config_version !== undefined && ![0, 1, 2].includes(input.config_version)) throw new Error(`Unsupported profile config_version: ${input.config_version}`);
   const obj = structuredClone(input);
-  migrateCapabilityLabels(obj);
-  if (input.config_version === 1) {
+  if (obj.config_version === 2) {
+    validateVectors(obj);
     validateFields(obj, fieldSchema);
     return obj;
   }
-  for (const cs of [obj.complexity_service, obj.skill_router?.complexity_model]) {
-    if (!cs) continue;
-    if (!cs.base_url && cs.address) cs.base_url = `http://${cs.address}:${cs.port || 8094}`;
-    let local = false;
-    try { const url = new URL(cs.base_url); local = ['classifier', 'host.docker.internal'].includes(url.hostname) || ['localhost', '127.0.0.1'].includes(url.hostname) && url.port === '8094'; } catch {}
-    if (cs.auto_spawn === true || local || (!cs.base_url && cs.address === 'classifier')) {
-      throw new Error('This profile requires the retired local complexity server. Configure the classifier API base_url, protocol, model_name and credential before migration; files were not changed.');
+  const sr = obj.skill_router;
+  if (sr) {
+    const labels = sr.capability_model?.labels;
+    if (labels?.length && JSON.stringify(labels) !== JSON.stringify(dimensions) && JSON.stringify(labels) !== JSON.stringify([...dimensions].sort()))
+      throw new Error('Incompatible legacy checkpoint labels; files were not changed.');
+    sr.capabilities ??= [...dimensions].sort();
+    sr.knob ??= sr.math?.routing_preference ?? 0;
+    sr.systemone ??= { local_path: 'models/systemone' };
+    for (const key of ['capability_model', 'complexity_model', 'math', 'dynamic_effort', 'keyword_rules']) delete sr[key];
+    for (const model of sr.models ?? []) {
+      for (const key of ['cost_weight', 'latency_weight', 'reasoning_effort', 'reasoning_description']) delete model[key];
     }
-    if (cs.enabled === true && !cs.base_url) throw new Error('Configure the classifier API base_url before migration; files were not changed.');
-    for (const key of [...spawnFields, 'address', 'port']) delete cs[key];
   }
-  // Encode the old implicit caller-key policy once, during migration. Runtime
-  // authentication never infers its source from a provider name or domain.
+  delete obj.complexity_service;
+  delete obj.default_reasoning_effort;
+  for (const block of [obj.brick, obj.anthropic_passthrough]) {
+    if (block) for (const key of obsoleteRouting) delete block[key];
+  }
   if (input.config_version === undefined && !obj.codex_router?.enabled) {
+    // Preserve the legacy implicit caller-key policy once; runtime uses explicit sources.
     const regoloURL = (value: string) => { try { const host = new URL(value).hostname; return host === 'regolo.ai' || host.endsWith('.regolo.ai'); } catch { return false; } };
     for (const [name, model] of Object.entries(obj.model_config ?? {}) as [string, any][]) {
-      const skill = obj.skill_router?.models?.find((entry: any) => entry.model === name);
+      const skill = sr?.models?.find((entry: any) => entry.model === name);
       const legacy = regoloURL(skill?.base_url) || (model.preferred_endpoints ?? []).some((id: string) => {
         const endpoint = obj.provider_endpoints?.find((entry: any) => entry.name === id);
         return ['regolo', 'regoloai'].includes(id) || ['regolo', 'regoloai'].includes(endpoint?.provider_profile) || regoloURL(obj.provider_profiles?.[endpoint?.provider_profile]?.base_url);
@@ -76,28 +84,26 @@ export function nativeConfig(input: any): any {
       const implicitCaller = !model.access_key && !model.access_key_env && !model.api_key_env && !model.api_key_file && !skill?.api_key && !skill?.api_key_env && !skill?.api_key_file;
       if ((legacy || implicitCaller) && model.use_client_key === undefined) model.use_client_key = true;
     }
-    for (const cs of [obj.complexity_service, obj.skill_router?.complexity_model]) {
-      if (cs && cs.use_client_key === undefined && regoloURL(cs.base_url)) cs.use_client_key = true;
+  }
+  for (const endpoint of obj.provider_endpoints ?? []) {
+    if (!endpoint.api_key) continue;
+    for (const model of Object.values(obj.model_config ?? {}) as any[]) {
+      if (model.preferred_endpoints?.includes(endpoint.name) && !model.access_key && !model.access_key_env) model.access_key = endpoint.api_key;
     }
+    delete endpoint.api_key;
   }
   if (obj.observability) {
     delete obj.observability.tracing;
     if (obj.observability.metrics) delete obj.observability.metrics.windowed_metrics;
   }
   for (const key of retired) delete obj[key];
-  for (const endpoint of obj.provider_endpoints ?? []) delete endpoint.api_key;
   for (const provider of Object.values(obj.providers ?? {}) as any[]) delete provider.type;
   for (const family of Object.values(obj.reasoning_families ?? {}) as any[]) delete family.type;
-  if (obj.skill_router?.capability_model) {
-    delete obj.skill_router.capability_model.repo_id;
-    delete obj.skill_router.capability_model.use_cpu;
-  }
-  if (obj.skill_router?.math) delete obj.skill_router.math.prior_strength;
   for (const model of Object.values(obj.model_config ?? {}) as any[]) {
-    for (const key of ['loras', 'description', 'capabilities', 'quality_score', 'modality', 'image_gen_backend', 'param_size', 'api_format', 'pricing', 'reasoning_description']) delete model[key];
+    for (const key of ['loras', 'description', 'capabilities', 'quality_score', 'modality', 'image_gen_backend', 'param_size', 'api_format', 'pricing', 'reasoning_description', 'reasoning_effort']) delete model[key];
   }
-  for (const model of obj.skill_router?.models ?? []) delete model.reasoning_description;
-  obj.config_version = 1;
+  obj.config_version = 2;
+  validateVectors(obj);
   validateFields(obj, fieldSchema);
   return obj;
 }
@@ -110,15 +116,9 @@ export async function migrateNativeProfile(profile: string): Promise<void> {
   try { original = yaml.load(text); }
   catch { throw new Error('Invalid YAML in profile configuration; files were not changed.'); }
   const migrated = nativeConfig(original);
-  if (original.config_version !== 1) {
-    for (const name of ['docker-compose.yml', 'docker-compose.yaml']) {
-      try { await access(join(pp.profileDir, name)); console.warn('Legacy container configuration found. Old containers may still occupy the profile port; stop them explicitly before starting the native runtime. Migration does not stop or remove containers.'); break; }
-      catch (error: any) { if (error.code !== 'ENOENT') throw error; }
-    }
-  }
   if (JSON.stringify(original) === JSON.stringify(migrated)) return;
   const id = randomUUID();
-  const backup = join(pp.profileDir, 'backups', `native-v1-${id}`);
+  const backup = join(pp.profileDir, 'backups', `systemone-v2-${id}`);
   await mkdir(backup, { recursive: true, mode: 0o700 });
   await writeFile(join(backup, 'config.yaml'), text, { flag: 'wx', mode: 0o600 });
   try { await copyFile(pp.env, join(backup, '.env')); }

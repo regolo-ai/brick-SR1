@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { paths, root } from '../config/paths.js';
 import { MODES, type ClaudeMode } from '../claude/modes.js';
-import type { ComputeMode } from '../config/classifier.js';
 
 export interface CodexWiringState {
   wired: boolean;
@@ -19,10 +18,8 @@ export interface CodexWiringState {
   createdFile: boolean;
   /** Last mode selected via the profile editor. */
   mode?: ClaudeMode;
-  computeMode?: ComputeMode;
   contextAwareness?: boolean;
   modelRouting?: boolean;
-  thinkingRouting?: boolean;
   fixedModel?: string;
 }
 
@@ -42,9 +39,6 @@ export function readCodexWiring(): CodexWiringState | null {
       const mode = typeof parsed.mode === 'string' && (MODES as readonly string[]).includes(parsed.mode)
         ? (parsed.mode as ClaudeMode)
         : undefined;
-      const computeMode = parsed.computeMode === 'api'
-        ? parsed.computeMode
-        : undefined;
       return {
         wired: true,
         baseUrl: parsed.baseUrl,
@@ -55,10 +49,8 @@ export function readCodexWiring(): CodexWiringState | null {
         managedModelCatalog: typeof parsed.managedModelCatalog === 'string' ? parsed.managedModelCatalog : undefined,
         createdFile: parsed.createdFile === true,
         ...(mode ? { mode } : {}),
-        ...(computeMode ? { computeMode } : {}),
         ...(typeof parsed.contextAwareness === 'boolean' ? { contextAwareness: parsed.contextAwareness } : {}),
         ...(typeof parsed.modelRouting === 'boolean' ? { modelRouting: parsed.modelRouting } : {}),
-        ...(typeof parsed.thinkingRouting === 'boolean' ? { thinkingRouting: parsed.thinkingRouting } : {}),
         ...(typeof parsed.fixedModel === 'string' ? { fixedModel: parsed.fixedModel } : {}),
       };
     }

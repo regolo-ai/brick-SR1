@@ -1,14 +1,11 @@
 package proxy
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/pricing"
 )
 
 func TestNewServerInitializesPricingRefresher(t *testing.T) {
@@ -31,33 +28,9 @@ func TestNewServerInitializesPricingRefresher(t *testing.T) {
 	}
 }
 
-func TestStalePricingCacheCancelsServerContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		stopWhenPricingStale(ctx, cancel, pricing.NewRefresher(""), time.Millisecond)
-		close(done)
-	}()
-
-	select {
-	case <-ctx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("stale pricing cache did not cancel the server context")
-	}
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("pricing cache watcher did not stop after cancellation")
-	}
-}
-
-func TestGetBrickRouterFailureSkipsPricingTable(t *testing.T) {
+func TestGetBrickRouterRejectsDisabledRouting(t *testing.T) {
 	dir := t.TempDir()
-	// Empty config: brickrouting.New fails (skill router disabled) while
-	// the pricing refresher is initialized. New returns a typed-nil
-	// *Router, which satisfies the SetPricingTable assertion as a non-nil
-	// interface; touching it must not panic on the nil receiver.
+	// Disabled routing fails before loading the local model.
 	server := NewServer(&config.RouterConfig{}, filepath.Join(dir, "config.yaml"), 0, dir)
 	if server.pricingRefresher == nil {
 		t.Fatal("precondition: pricing refresher must be initialized")

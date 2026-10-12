@@ -70,27 +70,6 @@ func TestResolveModelCredential(t *testing.T) {
 	}
 }
 
-func TestComplexityTokenValidation(t *testing.T) {
-	t.Setenv("REGOLO_API_KEY", "server-key")
-	cfg := &ComplexityServiceConfig{BearerToken: "${REGOLO_API_KEY}"}
-	if got, err := cfg.ResolveBearerToken(); err != nil || got != "server-key" {
-		t.Fatalf("expected resolved classifier credential: %v", err)
-	}
-	for _, value := range []string{"", " \n", "${REGOLO_API_KEY}"} {
-		t.Setenv("REGOLO_API_KEY", value)
-		if _, err := cfg.ResolveBearerToken(); err == nil {
-			t.Fatal("expected invalid classifier environment to fail")
-		}
-		path := filepath.Join(t.TempDir(), "token")
-		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := (&ComplexityServiceConfig{BearerTokenFile: path}).ResolveBearerToken(); err == nil {
-			t.Fatal("expected invalid classifier token file to fail")
-		}
-	}
-}
-
 func TestCredentialSourceIsIndependentOfEndpointDomain(t *testing.T) {
 	for _, url := range []string{"https://api.regolo.ai/v1", "https://other.example/v1"} {
 		cfg := &RouterConfig{SkillRouter: SkillRouterConfig{Models: []SkillRouterModelConfig{{Model: "test", BaseURL: url, APIKey: "provider-key"}}}}
@@ -106,9 +85,6 @@ func TestCredentialSourceIsIndependentOfEndpointDomain(t *testing.T) {
 		if _, err = cfg.ResolveUpstreamAPIKey("test", ""); err == nil {
 			t.Fatal("caller mode fell back to provider credential")
 		}
-		cs := &ComplexityServiceConfig{BaseURL: url, BearerToken: "classifier-key"}
-		if cs.UsesClientKey() {
-			t.Fatal("domain selected caller authentication")
-		}
+
 	}
 }

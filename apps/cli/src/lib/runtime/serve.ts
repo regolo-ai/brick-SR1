@@ -10,6 +10,7 @@ import { readEnvValue,upsertEnvValues } from '../config/env-file.js';
 import { loadConfig } from '../config/load.js';
 import { paths,updateState } from '../config/paths.js';
 import { loadSkillTable } from '../skills/resolver.js';
+import { skillVectorInOrder } from '../skills/table.js';
 import { ok,warn } from '../ui/banners.js';
 import * as p from '../ui/prompts.js';
 import { runtimeStatus,startRuntime } from './process.js';
@@ -87,7 +88,7 @@ export async function syncSkillCards(profile: string): Promise<void> {
     const card = table.get(id);
     if (!card) continue;
     const old = previous.get(id) ?? {};
-    const entry = { ...old, model: id, skill_vector: [...card.skill_vector] };
+    const entry = { ...old, model: id, skill_vector: skillVectorInOrder(card, raw.skill_router.capabilities) };
     for (const key of ['source', 'confidence', 'provider', 'support', 'subset_hash', 'notes', 'sources', 'alias_of', 'capabilities', 'skill_source', 'skill_confidence', 'skill_card_metadata']) delete entry[key];
     applyModelTransport(entry, resolveModelTransport(id, raw.model_config, raw.provider_profiles, raw.provider_endpoints));
     models.push(entry);

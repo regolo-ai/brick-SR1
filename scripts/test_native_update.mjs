@@ -28,14 +28,13 @@ try {
   const port = listener.address().port;
   await new Promise(resolve => listener.close(resolve));
   await writeFile(join(profile, 'config.yaml'), JSON.stringify({
-    config_version: 1, server_port: port, brick: { enabled: true },
+    config_version: 2, server_port: port, brick: { enabled: true },
     default_model: 'test', model_config: { test: {} }, skill_router: {
       enabled: true,
       capabilities: ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'],
-      capability_model: { model_id: 'installed' },
+      systemone: { local_path: 'models/systemone' },
       models: [{ model: 'test', skill_vector: [.5, .5, .5, .5, .5, .5], base_url: 'http://127.0.0.1:1' }],
-      complexity_model: { base_url: 'http://127.0.0.1:1', timeout_seconds: 1 },
-    },
+      },
   }));
   process.env.BRICK_HOME = home;
   manager = await import(pathToFileURL(join(cli, 'dist/lib/runtime/process.js')));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CACHE_ROUTING_OPTIONS, addModelAtomic, activeModels, editThinkingGlobal, hasPendingEnvChanges, normalizeRoutingInvariants, removeModelAtomic } from '../config/editor.js';
+import { addModelAtomic, activeModels, editThinkingGlobal, hasPendingEnvChanges, normalizeRoutingInvariants, removeModelAtomic } from '../config/editor.js';
 import { catalog } from '../catalog/index.js';
 
 function config(): any {
@@ -9,10 +9,11 @@ function config(): any {
     decisions: [],
     skill_router: {
       enabled: true,
+      capabilities: ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'],
       active_models: ['glm5.2'],
       models: [{ model: 'glm5.2', skill_vector: [0.6, 0.6, 0.6, 0.6, 0.6, 0.6] }],
     },
-    anthropic_passthrough: { fixed_model: 'glm5.2', model_map: { easy: 'glm5.2' } },
+    anthropic_passthrough: { fixed_model: 'glm5.2' },
     brick: { enabled: true, fixed_model: 'glm5.2' },
   };
 }
@@ -23,11 +24,6 @@ describe('unified settings model invariants', () => {
 
     await expect(hasPendingEnvChanges('/profile/.env', { REGOLO_API_KEY: 'new-key' }, readValue)).resolves.toBe(true);
     await expect(hasPendingEnvChanges('/profile/.env', { REGOLO_API_KEY: 'old-key' }, readValue)).resolves.toBe(false);
-  });
-
-  it('offers only the three supported cache-aware routing modes with explanations', () => {
-    expect(CACHE_ROUTING_OPTIONS.map((option) => option.value)).toEqual(['off', 'sticky', 'smartsqueeze']);
-    expect(CACHE_ROUTING_OPTIONS.every((option) => /\(.+\)/.test(option.label))).toBe(true);
   });
 
   it('returns to the Thinking model submenu after editing one model', async () => {

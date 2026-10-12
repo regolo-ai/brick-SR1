@@ -11,7 +11,6 @@ import (
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/headers"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/multimodal"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
@@ -61,6 +60,9 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		responseModel = req.Model
 	}
 
+	if !cfg.Brick.ModelRoutingEnabled() && r.Header.Get("x-selected-model") == "" {
+		r.Header.Set("x-selected-model", cfg.Brick.EffectiveFixedModel(cfg.DefaultModel))
+	}
 	// Check for x-selected-model header → bypass routing, forward directly
 	if selectedModel := r.Header.Get("x-selected-model"); selectedModel != "" {
 		// Validate that the model exists in the backend configuration
@@ -86,11 +88,11 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		result := s.buildForwardResultForModel(rewrittenBody, cfg, selectedModel, req.Stream, clientKey)
 		result.AcceptedAt = acceptedAt
-		result.RoutingSource, result.RoutingMode = "native", cfg.Brick.EffectiveRoutingMode()
+		result.RoutingSource = "native"
 		if writeDirectRoutingResult(w, result) {
 			return
 		}
-		metrics.BrickCCRequests.WithLabelValues("native", selectedModel).Inc()
+		metrics.BrickRequests.WithLabelValues("native", selectedModel).Inc()
 		w.Header().Set(headers.VSRSelectedModel, selectedModel)
 		s.forwardToBackend(w, r, result, responseModel)
 		return
@@ -138,39 +140,34 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			if strings.TrimSpace(routingText) == "" {
 				routingText = multimodalRoutingPlaceholder(modality)
 			}
-			allow := intersectAllow(plan.allow, brickFixedModelAllow(cfg))
+			allow := plan.allow
 			routingStarted := time.Now()
-			route, rerr := brickRouter.RouteWithCandidates(r.Context(), routingText, allow)
+			route, rerr := brickRouter.RouteWithOptions(r.Context(), routingText, requestRoutingOptions(body, allow))
 			if rerr != nil {
-				// Eligible set unexpectedly empty/failed: degrade gracefully to
-				// the OCR/STT preprocessing path rather than erroring the request.
-				logging.Warnf("Brick multimodal passthrough routing failed, falling back to preprocessing: %v", rerr)
+				// Inference errors never reconstruct a different routing signal.
+				writeError(w, http.StatusBadGateway, fmt.Sprintf("SystemOne routing failed: %v", rerr))
+				return
 			} else {
 				forwardBody := rewriteModelInBody(body, route.Model)
-				effortStr := ""
-				if cfg.SkillRouter.DynamicEffort {
-					level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
-					forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
-				} else {
-					forwardBody = applyBrickReasoning(forwardBody, cfg, route.Model, route.ComplexityLabel)
-				}
+				forwardBody = adaptClientReasoning(forwardBody, cfg, route.Model)
 				forwardBody = adaptForRegoloAPI(forwardBody)
+				effortStr := requestEffort(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
 				latency := time.Since(routingStarted).Milliseconds()
 				result.AcceptedAt, result.Route, result.RoutingLatencyMS = acceptedAt, route, &latency
-				result.RoutingSource, result.RoutingMode = "routed", cfg.Brick.EffectiveRoutingMode()
+				result.RoutingSource = "routed"
 				result.ReasoningMode = effortStr
 				if writeDirectRoutingResult(w, result) {
 					return
 				}
-				recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
+				metrics.BrickRequests.WithLabelValues("routed", route.Model).Inc()
 				w.Header().Set(headers.VSRSelectedModel, route.Model)
 				if effortStr != "" {
 					w.Header().Set("x-brick-effort", effortStr)
 				}
 				w.Header().Set("x-brick-route-reason", "multimodal_passthrough")
 				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s image=%v audio=%v",
-					route.Model, route.Reason, modality.HasImage, modality.HasAudio)
+					route.Model, "systemone", modality.HasImage, modality.HasAudio)
 				s.forwardToBackend(w, r, result, responseModel)
 				return
 			}
@@ -220,7 +217,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			Model:       preprocessResult.DirectModel,
 		}
 		result.AcceptedAt = acceptedAt
-		result.RoutingSource, result.RoutingMode = "native", cfg.Brick.EffectiveRoutingMode()
+		result.RoutingSource = "native"
 		w.Header().Set(headers.VSRSelectedModel, preprocessResult.DirectModel)
 		s.forwardToBackend(w, r, result, responseModel)
 		return
@@ -236,7 +233,7 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 
 	routingText := extractOpenAIRoutingText(preprocessResult.RewrittenBody, cfg)
 	routingStarted := time.Now()
-	route, err := brickRouter.RouteWithCandidates(r.Context(), routingText, brickFixedModelAllow(cfg))
+	route, err := brickRouter.RouteWithOptions(r.Context(), routingText, requestRoutingOptions(body, nil))
 	if err != nil {
 		logging.Errorf("Brick2 routing error: %v", err)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
@@ -244,47 +241,25 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	selectedModel := route.Model
-	under := underCapacityForModel(route, selectedModel)
-	stickyKey := ""
-	switch cfg.Brick.EffectiveRoutingMode() {
-	case config.RoutingModeSticky, config.RoutingModeSmartSqueeze:
-		if cfg.Brick.ModelRoutingEnabled() {
-			stickyKey, selectedModel, under, _ = s.applyBrickStickyRouting(&cfg.Brick, preprocessResult.RewrittenBody, route, selectedModel, under)
-		}
-	case config.RoutingModeOrchestrator:
-		logShadowOrchestrator(len(preprocessResult.RewrittenBody), route, selectedModel)
-	}
-
-	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, selectedModel)
-	effortStr := ""
-	if cfg.SkillRouter.DynamicEffort {
-		level := autonomousEffortLevel(route.TauQuery, under, routingPreferenceOf(cfg))
-		forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, selectedModel, level)
-	} else {
-		forwardBody = applyBrickReasoning(forwardBody, cfg, selectedModel, route.ComplexityLabel)
-	}
+	forwardBody := adaptClientReasoning(rewriteModelInBody(preprocessResult.RewrittenBody, selectedModel), cfg, selectedModel)
+	effortStr := requestEffort(forwardBody)
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
 	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, selectedModel, req.Stream, apiKey)
-	regoloResult.StickyKey = stickyKey
 	latency := time.Since(routingStarted).Milliseconds()
 	regoloResult.AcceptedAt, regoloResult.Route, regoloResult.RoutingLatencyMS = acceptedAt, route, &latency
-	regoloResult.RoutingSource, regoloResult.RoutingMode, regoloResult.ReasoningMode = "routed", cfg.Brick.EffectiveRoutingMode(), effortStr
+	regoloResult.RoutingSource, regoloResult.ReasoningMode = "routed", effortStr
 	if writeDirectRoutingResult(w, regoloResult) {
 		return
 	}
-	recordBrickOpenAIRoute(cfg, route, selectedModel, effortStr)
+	metrics.BrickRequests.WithLabelValues("routed", selectedModel).Inc()
 
 	w.Header().Set(headers.VSRSelectedModel, selectedModel)
-	w.Header().Set("x-brick-route-reason", route.Reason)
+	w.Header().Set("x-brick-route-reason", "systemone")
 	if effortStr != "" {
 		w.Header().Set("x-brick-effort", effortStr)
 	}
-	if route.MatchedKeyword != "" {
-		w.Header().Set("x-brick-keyword-rule", route.MatchedKeyword)
-	}
-	logging.Infof("Brick2: routed to model=%s reason=%s complexity=%s confidence=%.3f tau=%.3f effort=%s",
-		selectedModel, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, effortStr)
+	logging.Infof("SystemOne selected model=%s knob=%.2f", selectedModel, route.Knob)
 
 	s.forwardToBackend(w, r, regoloResult, responseModel)
 }
@@ -338,61 +313,8 @@ func multimodalRoutingPlaceholder(m multimodal.Modality) string {
 	}
 }
 
-func brickFixedModelAllow(cfg *config.RouterConfig) map[string]bool {
-	if cfg == nil || cfg.Brick.ModelRoutingEnabled() {
-		return nil
-	}
-	model := cfg.Brick.EffectiveFixedModel(cfg.BackendModels.DefaultModel)
-	return map[string]bool{model: true}
-}
-
-func intersectAllow(a, b map[string]bool) map[string]bool {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	out := make(map[string]bool)
-	for model, ok := range a {
-		if ok && b[model] {
-			out[model] = true
-		}
-	}
-	return out
-}
-
-func recordBrickOpenAIRoute(cfg *config.RouterConfig, route *brickrouting.Result, selectedModel, effortStr string) {
-	if cfg == nil || route == nil || selectedModel == "" {
-		return
-	}
-	label := route.ComplexityLabel
-	if label == "" {
-		label = "medium"
-	}
-	metrics.BrickCCRequests.WithLabelValues(label, selectedModel).Inc()
-	if cfg.SkillRouter.DynamicEffort && effortStr != "" {
-		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
-		metrics.BrickCCRouting.WithLabelValues(label, effortStr, selectedModel).Inc()
-	}
-}
-
 func (s *Server) getBrickRouter(cfg *config.RouterConfig) (brickModelRouter, error) {
-	s.brickRouterOnce.Do(func() {
-		s.brickRouter, s.brickRouterErr = brickrouting.New(cfg)
-	})
-	if s.brickRouterErr != nil {
-		// New returns a typed-nil *Router on failure, which is a non-nil
-		// interface: the type assertion below would succeed and the
-		// SetPricingTable call would panic on the nil receiver. Never
-		// touch the router when construction failed.
-		return s.brickRouter, s.brickRouterErr
-	}
-	if router, ok := s.brickRouter.(interface {
-		SetPricingTable(*economics.PricingTable)
-	}); ok && s.pricingRefresher != nil {
-		router.SetPricingTable(s.pricingRefresher.Table())
-	}
+	s.brickRouterOnce.Do(func() { s.brickRouter, s.brickRouterErr = brickrouting.New(cfg) })
 	return s.brickRouter, s.brickRouterErr
 }
 
