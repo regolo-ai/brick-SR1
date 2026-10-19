@@ -1,6 +1,6 @@
 {
-  "repository": "massaindustries/brick-systemone-large-v2",
-  "revision": "f6375c086ab5901631f80f3be442a41fb70b3386",
+  "repository": "regolo/brick-sysone-V1",
+  "revision": "9263a397a366ee22921214ddeebab1f5e4e8facd",
   "labels": [
     "instruction_following",
     "coding",

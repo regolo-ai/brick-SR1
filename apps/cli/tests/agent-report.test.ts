@@ -30,7 +30,7 @@ const DIAG = {
   enabled: true,
   ready: true,
   device: 'cpu',
-  model: 'massaindustries/brick-systemone-large-v2', engine: 'pytorch-transformers',
+  model: 'regolo/brick-sysone-V1', engine: 'pytorch-transformers',
   latency_ms: 12,
 };
 

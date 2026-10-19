@@ -21,8 +21,9 @@ Without `BRICK_SYSTEMONE_PYTHON`, the runtime uses `python3` on PATH. An optiona
 Install FlashAttention separately if desired on a supported CUDA system.
 The installer checks actual model loading; missing Python dependencies fail
 explicitly. The worker never downloads assets or reads Hub credentials.
-Checkpoint downloads remain the installer's responsibility, using `HF_TOKEN`
-or checksum-verified `BRICK_MODEL_ASSETS`.
+Checkpoint downloads remain the installer's responsibility. The pinned checkpoint
+is public, so downloads work anonymously; an optional `HF_TOKEN` is forwarded when
+present, and checksum-verified `BRICK_MODEL_ASSETS` supports offline installs.
 
 Go embeds the worker source in the runtime binary. Requests are serialized to
 keep one model resident. Worker startup, protocol, timeout and inference errors

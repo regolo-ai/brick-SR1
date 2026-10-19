@@ -26,9 +26,9 @@ uv run --frozen python packages/datasets/scripts/download_dataset_a.py --out ./d
 uv run --frozen python packages/datasets/scripts/download_models.py --out ~/.cache/brick/models
 ```
 
-The model command installs the pinned SystemOne v2 assets with checksum
-verification. Set `HF_TOKEN` for private Hub access. npm users receive the same
-verified assets during installation. Inference uses local PyTorch/Transformers;
+The model command installs the pinned public SystemOne v2 assets with checksum
+verification. `HF_TOKEN` is optional. npm users receive the same verified assets
+during installation. Inference uses local PyTorch/Transformers;
 provider credentials are needed only for generation and judging.
 
 ## Run inference

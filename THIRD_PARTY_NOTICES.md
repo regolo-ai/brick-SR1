@@ -34,10 +34,11 @@ SOFTWARE.
 
 ## SystemOne model assets
 
-The installer retrieves `massaindustries/brick-systemone-large-v2` at revision
-`f6375c086ab5901631f80f3be442a41fb70b3386`, verifies the asset checksums, and stores
-weights outside the source repository. Model access and licensing follow its
-Hub metadata and upstream model terms. The npm gateway contains no model weights.
+The installer retrieves the public `regolo/brick-sysone-V1` checkpoint at
+revision `9263a397a366ee22921214ddeebab1f5e4e8facd`, verifies the asset checksums,
+and stores weights outside the source repository. The checkpoint is Apache-2.0
+licensed and derived from `answerdotai/ModernBERT-large`. The npm gateway contains
+no model weights.
 
 ## Runtime dependencies
 

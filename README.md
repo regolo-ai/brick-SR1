@@ -16,8 +16,9 @@ source and communicates with it over pipes.
 
 ## Routing
 
-The pinned checkpoint is `massaindustries/brick-systemone-large-v2`, revision
-`f6375c086ab5901631f80f3be442a41fb70b3386`. Its output order is:
+The pinned checkpoint is `regolo/brick-sysone-V1`, revision
+`9263a397a366ee22921214ddeebab1f5e4e8facd`. It is public and Apache-2.0
+licensed. Its output order is:
 
 1. `instruction_following`
 2. `coding`
@@ -71,10 +72,11 @@ export BRICK_SYSTEMONE_PYTHON=/path/to/systemone-env/bin/python
 ```
 
 Without that variable, the runtime uses `python3` on PATH. The installer downloads
-private checkpoint assets using `HF_TOKEN`, verifies SHA-256 checksums, and checks
-real inference. For an offline installation, set `BRICK_MODEL_ASSETS` to a directory
-containing the pinned assets. The runtime also verifies local assets against the
-pinned manifest. Hub credentials are not written into completion markers or runtime
+the public checkpoint assets anonymously, verifies SHA-256 checksums, and checks
+real inference. `HF_TOKEN` is used only when present, for Hub rate limits. For an
+offline installation, set `BRICK_MODEL_ASSETS` to a directory containing the
+pinned assets. The runtime also verifies local assets against the pinned
+manifest. Hub credentials are not written into completion markers or runtime
 environment snapshots. Weights stay outside the source repository.
 
 ```bash

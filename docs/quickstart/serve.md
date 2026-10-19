@@ -13,18 +13,18 @@ Before installation, prepare the Python environment and export its interpreter:
 python3 -m venv /path/to/systemone-env
 /path/to/systemone-env/bin/python -m pip install -r apps/router/systemone/requirements.txt
 export BRICK_SYSTEMONE_PYTHON=/path/to/systemone-env/bin/python
-export HF_TOKEN=your_hugging_face_token
 ```
 
 Keep `BRICK_SYSTEMONE_PYTHON` set when installing and starting Brick. Without it,
-the runtime uses `python3` on PATH. The installer uses `HF_TOKEN` for private
-checkpoint access without writing the token to its completion marker. To install
-without downloading, set `BRICK_MODEL_ASSETS` to a directory containing the exact
-pinned assets; checksums are still verified.
+the runtime uses `python3` on PATH. The pinned checkpoint is public, so no Hub
+credentials are required; an optional `HF_TOKEN` is forwarded when present. The
+token is never written to the completion marker. To install without downloading,
+set `BRICK_MODEL_ASSETS` to a directory containing the exact pinned assets;
+checksums are still verified.
 
 ```bash
-npm install --global ./regoloai-brick-runtime-linux-x64-3.1.1.tgz \
-  ./regoloai-brick-3.1.1.tgz
+npm install --global ./regoloai-brick-runtime-linux-x64-4.0.0.tgz \
+  ./regoloai-brick-4.0.0.tgz
 brick profile create work
 brick profile edit work
 brick start work

@@ -81,7 +81,7 @@ test('an incompatible executable fails before downloading any assets', () => fix
   assert.equal(downloads, 0);
 }));
 
-test('private checkpoint authentication is sent without persisting the token', () => fixture(async ({ installer, content }) => {
+test('optional checkpoint authentication is sent without persisting the token', () => fixture(async ({ installer, content }) => {
   const previous = process.env.HF_TOKEN;
   process.env.HF_TOKEN = 'test-private-token';
   try {
