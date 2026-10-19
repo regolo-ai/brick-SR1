@@ -1,9 +1,9 @@
 # `@regoloai/brick`
 
-The Brick 3.0 command-line client manages explicit router profiles.
+The Brick 4.0 command-line client manages explicit router profiles.
 
 ```bash
-npm install --global @regoloai/brick@3.1.1
+npm install --global @regoloai/brick@4.0.0
 
 brick profile create work
 brick profile edit work
