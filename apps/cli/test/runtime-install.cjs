@@ -4,14 +4,19 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
 async function fixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'brick-installer-'));
   const originalFetch = global.fetch;
+  const previousPython = process.env.BRICK_SYSTEMONE_PYTHON;
+  process.env.BRICK_SYSTEMONE_PYTHON = path.join(root, 'fake-python');
   try {
     fs.mkdirSync(path.join(root, 'scripts'));
     fs.mkdirSync(path.join(root, 'assets'));
     fs.copyFileSync(path.join(__dirname, '../scripts/runtime-install.cjs'), path.join(root, 'scripts/runtime-install.cjs'));
+    fs.copyFileSync(path.join(__dirname, '../scripts/python-env.cjs'), path.join(root, 'scripts/python-env.cjs'));
+    fs.writeFileSync(path.join(root, 'fake-python'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1.0.0' }));
     const content = Buffer.from('test-asset');
     fs.writeFileSync(path.join(root, 'assets/systemone.json'), JSON.stringify({ repository: 'test/model', revision: 'pinned', files: { 'config.json': { bytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') } } }));
@@ -23,6 +28,8 @@ async function fixture(run) {
     await run({ installer, root, content, runtime });
   } finally {
     global.fetch = originalFetch;
+    if (previousPython === undefined) delete process.env.BRICK_SYSTEMONE_PYTHON;
+    else process.env.BRICK_SYSTEMONE_PYTHON = previousPython;
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
@@ -54,6 +61,17 @@ for (const failure of ['checksum', 'http', 'interrupted', 'permissions', 'disk-f
     assert.throws(() => installer.installedRuntime(), /incomplete/);
   }));
 }
+
+test('--python-only prints the interpreter and leaves model assets untouched', () => fixture(async ({ root }) => {
+  const fakePython = path.join(root, 'fake-python');
+  const probe = spawnSync(process.execPath, [path.join(root, 'scripts/runtime-install.cjs'), '--python-only'], {
+    encoding: 'utf8',
+    env: { ...process.env, BRICK_SYSTEMONE_PYTHON: fakePython },
+  });
+  assert.equal(probe.status, 0, probe.stderr);
+  assert.equal(probe.stdout, `${fakePython}\n`);
+  assert.equal(fs.existsSync(path.join(root, 'assets/models')), false);
+}));
 
 test('mismatched runtime versions are fatal', () => fixture(async ({ installer, runtime }) => {
   fs.writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({ version: '2.0.0' }));

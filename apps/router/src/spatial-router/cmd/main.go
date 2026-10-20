@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
@@ -34,6 +35,8 @@ func main() {
 		port         = flag.Int("port", 8000, "Port to listen on for HTTP proxy")
 		metricsPort  = flag.Int("metrics-port", 9190, "Port for Prometheus metrics")
 		validateOnly = flag.Bool("validate-config", false, "Validate configuration without starting or contacting providers")
+		strictConfig = flag.Bool("strict-config", false, "Reject any deprecated 3.x configuration field instead of warning")
+		migratePath  = flag.String("migrate-config", "", "Write a normalized configuration to this path (or - for stdout) and exit")
 		modelCheck   = flag.String("check-model", "", "Load local model assets and verify inference, then exit")
 		modelDir     = flag.String("model-dir", "", "Absolute directory of installed model assets")
 		instanceID   = flag.String("instance-id", "", "Runtime instance identifier")
@@ -77,9 +80,30 @@ func main() {
 		logging.Fatalf("Config file not found: %s", *configPath)
 	}
 
-	cfg, err := config.Parse(*configPath)
+	cfg, warnings, err := config.ParseWithOptions(*configPath, config.ParseOptions{Strict: *strictConfig})
+	for _, warning := range warnings {
+		logging.Warnf("config: %s", warning)
+	}
 	if err != nil {
 		logging.Fatalf("Failed to load config: %v", err)
+	}
+	if *migratePath != "" {
+		migrated, merr := yaml.Marshal(cfg)
+		if merr != nil {
+			logging.Fatalf("Failed to render migrated config: %v", merr)
+		}
+		if *migratePath == "-" {
+			_, merr = os.Stdout.Write(migrated)
+		} else {
+			merr = os.WriteFile(*migratePath, migrated, 0o600)
+		}
+		if merr != nil {
+			logging.Fatalf("Failed to write migrated config: %v", merr)
+		}
+		if *migratePath != "-" {
+			logging.Infof("Wrote migrated config to %s", *migratePath)
+		}
+		return
 	}
 	cfg.BrickExtension.ResolveProviderKeys()
 	if err := cfg.Brick.Validate(); err != nil {
@@ -97,6 +121,9 @@ func main() {
 			logging.Fatalf("model-dir must be absolute")
 		}
 		cfg.SkillRouter.SystemOne.LocalPath = *modelDir
+	}
+	if cfg.SkillRouter.Enabled && cfg.SkillRouter.SystemOne.LocalPath == "" {
+		logging.Fatalf("skill_router.systemone.local_path is required unless --model-dir is provided")
 	}
 	if *validateOnly {
 		return

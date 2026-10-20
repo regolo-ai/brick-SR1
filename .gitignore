@@ -216,6 +216,7 @@ wandb/
 
 # Python build / venv (workspace)
 **/.venv/
+**/.venv-*/
 **/__pycache__/
 **/*.egg-info/
 **/*.pyc

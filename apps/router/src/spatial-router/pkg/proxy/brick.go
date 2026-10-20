@@ -142,14 +142,21 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			allow := plan.allow
 			routingStarted := time.Now()
-			route, rerr := brickRouter.RouteWithOptions(r.Context(), routingText, requestRoutingOptions(body, allow))
+			options, oerr := requestRoutingOptions(r, body, allow)
+			if oerr != nil {
+				writeError(w, http.StatusBadRequest, oerr.Error())
+				return
+			}
+			options.KeywordText = keywordText(extractOpenAILastUserText(body))
+			route, rerr := brickRouter.RouteWithOptions(r.Context(), routingText, options)
 			if rerr != nil {
 				// Inference errors never reconstruct a different routing signal.
-				writeError(w, http.StatusBadGateway, fmt.Sprintf("SystemOne routing failed: %v", rerr))
+				writeRoutingError(w, rerr, "SystemOne routing failed")
 				return
 			} else {
 				forwardBody := rewriteModelInBody(body, route.Model)
 				forwardBody = adaptClientReasoning(forwardBody, cfg, route.Model)
+				forwardBody = applyKnobEffort(forwardBody, cfg, route.Model, route.Knob)
 				forwardBody = adaptForRegoloAPI(forwardBody)
 				effortStr := requestEffort(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
@@ -166,8 +173,8 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("x-brick-effort", effortStr)
 				}
 				w.Header().Set("x-brick-route-reason", "multimodal_passthrough")
-				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s image=%v audio=%v",
-					route.Model, "systemone", modality.HasImage, modality.HasAudio)
+				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s rule=%s image=%v audio=%v",
+					route.Model, route.Reason, route.MatchedRule, modality.HasImage, modality.HasAudio)
 				s.forwardToBackend(w, r, result, responseModel)
 				return
 			}
@@ -233,15 +240,22 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 
 	routingText := extractOpenAIRoutingText(preprocessResult.RewrittenBody, cfg)
 	routingStarted := time.Now()
-	route, err := brickRouter.RouteWithOptions(r.Context(), routingText, requestRoutingOptions(body, nil))
+	options, err := requestRoutingOptions(r, body, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	options.KeywordText = keywordText(extractOpenAILastUserText(body))
+	route, err := brickRouter.RouteWithOptions(r.Context(), routingText, options)
 	if err != nil {
 		logging.Errorf("Brick2 routing error: %v", err)
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
+		writeRoutingError(w, err, "SystemOne routing failed")
 		return
 	}
 
 	selectedModel := route.Model
 	forwardBody := adaptClientReasoning(rewriteModelInBody(preprocessResult.RewrittenBody, selectedModel), cfg, selectedModel)
+	forwardBody = applyKnobEffort(forwardBody, cfg, selectedModel, route.Knob)
 	effortStr := requestEffort(forwardBody)
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
@@ -255,11 +269,11 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	metrics.BrickRequests.WithLabelValues("routed", selectedModel).Inc()
 
 	w.Header().Set(headers.VSRSelectedModel, selectedModel)
-	w.Header().Set("x-brick-route-reason", "systemone")
+	w.Header().Set("x-brick-route-reason", routeReasonHeader(route))
 	if effortStr != "" {
 		w.Header().Set("x-brick-effort", effortStr)
 	}
-	logging.Infof("SystemOne selected model=%s knob=%.2f", selectedModel, route.Knob)
+	logging.Infof("Brick2 routed model=%s knob=%.2f reason=%s rule=%s", selectedModel, route.Knob, route.Reason, route.MatchedRule)
 
 	s.forwardToBackend(w, r, regoloResult, responseModel)
 }
@@ -313,9 +327,40 @@ func multimodalRoutingPlaceholder(m multimodal.Modality) string {
 	}
 }
 
+// getBrickRouter lazily builds the router and retries after failures with
+// exponential backoff instead of caching the first error forever. A worker that
+// died mid-run is reloaded by the router's own classify closure; this path only
+// covers construction/initialization failures.
 func (s *Server) getBrickRouter(cfg *config.RouterConfig) (brickModelRouter, error) {
-	s.brickRouterOnce.Do(func() { s.brickRouter, s.brickRouterErr = brickrouting.New(cfg) })
-	return s.brickRouter, s.brickRouterErr
+	s.routerMu.Lock()
+	defer s.routerMu.Unlock()
+	if s.brickRouter != nil {
+		return s.brickRouter, nil
+	}
+	if s.brickRouterErr != nil && time.Now().Before(s.brickRouterRetryAt) {
+		return nil, s.brickRouterErr
+	}
+	router, err := brickrouting.New(cfg)
+	if err != nil {
+		backoff := s.brickRouterBackoff
+		switch {
+		case backoff <= 0:
+			backoff = time.Second
+		case backoff < 30*time.Second:
+			backoff *= 2
+		}
+		if backoff > 30*time.Second {
+			backoff = 30 * time.Second
+		}
+		s.brickRouterErr = err
+		s.brickRouterBackoff = backoff
+		s.brickRouterRetryAt = time.Now().Add(backoff)
+		return nil, err
+	}
+	s.brickRouter = router
+	s.brickRouterErr = nil
+	s.brickRouterBackoff = 0
+	return router, nil
 }
 
 func extractOpenAIRoutingText(body []byte, cfg *config.RouterConfig) string {
@@ -333,6 +378,18 @@ func extractOpenAIText(body []byte) string {
 		return ""
 	}
 	return multimodal.ExtractText(raw.Messages)
+}
+
+// extractOpenAILastUserText returns only the latest user message for strict
+// keyword rules; system prompts and earlier turns never force a model.
+func extractOpenAILastUserText(body []byte) string {
+	var raw struct {
+		Messages []interface{} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+	return multimodal.ExtractLastUserText(raw.Messages)
 }
 
 type openAIMessageForRouting struct {

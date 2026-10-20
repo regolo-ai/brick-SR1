@@ -26,25 +26,40 @@ def main():
     path = sys.argv[1]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
-    attention = "sdpa"
-    if device == "cuda":
-        try:
-            import flash_attn  # noqa: F401
 
-            attention = "flash_attention_2"
-        except ImportError:
-            pass
-    tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
-    model = (
-        AutoModelForSequenceClassification.from_pretrained(
-            path,
-            dtype=dtype,
-            attn_implementation=attention,
-            local_files_only=True,
+    def load(backend):
+        return (
+            AutoModelForSequenceClassification.from_pretrained(
+                path,
+                dtype=dtype,
+                attn_implementation=backend,
+                local_files_only=True,
+            )
+            .to(device)
+            .eval()
         )
-        .to(device)
-        .eval()
-    )
+
+    requested = os.environ.get("BRICK_SYSTEMONE_ATTENTION", "auto").strip().lower()
+    if requested not in {"auto", "sdpa", "flash_attention_2"}:
+        requested = "auto"
+    if requested == "auto":
+        if device == "cuda":
+            try:
+                import flash_attn  # noqa: F401
+
+                model = load("flash_attention_2")
+                attention = "flash_attention_2"
+            except Exception as error:  # noqa: BLE001 - fall back to a safe backend
+                print(f"flash_attention_2 unavailable, falling back to sdpa: {error}", file=sys.stderr, flush=True)
+                model = load("sdpa")
+                attention = "sdpa"
+        else:
+            model = load("sdpa")
+            attention = "sdpa"
+    else:
+        model = load(requested)
+        attention = requested
+    tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
     labels = [model.config.id2label.get(i) for i in range(model.config.num_labels)]
     if labels != LABELS:
         raise ValueError("checkpoint labels differ from SystemOne")

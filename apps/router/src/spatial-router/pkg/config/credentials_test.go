@@ -36,8 +36,6 @@ func TestParseCredentialValidation(t *testing.T) {
 		"model_config:\n  model:\n    access_key: secret-literal\n    access_key_env: REGOLO_API_KEY\n",
 		"model_config:\n  model:\n    access_key: prefix-${EMPTY_KEY}\n",
 		"skill_router:\n  models:\n    - model: model\n      api_key_env: EMPTY_KEY\n",
-		"complexity_service:\n  enabled: true\n  bearer_token: ${EMPTY_KEY}\n",
-		"skill_router:\n  complexity_model:\n    bearer_token: ${EMPTY_KEY}\n",
 	} {
 		path := filepath.Join(t.TempDir(), "config.yaml")
 		if err := os.WriteFile(path, []byte(fragment), 0o600); err != nil {

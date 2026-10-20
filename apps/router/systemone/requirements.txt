@@ -1,3 +1,6 @@
-# Install the PyTorch build appropriate for CPU or your CUDA environment.
-torch>=2.2
-transformers==5.16.1
+torch==2.11.0
+transformers==5.20.2
+safetensors==0.8.0
+tokenizers==0.23.3
+numpy==1.26.4
+huggingface-hub==2.2.0

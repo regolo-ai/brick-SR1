@@ -10,6 +10,7 @@ import { migrateNativeProfile } from '../config/native-migration.js';
 import { paths, validateProfileName } from '../config/paths.js';
 const require = createRequire(import.meta.url);
 const installer = require('../../../scripts/runtime-install.cjs');
+const pythonEnv = require('../../../scripts/python-env.cjs');
 export interface RuntimeState {
   pid: number; birth: string; executableDevice: number; executableInode: number; instance: string; profile: string; version: string;
   binary: string; models: string; config: string; digest: string; port: number; envFile: string;
@@ -163,6 +164,10 @@ export async function startRuntime(profile: string, port: number, restart = fals
     await migrateNativeProfile(profile);
     await ensureProfilePricing(profile);
     const env = await environment(profile);
+    if (!env.BRICK_SYSTEMONE_PYTHON) {
+      try { env.BRICK_SYSTEMONE_PYTHON = pythonEnv.ensurePython((message: string) => console.log(`[brick] ${message}`)); }
+      catch (error) { void error; }
+    }
     const content = await readFile(paths(profile).config);
     const digest = createHash('sha256').update(content).digest('hex');
     const snapshot = resolve(paths(profile).runtime, `config-${digest}.yaml`);

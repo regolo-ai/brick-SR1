@@ -31,6 +31,8 @@
     "/assets/systemone.json",
     "/oclif.manifest.json",
     "/scripts/runtime-install.cjs",
+    "/scripts/python-env.cjs",
+    "/assets/requirements-systemone.txt",
     "/assets/config-schema.json",
     "/assets/pricing.yaml",
     "/runtimes",
@@ -60,7 +62,7 @@
   "scripts": {
     "build": "node scripts/clean-dist.cjs && tsc -b --force",
     "dev": "node --loader ts-node/esm bin/dev.js",
-    "test": "vitest run && node --test test/runtime-install.cjs",
+    "test": "vitest run && node --test test/",
     "lint": "tsc --noEmit",
     "prepack": "npm run build && oclif manifest",
     "postinstall": "node scripts/runtime-install.cjs"

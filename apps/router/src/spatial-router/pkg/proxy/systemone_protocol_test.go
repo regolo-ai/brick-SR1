@@ -60,7 +60,6 @@ func TestSystemOneProtocolsPreserveEffortAndFailWithoutFallback(t *testing.T) {
 				cfg.DefaultModel = model
 				router := &optionsTestRouter{model: model}
 				server := &Server{cfg: cfg, brickRouter: router}
-				server.brickRouterOnce.Do(func() {})
 				body := map[string]any{"model": "brick", "messages": []map[string]string{{"role": "user", "content": "same query"}}}
 				path := "/v1/chat/completions"
 				handler := server.handleBrickRequest
@@ -152,7 +151,6 @@ func TestFixedModelsBypassUnavailableSystemOneAcrossProtocols(t *testing.T) {
 			cfg.ModelConfig = map[string]config.ModelParams{model: {UseClientKey: true, ContextWindowSize: 32000, PreferredEndpoints: []string{"test"}}}
 			router := &optionsTestRouter{model: model, fail: true}
 			server := &Server{cfg: cfg, brickRouter: router}
-			server.brickRouterOnce.Do(func() {})
 			path := "/v1/chat/completions"
 			body := `{"model":"brick","reasoning_effort":"high","messages":[{"role":"user","content":"query"}]}`
 			handler := server.handleBrickRequest

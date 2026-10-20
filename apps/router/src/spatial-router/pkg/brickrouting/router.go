@@ -8,6 +8,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
@@ -20,15 +21,37 @@ var defaultCapabilities = []string{
 
 type Router struct {
 	skillCfg config.SkillRouterConfig
-	classify func(string) ([]float64, error)
+	classify func(context.Context, string) ([]float64, error)
+
+	keywordsOnce sync.Once
+	keywords     []compiledKeywordRule
 }
+
+// Routing sources reported in Result.Reason.
+const (
+	ReasonKeyword    = "keyword"
+	ReasonClassifier = "classifier"
+)
 
 type Result struct {
 	Model        string          `json:"model"`
-	QueryVector  []float64       `json:"query_vector"`
-	ScaledVector []float64       `json:"scaled_vector"`
+	QueryVector  []float64       `json:"query_vector,omitempty"`
+	ScaledVector []float64       `json:"scaled_vector,omitempty"`
 	Knob         float64         `json:"knob"`
-	Distances    []ModelDistance `json:"distances"`
+	Distances    []ModelDistance `json:"distances,omitempty"`
+	Reason       string          `json:"reason,omitempty"`
+	MatchedRule  string          `json:"matched_rule,omitempty"`
+}
+
+// KeywordRuleIneligibleError reports that a strict rule matched but its model
+// cannot serve this request, for example because it cannot accept images.
+type KeywordRuleIneligibleError struct {
+	Rule  string
+	Model string
+}
+
+func (e *KeywordRuleIneligibleError) Error() string {
+	return fmt.Sprintf("keyword rule %q matched but model %q is not eligible for this request", e.Rule, e.Model)
 }
 
 type ModelDistance struct {
@@ -40,6 +63,12 @@ type ModelDistance struct {
 type RoutingOptions struct {
 	Knob       *float64
 	Candidates map[string]bool
+
+	// KeywordText is the latest user message evaluated by strict keyword rules.
+	// When nil, RouteWithOptions falls back to the routing text; callers that
+	// only have one text (tests, non-chat entry points) can leave it unset.
+	// Pointing at an empty string disables keyword matching for the request.
+	KeywordText *string
 }
 
 func New(cfg *config.RouterConfig) (*Router, error) {
@@ -57,8 +86,18 @@ func New(cfg *config.RouterConfig) (*Router, error) {
 	if err := systemone.Init(path); err != nil {
 		return nil, err
 	}
-	return &Router{skillCfg: skillCfg, classify: func(text string) ([]float64, error) {
-		return systemone.Classify(text)
+	return &Router{skillCfg: skillCfg, classify: func(ctx context.Context, text string) ([]float64, error) {
+		vector, err := systemone.ClassifyContext(ctx, text)
+		if err == nil || ctx.Err() != nil || systemone.Available() {
+			return vector, err
+		}
+		// The worker is gone (crash, protocol error or timeout). Reload it from
+		// the already-validated checkpoint and retry once, so a single failure
+		// does not disable routing until the process restarts.
+		if reloadErr := systemone.Init(path); reloadErr != nil {
+			return nil, err
+		}
+		return systemone.ClassifyContext(ctx, text)
 	}}, nil
 }
 
@@ -108,12 +147,24 @@ func (r *Router) RouteWithOptions(ctx context.Context, text string, options Rout
 	if math.IsNaN(knob) || math.IsInf(knob, 0) || knob < -1 || knob > 1 {
 		return nil, fmt.Errorf("routing knob must be finite and in [-1, 1]")
 	}
+	keywordText := text
+	if options.KeywordText != nil {
+		keywordText = *options.KeywordText
+	}
+	if rule := r.matchKeyword(keywordText); rule != nil {
+		if options.Candidates != nil && !options.Candidates[rule.model] {
+			metrics.KeywordBlocked.WithLabelValues(rule.name, "ineligible").Inc()
+			return nil, &KeywordRuleIneligibleError{Rule: rule.name, Model: rule.model}
+		}
+		metrics.KeywordRoutes.WithLabelValues(rule.name, rule.model).Inc()
+		return &Result{Model: rule.model, Knob: knob, Reason: ReasonKeyword, MatchedRule: rule.name}, nil
+	}
 	allow := intersectAllow(options.Candidates, r.activeAllow())
 	if !anyAllowed(r.skillCfg.Models, allow) {
 		return nil, fmt.Errorf("no eligible SystemOne candidates")
 	}
 	started := time.Now()
-	query, err := r.classify(text)
+	query, err := r.classify(ctx, text)
 	outcome := "success"
 	if err != nil {
 		outcome = "error"
@@ -125,11 +176,11 @@ func (r *Router) RouteWithOptions(ctx context.Context, text string, options Rout
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	scaled, distances, err := selectSystemOne(query, knob, r.skillCfg.Models, allow)
+	scaled, distances, err := selectSystemOne(query, knob, r.skillCfg.Models, allow, r.skillCfg.EffectiveOverCapacityWeight())
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Model: distances[0].Model, QueryVector: query, ScaledVector: scaled, Knob: knob, Distances: distances}, nil
+	return &Result{Model: distances[0].Model, QueryVector: query, ScaledVector: scaled, Knob: knob, Distances: distances, Reason: ReasonClassifier}, nil
 }
 
 func validateVector(vector []float64, dimensions int) error {
@@ -144,12 +195,15 @@ func validateVector(vector []float64, dimensions int) error {
 	return nil
 }
 
-func selectSystemOne(query []float64, knob float64, models []config.SkillRouterModelConfig, allow map[string]bool) ([]float64, []ModelDistance, error) {
+func selectSystemOne(query []float64, knob float64, models []config.SkillRouterModelConfig, allow map[string]bool, overCapacityWeight float64) ([]float64, []ModelDistance, error) {
 	if err := validateVector(query, 6); err != nil {
 		return nil, nil, err
 	}
 	if math.IsNaN(knob) || math.IsInf(knob, 0) || knob < -1 || knob > 1 {
 		return nil, nil, fmt.Errorf("invalid routing knob")
+	}
+	if math.IsNaN(overCapacityWeight) || math.IsInf(overCapacityWeight, 0) || overCapacityWeight < 0 || overCapacityWeight > 1 {
+		return nil, nil, fmt.Errorf("invalid over-capacity weight")
 	}
 	scaled := make([]float64, len(query))
 	for i, value := range query {
@@ -166,7 +220,15 @@ func selectSystemOne(query []float64, knob float64, models []config.SkillRouterM
 		var sum float64
 		for i, value := range scaled {
 			delta := value - model.SkillVector[i]
-			sum += delta * delta
+			// delta > 0 means the model falls short of the requirement
+			// (under-capacity) and always counts fully; delta < 0 means the
+			// model exceeds it (over-capacity) and is down-weighted so broad,
+			// capable models are not penalized for exceeding the request.
+			if delta > 0 {
+				sum += delta * delta
+			} else {
+				sum += overCapacityWeight * delta * delta
+			}
 		}
 		distance := math.Sqrt(sum)
 		scores = append(scores, ModelDistance{Model: model.Model, Distance: distance})

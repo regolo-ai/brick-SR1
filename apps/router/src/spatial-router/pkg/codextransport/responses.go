@@ -182,6 +182,48 @@ func RoutingText(body []byte, window int) string {
 	return strings.Join(parts, "\n")
 }
 
+// LastUserText returns the text of the final user message only. Strict keyword
+// rules use it so instructions, assistant output and tool payloads cannot force
+// a model.
+func LastUserText(body []byte) string {
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal(body, &raw)
+	var items []json.RawMessage
+	if json.Unmarshal(raw["input"], &items) != nil {
+		var s string
+		_ = json.Unmarshal(raw["input"], &s)
+		return s
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		var message struct {
+			Role    string          `json:"role"`
+			Type    string          `json:"type"`
+			Content json.RawMessage `json:"content"`
+		}
+		_ = json.Unmarshal(items[i], &message)
+		if message.Role != "user" || (message.Type != "" && message.Type != "message") {
+			continue
+		}
+		var text string
+		if json.Unmarshal(message.Content, &text) == nil {
+			return text
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(message.Content, &blocks)
+		var content []string
+		for _, block := range blocks {
+			if block.Type == "input_text" || block.Type == "text" {
+				content = append(content, block.Text)
+			}
+		}
+		return strings.Join(content, "\n")
+	}
+	return ""
+}
+
 // Forward uses a fresh header allowlist and no redirects or retries. A failed
 // stream is terminated, never converted to response.completed.
 func Forward(w http.ResponseWriter, r *http.Request, client *http.Client, endpoint, provider, key string, codexAuth bool, body []byte) {

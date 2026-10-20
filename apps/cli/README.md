@@ -27,14 +27,17 @@ The installer selects the verified bundled runtime for the current platform.
 | `brick restart <profile>` | Synchronize and restart a profile while preserving harness wiring |
 | `brick stop <profile>` | Stop a router; for Codex, detach future launches while keeping the current bridge alive |
 | `brick clear <profile>` | Remove runtime state while preserving configuration, credentials and history |
+| `brick migrate <profile>` | Rewrite a legacy profile to the current format; `--dry-run` previews it |
 | `brick update` | Update CLI and native runtime together, retaining a rollback bundle |
 
 The authoritative table is the public Hugging Face `skill_vectors.csv`. Brick
 keeps one private (`0600`) cached copy for network fallback; it does not bundle
 per-model JSON cards or provide local measurement or publishing commands.
 
-Requires Node.js 20 or 22+. The npm installer downloads and verifies the pinned
-ModernBERT assets and CPU runtime; no compiler, Docker or Python is required on
+Requires Node.js 20 or 22+ and Python 3 with `venv`. The npm installer downloads
+and verifies the pinned SystemOne checkpoint and the platform runtime, then
+creates a managed Python environment with the pinned torch and transformers
+build that matches the detected GPU driver. No compiler or Docker is required on
 the user machine. Linux x64, Linux arm64, macOS x64, and macOS arm64 artifacts
 are execution-tested before publication.
 

@@ -74,6 +74,12 @@ func validateSkillRouterConfig(cfg *RouterConfig) error {
 	if math.IsNaN(sr.Knob) || math.IsInf(sr.Knob, 0) || sr.Knob < -1 || sr.Knob > 1 {
 		return fmt.Errorf("skill_router.knob must be finite and in [-1, 1]")
 	}
+	if sr.OverCapacityWeight != nil {
+		weight := *sr.OverCapacityWeight
+		if math.IsNaN(weight) || math.IsInf(weight, 0) || weight < 0 || weight > 1 {
+			return fmt.Errorf("skill_router.over_capacity_weight must be finite and in [0, 1]")
+		}
+	}
 	expected := map[string]bool{"instruction_following": true, "coding": true, "math_reasoning": true, "world_knowledge": true, "planning_agentic": true, "creative_synthesis": true}
 	if len(sr.Capabilities) != 6 {
 		return fmt.Errorf("skill_router.capabilities must declare the six SystemOne dimensions")
@@ -83,9 +89,6 @@ func validateSkillRouterConfig(cfg *RouterConfig) error {
 			return fmt.Errorf("invalid or duplicate SystemOne capability %q", name)
 		}
 		delete(expected, name)
-	}
-	if sr.SystemOne.LocalPath == "" {
-		return fmt.Errorf("skill_router.systemone.local_path is required")
 	}
 	if len(sr.Models) == 0 {
 		return fmt.Errorf("skill_router.models must contain at least one candidate")
@@ -114,6 +117,46 @@ func validateSkillRouterConfig(cfg *RouterConfig) error {
 			return fmt.Errorf("invalid or duplicate active model %q", name)
 		}
 		active[name] = true
+	}
+	if err := validateSkillRouterKeywords(sr, seen, active); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateSkillRouterKeywords(sr SkillRouterConfig, models, active map[string]bool) error {
+	names := map[string]bool{}
+	for i, rule := range sr.Keywords {
+		owner := fmt.Sprintf("skill_router.keywords[%d]", i)
+		if strings.TrimSpace(rule.Name) == "" {
+			return fmt.Errorf("%s.name cannot be empty", owner)
+		}
+		if names[rule.Name] {
+			return fmt.Errorf("duplicate %s.name %q", owner, rule.Name)
+		}
+		names[rule.Name] = true
+		if len(rule.Keywords) == 0 {
+			return fmt.Errorf("%s (%q).keywords cannot be empty", owner, rule.Name)
+		}
+		for _, keyword := range rule.Keywords {
+			if strings.TrimSpace(keyword) == "" {
+				return fmt.Errorf("%s (%q).keywords cannot contain empty entries", owner, rule.Name)
+			}
+		}
+		switch operator := strings.ToUpper(strings.TrimSpace(rule.Operator)); operator {
+		case "", "OR", "AND":
+		default:
+			return fmt.Errorf("%s (%q).operator must be OR or AND", owner, rule.Name)
+		}
+		if rule.Model == "" {
+			return fmt.Errorf("%s (%q).model is required", owner, rule.Name)
+		}
+		if !models[rule.Model] {
+			return fmt.Errorf("%s (%q).model %q is not listed in skill_router.models", owner, rule.Name, rule.Model)
+		}
+		if len(sr.ActiveModels) > 0 && !active[rule.Model] {
+			return fmt.Errorf("%s (%q).model %q is not an active routing candidate", owner, rule.Name, rule.Model)
+		}
 	}
 	return nil
 }

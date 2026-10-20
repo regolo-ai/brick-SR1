@@ -78,7 +78,6 @@ func TestRegoloAuthorizationThroughHandlers(t *testing.T) {
 						cfg.Brick.VisionEndpoint = upstream.URL + "/v1/chat/completions"
 					}
 					srv := &Server{cfg: cfg, brickRouter: fixedAuthTestRouter{}}
-					srv.brickRouterOnce.Do(func() {})
 					body := fmt.Sprintf(`{"model":"brick","stream":%v,"messages":[{"role":"user","content":%s}]}`, stream, content)
 					req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
 					req.Header.Set("Authorization", "Bearer "+credential)

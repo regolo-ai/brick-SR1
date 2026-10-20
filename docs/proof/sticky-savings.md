@@ -66,9 +66,9 @@ of the
 trade-off (avoided cache-invalidation vs the held model's own price).
 
 Code:
-[`apps/router/src/spatial-router/pkg/proxy/replay.go`](../../apps/router/src/spatial-router/pkg/proxy/replay.go)
+`apps/router/src/spatial-router/pkg/proxy/replay.go`
 (`replayCounterfactual`), reusing the same switch-cost math as the live router
-([`pkg/sticky/decision.go`](../../apps/router/src/spatial-router/pkg/sticky/decision.go)).
+(`pkg/sticky/decision.go`).
 
 **Assumption (held-token-parity):** the counterfactual branch reprices the
 *same* token
@@ -124,7 +124,7 @@ curl http://127.0.0.1:8000/api/v1/routing/stats
 The `net (honest)` column shows the same counterfactual computed live, merged
 from
 `replayCounterfactual` into `/api/v1/routing/stats`
-([`pkg/proxy/routing_stats.go`](../../apps/router/src/spatial-router/pkg/proxy/routing_stats.go)).
+(`pkg/proxy/routing_stats.go`).
 
 ## Data
 
@@ -164,7 +164,7 @@ silently mixing them in.
 - **2 of 39 held turns lost the trade-off** — sticky cost more than switching
   would have.
   That is expected: the hysteresis in `DecideModel` (see
-[`pkg/sticky/decision.go`](../../apps/router/src/spatial-router/pkg/sticky/decision.go))
+`pkg/sticky/decision.go`)
   trades off *some* held turns being wrong for *most* being right, using a fixed
 score
   margin rather than knowing the future. The net figure already includes these 2
@@ -181,9 +181,9 @@ gate
 
 ## Where to go next
 
-- [Replay implementation](../../apps/router/src/spatial-router/pkg/proxy/replay.go)
+- Replay implementation (`apps/router/src/spatial-router/pkg/proxy/replay.go`)
   and its tests.
-- [Sticky decisions](../../apps/router/src/spatial-router/pkg/sticky/decision.go):
+- Sticky decisions (`apps/router/src/spatial-router/pkg/sticky/decision.go`):
   switch-cost math and hysteresis.
 - `curl http://127.0.0.1:8000/api/v1/routing/stats`: live measurements from
   your router.

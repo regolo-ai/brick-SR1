@@ -8,12 +8,14 @@ type RouterConfig struct {
 	ConfigVersion      int               `yaml:"config_version,omitempty"`
 	CodexRouter        CodexRouterConfig `yaml:"codex_router,omitempty"`
 	TrustedProxyHeader string            `yaml:"trusted_proxy_header,omitempty"`
-	LLMObservability   `yaml:",inline"`
-	RouterOptions      `yaml:",inline"`
-	ReasoningConfig    `yaml:",inline"`
-	BackendModels      `yaml:",inline"`
-	BrickExtension     `yaml:",inline"`
-	SkillRouter        SkillRouterConfig `yaml:"skill_router,omitempty"`
+	// Deprecated: hosted classifier removed in 4.0. Parsed for migration only.
+	ComplexityService *LegacyComplexityServiceConfig `yaml:"complexity_service,omitempty"`
+	LLMObservability  `yaml:",inline"`
+	RouterOptions     `yaml:",inline"`
+	ReasoningConfig   `yaml:",inline"`
+	BackendModels     `yaml:",inline"`
+	BrickExtension    `yaml:",inline"`
+	SkillRouter       SkillRouterConfig `yaml:"skill_router,omitempty"`
 }
 
 type LLMObservability struct {
@@ -34,6 +36,9 @@ type BackendModels struct {
 }
 
 type ReasoningConfig struct {
+	// Deprecated: removed in 4.0; effort now comes from the client request or
+	// skill_router.knob. Parsed for migration only.
+	DefaultReasoningEffort string `yaml:"default_reasoning_effort,omitempty"`
 
 	// Reasoning family configurations to define how different model families handle reasoning syntax
 	ReasoningFamilies map[string]ReasoningFamilyConfig `yaml:"reasoning_families,omitempty"`
@@ -154,6 +159,13 @@ type SkillRouterConfig struct {
 	SystemOne SystemOneConfig `yaml:"systemone,omitempty"`
 	Enabled   bool            `yaml:"enabled,omitempty"`
 
+	// OverCapacityWeight scales the penalty for a model whose skill exceeds the
+	// (knob-scaled) query requirement. 1.0 makes the metric symmetric (plain
+	// Euclidean distance); lower values let broad, capable models compete
+	// without punishing them for exceeding the request. Nil defaults to 0.25.
+	// +optional
+	OverCapacityWeight *float64 `yaml:"over_capacity_weight,omitempty"`
+
 	// Capabilities fixes the vector dimension order used by model skill vectors
 	// and capability classifier probabilities.
 	Capabilities []string `yaml:"capabilities,omitempty"`
@@ -170,10 +182,46 @@ type SkillRouterConfig struct {
 	// (backward compatible). The multimodal passthrough path intersects this
 	// with the per-request modality allowlist.
 	ActiveModels []string `yaml:"active_models,omitempty"`
+
+	// Keywords are strict routing rules. When a rule matches the latest user
+	// message, the rule's model is selected without running SystemOne. Rules are
+	// evaluated in file order and the first match wins.
+	Keywords []SkillRouterKeywordRuleConfig `yaml:"keywords,omitempty"`
+
+	// Deprecated: removed in 4.0. Parsed for migration only.
+	KeywordRules    []LegacyKeywordRuleConfig    `yaml:"keyword_rules,omitempty"`
+	CapabilityModel *LegacyCapabilityModelConfig `yaml:"capability_model,omitempty"`
+	ComplexityModel *LegacyComplexityModelConfig `yaml:"complexity_model,omitempty"`
+	Math            *LegacyMathConfig            `yaml:"math,omitempty"`
+	DynamicEffort   bool                         `yaml:"dynamic_effort,omitempty"`
+}
+
+// SkillRouterKeywordRuleConfig is a strict override: a matched rule forces the
+// named model instead of scoring candidates.
+type SkillRouterKeywordRuleConfig struct {
+	Name          string   `yaml:"name"`
+	Keywords      []string `yaml:"keywords"`
+	Model         string   `yaml:"model"`
+	Operator      string   `yaml:"operator,omitempty"`
+	CaseSensitive bool     `yaml:"case_sensitive,omitempty"`
 }
 
 type SystemOneConfig struct {
 	LocalPath string `yaml:"local_path,omitempty"`
+}
+
+// DefaultOverCapacityWeight is used when skill_router.over_capacity_weight is
+// unset. It keeps a fully capable model competitive without letting it win on
+// raw magnitude alone.
+const DefaultOverCapacityWeight = 0.25
+
+// EffectiveOverCapacityWeight returns the configured over-capacity penalty
+// weight, falling back to DefaultOverCapacityWeight when unset.
+func (c SkillRouterConfig) EffectiveOverCapacityWeight() float64 {
+	if c.OverCapacityWeight == nil {
+		return DefaultOverCapacityWeight
+	}
+	return *c.OverCapacityWeight
 }
 
 type SkillRouterModelConfig struct {
@@ -200,6 +248,10 @@ type SkillRouterModelConfig struct {
 	// CustomParams are merged into the request body before forward. Values
 	// already present in the client request are NOT overwritten.
 	CustomParams map[string]interface{} `yaml:"custom_params,omitempty"`
+
+	// Deprecated: removed in 4.0. Parsed for migration only.
+	CostWeight      float64 `yaml:"cost_weight,omitempty"`
+	ReasoningEffort string  `yaml:"reasoning_effort,omitempty"`
 
 	ModelReasoningControl `yaml:",inline"`
 }

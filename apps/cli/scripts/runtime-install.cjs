@@ -7,6 +7,7 @@ const crypto = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { spawnSync } = require('node:child_process');
+const { ensurePython } = require('./python-env.cjs');
 const root = path.resolve(__dirname, '..');
 const manifest = require('../assets/systemone.json');
 const version = require('../package.json').version;
@@ -49,6 +50,8 @@ async function install() {
   const bundle = runtimeBundle();
   const binaryVersion = spawnSync(bundle.binary, ['--version'], { encoding: 'utf8', timeout: 10000 });
   if (binaryVersion.error || binaryVersion.status !== 0 || binaryVersion.stdout.trim() !== version) throw new Error(`Installed runtime cannot execute or has the wrong version: ${binaryVersion.error?.message || binaryVersion.stderr || binaryVersion.stdout || binaryVersion.status}`);
+  const python = ensurePython(message => console.log(`[brick] ${message}`));
+  const modelEnv = { ...process.env, BRICK_SYSTEMONE_PYTHON: python };
   const destination = assetDirectory();
   await fsp.mkdir(path.dirname(destination), { recursive: true, mode: 0o755 });
   const lock = destination + '.lock';
@@ -77,7 +80,7 @@ async function install() {
       await verify(temporary);
     }
     const directory = temporary || destination;
-    const checked = spawnSync(bundle.binary, ['--check-model', directory], { encoding: 'utf8', timeout: 180000, maxBuffer: 1024 * 1024 });
+    const checked = spawnSync(bundle.binary, ['--check-model', directory], { encoding: 'utf8', timeout: 180000, maxBuffer: 1024 * 1024, env: modelEnv });
     if (checked.error || checked.status !== 0) throw new Error(`Runtime could not load the installed model: ${checked.error?.message || checked.stderr || checked.status}`);
     await fsp.writeFile(path.join(directory, '.complete.json'), JSON.stringify({ revision: manifest.revision, version }), { mode: 0o644 });
     if (temporary) { await fsp.rename(temporary, destination); temporary = undefined; }
@@ -86,5 +89,16 @@ async function install() {
     await fsp.rmdir(lock);
   }
 }
-module.exports = { install, installedRuntime, runtimeBundle, verify, manifest };
-if (require.main === module) install().catch(error => { console.error(`[brick] installation failed: ${error.message}`); process.exitCode = 1; });
+// ensurePythonOnly prepares the managed interpreter without model assets. The
+// container entrypoint uses it to pick the CUDA or CPU wheel at first start,
+// when the host driver is known, and prints the interpreter path on stdout.
+function installPython() {
+  return ensurePython(message => console.error(`[brick] ${message}`));
+}
+module.exports = { install, installPython, installedRuntime, runtimeBundle, verify, manifest };
+if (require.main === module) {
+  const action = process.argv.includes('--python-only')
+    ? () => { process.stdout.write(`${installPython()}\n`); }
+    : install;
+  Promise.resolve().then(action).catch(error => { console.error(`[brick] installation failed: ${error.message}`); process.exitCode = 1; });
+}

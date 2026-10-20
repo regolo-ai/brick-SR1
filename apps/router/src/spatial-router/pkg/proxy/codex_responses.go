@@ -224,9 +224,15 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "Codex routing is unavailable")
 			return
 		}
-		route, err = router.RouteWithOptions(r.Context(), codextransport.RoutingText(body, codexRoutingWindow(s.cfg)), requestRoutingOptions(body, allow))
+		options, optErr := requestRoutingOptions(r, body, allow)
+		if optErr != nil {
+			writeError(w, 400, optErr.Error())
+			return
+		}
+		options.KeywordText = keywordText(codextransport.LastUserText(body))
+		route, err = router.RouteWithOptions(r.Context(), codextransport.RoutingText(body, codexRoutingWindow(s.cfg)), options)
 		if err != nil {
-			writeError(w, 502, "Codex routing failed")
+			writeRoutingError(w, err, "Codex routing failed")
 			return
 		}
 		model = route.Model
@@ -258,6 +264,11 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body = adaptClientReasoning(body, s.cfg, model)
+	knob := s.cfg.SkillRouter.Knob
+	if route != nil {
+		knob = route.Knob
+	}
+	body = applyKnobEffort(body, s.cfg, model, knob)
 	selectedEffort = requestEffort(body)
 	w.Header().Set("X-Brick-Selected-Model", model)
 	w.Header().Set("X-Brick-Reasoning-Requested", requested)

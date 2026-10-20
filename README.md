@@ -35,8 +35,14 @@ The profile knob defaults to `0` and accepts values from `-1` to `+1`:
 
 ```text
 scaled_query[i] = clamp(query[i] × (1 + 0.5 × knob), 0, 1)
-distance(model) = sqrt(sum((scaled_query[i] - model.skill_vector[i])²))
+delta[i] = scaled_query[i] - model.skill_vector[i]
+penalty[i] = delta[i]² × (delta[i] < 0 ? over_capacity_weight : 1)
+distance(model) = sqrt(sum(penalty))
 ```
+
+Over-capacity mismatch (a model stronger than the query needs) is discounted by
+`skill_router.over_capacity_weight`, default `0.25`; set it to `1.0` to restore
+the fully symmetric distance. Under-capacity mismatch is never discounted.
 
 The closest eligible model wins. Exact ties preserve the configured model order.
 Model vectors are unchanged by the knob. If a profile declares a different
@@ -55,23 +61,27 @@ Request effort overrides the profile knob across all three protocols:
 | `xhigh` | +0.5 |
 | `max` | +1 |
 
-An absent effort uses the profile knob. Provider-supported reasoning controls are
-forwarded, with only required provider adaptations. Brick does not infer reasoning
-effort. Explicit model selections and configured fixed models bypass inference.
+An absent effort uses the profile knob. The `X-Brick-Knob` request header sets
+the routing knob directly with a number in `[-1, 1]` and takes precedence over
+any effort; it is never forwarded upstream. Provider-supported reasoning controls
+are forwarded, with only required provider adaptations, and the client's explicit
+effort is preserved; the knob only fills a request that carries no effort. Brick
+does not infer reasoning effort. Explicit model selections and configured fixed
+models bypass inference.
 
 ## Install and run locally
 
-Prepare a Python environment using
-[the runtime requirements](apps/router/systemone/requirements.txt), and set
-`BRICK_SYSTEMONE_PYTHON` to its interpreter:
+The installer prepares a managed Python environment under
+`~/.brick/runtime/<version>/venv` with pinned `torch==2.11.0` and
+`transformers==5.20.2`, choosing CUDA wheels that the detected driver can load
+and CPU wheels otherwise. Python 3 is required. Set `BRICK_SYSTEMONE_PYTHON` to
+use your own interpreter instead, `BRICK_CUDA=0` to force CPU wheels, or
+`BRICK_SKIP_PYTHON_INSTALL=1` to reuse an interpreter that already imports torch
+and transformers. See [the runtime requirements](apps/router/systemone/requirements.txt)
+and [local lifecycle and installation](docs/quickstart/serve.md) for the pinned
+stack and driver selection rules.
 
-```bash
-python3 -m venv /path/to/systemone-env
-/path/to/systemone-env/bin/python -m pip install -r apps/router/systemone/requirements.txt
-export BRICK_SYSTEMONE_PYTHON=/path/to/systemone-env/bin/python
-```
-
-Without that variable, the runtime uses `python3` on PATH. The installer downloads
+The installer downloads
 the public checkpoint assets anonymously, verifies SHA-256 checksums, and checks
 real inference. `HF_TOKEN` is used only when present, for Hub rate limits. For an
 offline installation, set `BRICK_MODEL_ASSETS` to a directory containing the
@@ -94,7 +104,9 @@ connect their official harnesses through the existing native transports.
 
 `brick route "Write a parser" --json` runs local routing only. It returns the
 original vector, scaled vector, knob, candidate distances, selected model, and
-latency. Add `--effort xhigh` to inspect a request override. `brick generate` and
+latency. Add `--effort xhigh` to inspect an effort override, or `--knob 0.5` to
+exercise the explicit knob header (the header wins when both are given).
+`brick generate` and
 `brick chat` perform generation through the chosen provider.
 
 See [local lifecycle and installation](docs/quickstart/serve.md) for package
@@ -118,18 +130,33 @@ skill_router:
     - model: large
       skill_vector: [0.9, 0.9, 0.9, 0.9, 0.9, 0.9]
   active_models: [small, large]
+  keywords:
+    - name: force_coder
+      keywords: ["write a parser", "refactor this module"]
+      model: large
+      operator: OR          # OR (default) or AND
+      case_sensitive: false
 ```
 
 Provider endpoints, credentials, and `model_config` entries complete the profile;
 see [the examples](examples) and [default templates](apps/cli/templates).
 The CLI supplies the installed checkpoint directory via `--model-dir`.
 
+`skill_router.keywords` forces a model when the last user message contains a
+keyword; rules evaluate in file order and the first match wins. Matching uses
+Unicode word boundaries and never reads the system prompt, earlier turns,
+assistant output, or tool results. An explicit `model`, `--fixed-model`, or a
+disabled router bypasses keyword rules.
+
 Legacy profiles migrate with exact configuration and environment backups, followed
 by atomic replacement. Migration preserves providers, generation credentials,
 model priority, active-model order, capability order, and vector values. The old
-numeric routing preference becomes `skill_router.knob`; obsolete fields are
-removed. Incompatible vectors stop migration before any files are written.
-Repeating migration performs no second write.
+numeric routing preference becomes `skill_router.knob`; `keyword_rules` with
+`mode: override` become `skill_router.keywords`, while `mode: bias` (including an
+omitted mode) stops the migration because it cannot become a strict override.
+Obsolete fields are removed. Incompatible vectors stop migration before any files
+are written. Repeating migration performs no second write. Run
+`brick migrate <profile> --dry-run` to preview the result.
 
 ## Observability and protocol behavior
 

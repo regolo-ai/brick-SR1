@@ -12,6 +12,7 @@ export default class Route extends Command {
     json: Flags.boolean({ default: false }),
     repeat: Flags.integer({ default: 1, min: 1 }),
     effort: Flags.string({ options: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Override the profile routing knob using request effort' }),
+    knob: Flags.string({ description: 'Override the profile routing knob directly with a number in [-1, 1]' }),
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Route);
@@ -19,6 +20,11 @@ export default class Route extends Command {
     const cfg = await loadConfig(profile);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (cfg.codex_router?.enabled) headers['X-Brick-Key'] = await readEnvValue(paths(profile).env, cfg.codex_router.local_key_env) ?? '';
+    if (flags.knob !== undefined) {
+      const knob = Number(flags.knob);
+      if (!Number.isFinite(knob) || knob < -1 || knob > 1) this.error('--knob must be a number in [-1, 1]');
+      headers['X-Brick-Knob'] = String(knob);
+    }
     const samples: number[] = [];
     let decision: any;
     for (let i = 0; i < flags.repeat; i++) {
@@ -33,7 +39,8 @@ export default class Route extends Command {
     }
     if (flags.json) { this.log(JSON.stringify({ ...decision, latency_ms: samples }, null, 2)); return; }
     this.log(`Selected model: ${decision.selected_model}`);
-    this.log(`Knob: ${decision.knob}`);
+    this.log(`Knob: ${decision.knob}${decision.knob_source ? ` (${decision.knob_source})` : ''}`);
+    if (decision.forwarded_effort) this.log(`Forwarded effort: ${decision.forwarded_effort}`);
     if (decision.query_vector) this.log(`Query vector: ${JSON.stringify(decision.query_vector)}`);
     if (decision.scaled_vector) this.log(`Scaled vector: ${JSON.stringify(decision.scaled_vector)}`);
     for (const candidate of decision.distances ?? []) this.log(`${candidate.model}: ${candidate.distance}`);

@@ -98,10 +98,44 @@
         }
       }
     },
+    "complexity_service": {
+      "fields": {
+        "base_url": {
+          "scalar": true
+        },
+        "bearer_token": {
+          "scalar": true
+        },
+        "bearer_token_file": {
+          "scalar": true
+        },
+        "default_confidence": {
+          "scalar": true
+        },
+        "enabled": {
+          "scalar": true
+        },
+        "model_name": {
+          "scalar": true
+        },
+        "protocol": {
+          "scalar": true
+        },
+        "timeout_seconds": {
+          "scalar": true
+        },
+        "use_client_key": {
+          "scalar": true
+        }
+      }
+    },
     "config_version": {
       "scalar": true
     },
     "default_model": {
+      "scalar": true
+    },
+    "default_reasoning_effort": {
       "scalar": true
     },
     "include_config_models_in_list": {
@@ -271,11 +305,180 @@
             "scalar": true
           }
         },
+        "capability_model": {
+          "fields": {
+            "labels": {
+              "items": {
+                "scalar": true
+              }
+            },
+            "local_path": {
+              "scalar": true
+            },
+            "model_id": {
+              "scalar": true
+            }
+          }
+        },
+        "complexity_model": {
+          "fields": {
+            "base_url": {
+              "scalar": true
+            },
+            "bearer_token": {
+              "scalar": true
+            },
+            "bearer_token_file": {
+              "scalar": true
+            },
+            "default_confidence": {
+              "scalar": true
+            },
+            "model_id": {
+              "scalar": true
+            },
+            "model_name": {
+              "scalar": true
+            },
+            "protocol": {
+              "scalar": true
+            },
+            "timeout_seconds": {
+              "scalar": true
+            },
+            "use_client_key": {
+              "scalar": true
+            }
+          }
+        },
+        "dynamic_effort": {
+          "scalar": true
+        },
         "enabled": {
           "scalar": true
         },
+        "keyword_rules": {
+          "items": {
+            "fields": {
+              "bias": {
+                "values": {
+                  "scalar": true
+                }
+              },
+              "capability": {
+                "scalar": true
+              },
+              "case_sensitive": {
+                "scalar": true
+              },
+              "importance": {
+                "scalar": true
+              },
+              "keywords": {
+                "items": {
+                  "scalar": true
+                }
+              },
+              "mode": {
+                "scalar": true
+              },
+              "model": {
+                "scalar": true
+              },
+              "name": {
+                "scalar": true
+              },
+              "operator": {
+                "scalar": true
+              }
+            }
+          }
+        },
+        "keywords": {
+          "items": {
+            "fields": {
+              "case_sensitive": {
+                "scalar": true
+              },
+              "keywords": {
+                "items": {
+                  "scalar": true
+                }
+              },
+              "model": {
+                "scalar": true
+              },
+              "name": {
+                "scalar": true
+              },
+              "operator": {
+                "scalar": true
+              }
+            }
+          }
+        },
         "knob": {
           "scalar": true
+        },
+        "math": {
+          "fields": {
+            "clip_max": {
+              "scalar": true
+            },
+            "clip_min": {
+              "scalar": true
+            },
+            "complexity_bias": {
+              "scalar": true
+            },
+            "complexity_mu": {
+              "scalar": true
+            },
+            "cost_penalty_beta": {
+              "scalar": true
+            },
+            "max_bias_shift": {
+              "scalar": true
+            },
+            "max_cost_relief": {
+              "scalar": true
+            },
+            "max_mu_multiplier": {
+              "scalar": true
+            },
+            "max_over_relief": {
+              "scalar": true
+            },
+            "min_bias_shift": {
+              "scalar": true
+            },
+            "min_cost_boost": {
+              "scalar": true
+            },
+            "min_mu_multiplier": {
+              "scalar": true
+            },
+            "min_over_boost": {
+              "scalar": true
+            },
+            "over_penalty_lambda": {
+              "scalar": true
+            },
+            "preference_power": {
+              "scalar": true
+            },
+            "routing_preference": {
+              "scalar": true
+            },
+            "tau": {
+              "values": {
+                "scalar": true
+              }
+            },
+            "tie_epsilon": {
+              "scalar": true
+            }
+          }
         },
         "models": {
           "items": {
@@ -292,6 +495,9 @@
               "base_url": {
                 "scalar": true
               },
+              "cost_weight": {
+                "scalar": true
+              },
               "custom_params": {
                 "values": {
                   "any": true
@@ -304,6 +510,9 @@
                 "scalar": true
               },
               "model": {
+                "scalar": true
+              },
+              "reasoning_effort": {
                 "scalar": true
               },
               "skill_vector": {
@@ -319,6 +528,9 @@
               }
             }
           }
+        },
+        "over_capacity_weight": {
+          "scalar": true
         },
         "systemone": {
           "fields": {

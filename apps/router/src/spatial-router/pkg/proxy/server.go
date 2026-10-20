@@ -19,6 +19,7 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/pricing"
+	systemone "github.com/regolo-ai/brick-SR1/systemone"
 )
 
 type brickModelRouter interface {
@@ -31,16 +32,20 @@ type Server struct {
 	instanceID     string
 	profile        string
 	version        string
-	routingReady   atomic.Bool
 	routingChecked atomic.Bool
 	cfg            *config.RouterConfig
 	configPath     string
 	port           int
 	httpServer     *http.Server
 
-	brickRouterOnce sync.Once
-	brickRouter     brickModelRouter
-	brickRouterErr  error
+	// routerMu guards lazy (re)initialization of the SystemOne-backed router.
+	// It replaces a sync.Once so a transient failure or a dead worker can be
+	// recovered without restarting the process.
+	routerMu           sync.Mutex
+	brickRouter        brickModelRouter
+	brickRouterErr     error
+	brickRouterRetryAt time.Time
+	brickRouterBackoff time.Duration
 
 	economicsStore *economics.Store
 	// pricingPath is where pricing.yaml lives, used by handleEconomics to
@@ -119,18 +124,23 @@ func (s *Server) Start(ctx context.Context) error {
 	ctx = runCtx
 
 	go func() {
-		cfg := s.cfg
-		needsInference := cfg != nil && cfg.SkillRouter.Enabled && ((cfg.Brick.Enabled || cfg.CodexRouter.Enabled) && cfg.Brick.ModelRoutingEnabled() || cfg.AnthropicPassthrough.Enabled && cfg.AnthropicPassthrough.ModelRoutingEnabled())
-		if !needsInference {
-			s.routingReady.Store(true)
+		if !s.routingNeedsInference() {
 			s.routingChecked.Store(true)
 			return
 		}
-		_, err := s.getBrickRouter(s.cfg)
-		s.routingReady.Store(err == nil)
-		s.routingChecked.Store(true)
-		if err != nil {
-			logging.Warnf("Routing unavailable: %v", err)
+		for {
+			if _, err := s.getBrickRouter(s.cfg); err == nil {
+				s.routingChecked.Store(true)
+				return
+			} else {
+				logging.Warnf("Routing unavailable: %v", err)
+			}
+			s.routingChecked.Store(true)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
 		}
 	}()
 
@@ -234,10 +244,27 @@ func (s *Server) saveEconomicsSnapshot() {
 	}
 }
 
+// routingNeedsInference reports whether this profile routes through SystemOne.
+func (s *Server) routingNeedsInference() bool {
+	cfg := s.cfg
+	return cfg != nil && cfg.SkillRouter.Enabled &&
+		((cfg.Brick.Enabled || cfg.CodexRouter.Enabled) && cfg.Brick.ModelRoutingEnabled() ||
+			cfg.AnthropicPassthrough.Enabled && cfg.AnthropicPassthrough.ModelRoutingEnabled())
+}
+
+// routingReady reflects the live worker state instead of a one-shot startup
+// flag, so a worker that died mid-run is reported as not ready.
+func (s *Server) routingReady() bool {
+	if !s.routingNeedsInference() {
+		return true
+	}
+	return systemone.Available()
+}
+
 // handleHealth returns a simple health check response.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	body := map[string]interface{}{"status": "ok", "instance_id": s.instanceID, "profile": s.profile, "version": s.version, "pid": os.Getpid(), "config": s.configPath, "routing_ready": s.routingReady.Load(), "routing_checked": s.routingChecked.Load()}
+	body := map[string]interface{}{"status": "ok", "instance_id": s.instanceID, "profile": s.profile, "version": s.version, "pid": os.Getpid(), "config": s.configPath, "routing_ready": s.routingReady(), "routing_checked": s.routingChecked.Load()}
 	if s.cfg != nil && s.cfg.CodexRouter.Enabled {
 		body["codex_router"] = "native-responses-v1"
 		body["authentication"] = "not_probed"
@@ -438,23 +465,48 @@ func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
 		fixed = s.cfg.Brick.EffectiveFixedModel(s.cfg.DefaultModel)
 	}
 	if fixed != "" {
-		writeJSON(w, 200, map[string]interface{}{"selected_model": fixed, "source": "fixed", "knob": s.cfg.SkillRouter.Knob})
+		writeJSON(w, 200, map[string]interface{}{"selected_model": fixed, "source": "fixed_model", "knob": s.cfg.SkillRouter.Knob})
 		return
 	}
 	brickRouter, err := s.getBrickRouter(s.cfg)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", err))
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("brick router unavailable: %v", err))
 		return
 	}
-	route, err := brickRouter.RouteWithOptions(r.Context(), extractOpenAIRoutingText(body, s.cfg), requestRoutingOptions(body, nil))
+	options, err := requestRoutingOptions(r, body, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	options.KeywordText = keywordText(extractOpenAILastUserText(body))
+	route, err := brickRouter.RouteWithOptions(r.Context(), extractOpenAIRoutingText(body, s.cfg), options)
+	if err != nil {
+		writeRoutingError(w, err, "SystemOne routing failed")
+		return
+	}
+	effort := clampEffortToAllowed(knobToEffort(route.Knob), s.cfg.GetAllowedThinkingModes(route.Model))
+	knobSource := "profile"
+	if options.Knob != nil {
+		knobSource = "request"
+		if r.Header.Get(KnobHeader) != "" {
+			knobSource = "header"
+		} else {
+			knobSource = "effort"
+		}
+	}
+	source := route.Reason
+	if source == "" {
+		source = "classifier"
 	}
 	resp := map[string]interface{}{
 		"selected_model": route.Model,
+		"source":         source,
+		"matched_rule":   route.MatchedRule,
 		"query_vector":   route.QueryVector, "scaled_vector": route.ScaledVector,
-		"knob": route.Knob, "distances": route.Distances,
+		"knob": route.Knob, "effort": effort, "knob_source": knobSource, "distances": route.Distances,
+	}
+	if forwarded := requestEffort(applyKnobEffort(body, s.cfg, route.Model, route.Knob)); forwarded != "" {
+		resp["forwarded_effort"] = forwarded
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

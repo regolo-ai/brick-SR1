@@ -114,7 +114,6 @@ func TestCodexDynamicToolCycle(t *testing.T) {
 	s := &Server{cfg: cfg}
 	router := &codexTestRouter{}
 	s.brickRouter = router
-	s.brickRouterOnce.Do(func() {})
 	for i, input := range []string{`[{"role":"user","content":"do work"}]`, `[{"role":"user","content":"do work"},{"type":"function_call","call_id":"a","name":"shell","arguments":"{}"},{"type":"function_call_output","call_id":"a","output":"done"}]`} {
 		r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"brick","instructions":"keep rules","input":`+input+`}`))
 		r.Header.Set("X-Brick-Key", "local")
@@ -198,7 +197,6 @@ func TestCodexChatAdapterRecordsRoutedRequest(t *testing.T) {
 	profile.Protocol = "chat_completions"
 	cfg.ProviderProfiles["external"] = profile
 	s := &Server{cfg: cfg, brickRouter: &codexTestRouter{}}
-	s.brickRouterOnce.Do(func() {})
 
 	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"brick","input":"hi"}`))
 	r.Header.Set("X-Brick-Key", "local")
@@ -429,7 +427,6 @@ func TestCodexOfficialMixedProviderContinuation(t *testing.T) {
 	}
 	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "terra-live"}, {Model: "regolo-live"}}
 	s := &Server{cfg: cfg, brickRouter: mixedLiveRouter{}}
-	s.brickRouterOnce.Do(func() {})
 	var mu sync.Mutex
 	selected := []string{}
 	cachedUsageEvents := 0

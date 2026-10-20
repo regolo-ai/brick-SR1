@@ -154,6 +154,48 @@ func (s *Server) handleAnthropicMessages(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// anthropicRequestsImage reports whether an Anthropic Messages request carries
+// at least one image content block.
+func anthropicRequestsImage(body []byte) bool {
+	var raw struct {
+		Messages []struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if json.Unmarshal(body, &raw) != nil {
+		return false
+	}
+	for _, message := range raw.Messages {
+		var blocks []struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(message.Content, &blocks) != nil {
+			continue
+		}
+		for _, block := range blocks {
+			if block.Type == "image" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// anthropicImageAllow computes the candidate allowlist for image-bearing
+// requests: only models that consume image input natively are eligible.
+func anthropicImageAllow(cfg *config.RouterConfig, body []byte) (map[string]bool, bool) {
+	if cfg == nil || !anthropicRequestsImage(body) {
+		return nil, false
+	}
+	allow := map[string]bool{}
+	for _, model := range cfg.SkillRouter.Models {
+		if model.HandlesImages {
+			allow[model.Model] = true
+		}
+	}
+	return allow, true
+}
+
 // isNativeClaudeModel reports whether the requested model is an explicit Claude
 // model name (e.g. "claude-haiku-4-5"). Used to decide whether subagent traffic
 // that arrives with a concrete model should be pulled into the skill router when
@@ -181,9 +223,20 @@ func (s *Server) handleBrickRouted(w http.ResponseWriter, r *http.Request, cfg *
 		if prompt == "" {
 			prompt = "[multimodal request]"
 		}
-		route, err = router.RouteWithOptions(r.Context(), prompt, requestRoutingOptions(body, nil))
+		allow, hasImage := anthropicImageAllow(cfg, body)
+		if hasImage && len(allow) == 0 {
+			writeError(w, http.StatusBadRequest, "no eligible model supports image input")
+			return
+		}
+		options, optErr := requestRoutingOptions(r, body, allow)
+		if optErr != nil {
+			writeError(w, http.StatusBadRequest, optErr.Error())
+			return
+		}
+		options.KeywordText = keywordText(extractAnthropicLastUserText(body))
+		route, err = router.RouteWithOptions(r.Context(), prompt, options)
 		if err != nil {
-			writeError(w, 502, fmt.Sprintf("SystemOne routing failed: %v", err))
+			writeRoutingError(w, err, "SystemOne routing failed")
 			return
 		}
 		selected = route.Model
@@ -193,6 +246,11 @@ func (s *Server) handleBrickRouted(w http.ResponseWriter, r *http.Request, cfg *
 	use1M := requestRequestsContext1M(r.Header.Values("Anthropic-Beta")) && apCfg.ExtraUsageEnabled && len(body) > apCfg.EffectiveContext1MThresholdBytes()
 	stripBeta := !use1M || strings.Contains(strings.ToLower(selected), "haiku")
 	rewritten := stripUnsupportedFieldsForModel(rewriteModelInBody(body, selected), selected)
+	knob := cfg.SkillRouter.Knob
+	if route != nil {
+		knob = route.Knob
+	}
+	rewritten = applyKnobEffort(rewritten, cfg, selected, knob)
 	source := "native"
 	if route != nil {
 		source = "routed"
@@ -218,6 +276,7 @@ func (s *Server) handleNativeModel(
 	// body is re-serialised cleanly if Brick ever needs to normalise the field.
 	rewritten := rewriteModelInBody(body, requestedModel)
 	rewritten = stripUnsupportedFieldsForModel(rewritten, requestedModel)
+	rewritten = applyKnobEffort(rewritten, cfg, requestedModel, cfg.SkillRouter.Knob)
 
 	// Count native-model traffic under label="native" so status shows both paths.
 	metrics.BrickRequests.WithLabelValues("native", requestedModel).Inc()
@@ -257,6 +316,10 @@ func (s *Server) forwardAnthropicRequest(w http.ResponseWriter, r *http.Request,
 		if _, hop := hopByHopHeaders[http.CanonicalHeaderKey(name)]; hop {
 			continue
 		}
+		canonical := http.CanonicalHeaderKey(name)
+		if canonical == http.CanonicalHeaderKey(KnobHeader) || canonical == "X-Brick-Key" {
+			continue
+		}
 		if http.CanonicalHeaderKey(name) == "Anthropic-Beta" && stripBeta {
 			for _, v := range values {
 				stripped := stripContext1MBeta(v)
@@ -293,7 +356,7 @@ func (s *Server) forwardAnthropicRequest(w http.ResponseWriter, r *http.Request,
 		w.Header().Set("X-Brick-Effort", effortStr)
 	}
 	if route != nil {
-		w.Header().Set("x-brick-route-reason", "systemone")
+		w.Header().Set("x-brick-route-reason", routeReasonHeader(route))
 	} else {
 		w.Header().Set("x-brick-route-reason", "fixed")
 	}
@@ -475,6 +538,28 @@ func stripContext1MBeta(v string) string {
 // Anthropic Messages API request body. It concatenates an optional system
 // prompt with the text content of the most recent user message, supporting
 // both string and structured (array of content blocks) shapes.
+// extractAnthropicLastUserText returns only the latest user message, without
+// the system prompt. Strict keyword rules use it so system instructions and
+// assistant turns never force a model.
+func extractAnthropicLastUserText(body []byte) string {
+	var raw struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+	for i := len(raw.Messages) - 1; i >= 0; i-- {
+		if raw.Messages[i].Role != "user" {
+			continue
+		}
+		return strings.TrimSpace(decodeAnthropicContent(raw.Messages[i].Content))
+	}
+	return ""
+}
+
 func extractAnthropicPromptText(body []byte) string {
 	var raw struct {
 		System   json.RawMessage `json:"system"`
