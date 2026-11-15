@@ -5,13 +5,40 @@ its workspace, tools, login, and credential refresh. The former nested
 `codex exec` bridge is retired.
 
 Activation is enabled after complete official Codex tool cycles passed against
-both the Codex subscription upstream and Regolo's Chat Completions endpoint.
+the Codex subscription upstream.
 
 Codex's official model catalog is preserved and extended with `brick`. Selecting
 an official model bypasses classification and preserves its reasoning settings.
 Selecting `brick` reevaluates the compatible active pool on every inference
 request, including requests containing tool results. Routing uses a separate
 context view and does not truncate the forwarded history.
+
+## One-command setup
+
+Install the published Brick package, install Codex, and authenticate the
+subscription once:
+
+```bash
+npm install -g @regoloai/brick
+codex login
+brick start codex
+```
+
+`brick start codex` creates the `codex` profile when it does not exist, verifies
+the SystemOne checkpoint installed by `npm install`, starts the local router,
+and wires the official Codex client to it. The default pool is two Codex subscription models,
+`gpt-6.1-terra` and `gpt-6-luna`; no Regolo API key is required. Open Codex,
+select the `brick` model, and every turn is routed on the subscription.
+
+An existing profile keeps its user-owned pool. To switch it to the default
+Codex pool, run `brick start codex --reset-pool`: this replaces only the routing
+pool, the default model, and an empty rule list, and leaves the configured
+providers and credentials untouched.
+
+Before starting, Brick compares the active pool with the authenticated Codex
+catalog and warns when a model is not listed. The check is metadata-only and
+never blocks a start: a catalog that lags the backend must not break a working
+profile.
 
 ## Authentication and configuration
 
@@ -23,7 +50,7 @@ The environment and Codex configuration files use mode `0600`. Conflicting
 inline endpoints or credentials stop migration. The original catalog setting,
 model, and provider are restored by `brick stop codex`. That command leaves the
 local Responses bridge available to the already-open Codex thread: select an
-official model such as `gpt-5.6-terra` to forward directly to the official Codex
+official model such as `gpt-6.1-terra` to forward directly to the official Codex
 upstream without classifier routing. Use `brick clear codex` when that thread
 can be disconnected and the local bridge/runtime should be removed completely;
 later Codex launches then use OpenAI directly.
@@ -77,6 +104,12 @@ protocols and incompatible requests are excluded; an empty candidate set fails
 before forwarding. Configuration conflicts fail rather than selecting a
 fallback.
 
+Requests routed to the subscription backend are normalized to `store: false`
+before forwarding: the Codex backend rejects persisted responses, while a client
+may leave the field unset. Other Responses providers keep their own storage
+semantics. The subscription backend also requires streaming; a non-streaming
+request receives its explicit error rather than a synthesized JSON response.
+
 The native runtime binds only `127.0.0.1`. It starts explicitly with
 `brick start codex` and is not registered as a system service.
 `brick start codex` refuses to wire a runtime that does not advertise the
@@ -124,13 +157,60 @@ unprobed upstream authentication and tool capability. It never runs classifier
 or model inference during refresh. Responses include separate requested,
 selected, and sent reasoning headers.
 
+## Cheap model mixture
+
+The starter pool is exactly two Codex subscription models, so cost and
+capability trade off inside the same `brick` session:
+
+- `gpt-6-luna` is the cheap tier, weighted toward creative and math-heavy work.
+- `gpt-6.1-terra` carries the agentic and coding vectors, so tool-driven turns
+  keep the stronger model.
+
+The pool is only applied to new or empty profiles; an existing user-owned pool
+is never rewritten. Skill vectors come from the Hugging Face dataset
+`regolo/brick-skill-tables`: profile setup and every `brick start` replace the
+template's provisional vectors with the published CSV, cached under
+`$BRICK_HOME/cache`. `BRICK_SKILLS_OFFLINE=1` uses the cache only. A download
+failure, an invalid published table, or a model missing from the table never
+blocks the start and never drops a pool model: Brick keeps the vectors already
+in the profile and reports what it kept. Official Codex catalog entries declare their reasoning
+levels (both of these models support `max`), and the proxy clamps an effort only
+when the selected model's declared modes exclude it.
+
+Request effort also drives the routing knob (`low=-1`, `medium=-0.5`, `high=0`,
+`xhigh=0.5`, `max=1`). The knob scales the request vector up, and at `max` the
+starter pool's hard coding requests reach the stronger model by distance alone.
+The pool also ships one strict rule, `strong-agentic`, which forces
+`gpt-6.1-terra` whenever the latest user message mentions `apply_patch`,
+`refactor`, `debug`, `bug(s)`, `failing test(s)`, or `unit test(s)`. That keeps
+tool work on the strong tier while ordinary creative and math turns stay on the
+cheap tier.
+
+Because the Codex system prompt is itself coding-heavy, the classifier sees a
+coding request on every Codex turn. At `high` effort (knob 0) that means serious
+coding tasks can all land on `gpt-6.1-terra`; the cheap tier is exercised at
+`medium` and `low` effort. This is expected knob behaviour, not a pool bug, and
+`BRICK_CODEX_POOL_EFFORT` makes it measurable.
+
 ## Verification
 
 The automated tests cover credential separation, redirects, cancellation,
 concurrent sessions, early SSE delivery, function-call replay, incompatible
 requests, dynamic routing after tool results, and manual model bypass.
 
-Explicit live tests are opt-in in `pkg/proxy/codex_responses_test.go`:
+Explicit live tests are opt-in in `pkg/proxy/codex_responses_test.go` and
+`pkg/proxy/codex_cheap_mixture_live_test.go`:
+
+- `BRICK_CODEX_CHEAP_MIX_LIVE_TEST=1`: the official Codex app-server routes
+  real turns through SystemOne against its pinned luna/terra pair at `xhigh`,
+  proves a tool turn edits the workspace through the routed model, and checks
+  the effort normalization the harness configures.
+- `BRICK_CODEX_POOL_POLL_LIVE_TEST=1`: five bounded coding tasks (Python, Go
+  and Node) run through the official Codex client and a pinned luna/terra pool; the log records each task's routed model sequence, duration and whether
+  its own tests pass, and protected test files are checked so a model cannot
+  "fix" a task by rewriting the test. The companion
+  `TestCheapPoolFixturesFailBeforeFix` runs offline and proves every fixture
+  fails before the edit.
 
 - `BRICK_CODEX_LIVE_TEST=1`: official Codex edits a temporary Python project,
   executes its tests, and returns through Brick after tool execution.

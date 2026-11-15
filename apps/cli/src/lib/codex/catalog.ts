@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import yaml from 'js-yaml';
 import { paths } from '../config/paths.js';
 import { codexHome, getTopLevelString, readCodexConfig } from './config-toml.js';
+import { execa } from 'execa';
 
 type Model = Record<string, any> & { slug: string };
 
@@ -11,12 +12,69 @@ interface CodexCatalog {
   [key: string]: any;
 }
 
+/**
+ * Path of the account's authenticated Codex catalog.
+ *
+ * While a Brick profile is wired, Brick points Codex's `model_catalog_json` at
+ * its own generated catalog. That file is derived output, not the account's
+ * catalog: reading it back would make every later setup run blind to Codex
+ * adding or retiring a model (and to the models the account cannot use). When
+ * the configured path is Brick's managed file, fall back to Codex's own cache.
+ */
+export function authenticatedCatalogPath(): string {
+  const configured = getTopLevelString(readCodexConfig(), 'model_catalog_json');
+  const managed = paths('codex').codexCatalog;
+  if (configured && configured !== managed) return configured;
+  return join(codexHome(), 'models_cache.json');
+}
+
 export async function readAuthenticatedCodexCatalog(): Promise<CodexCatalog> {
-  const cache = getTopLevelString(readCodexConfig(), 'model_catalog_json') || join(codexHome(), 'models_cache.json');
+  const cache = authenticatedCatalogPath();
   try {
     return JSON.parse(await readFile(cache, 'utf8')) as CodexCatalog;
   } catch (error: any) {
-    throw new Error(`cannot read Codex's authenticated model catalog at ${cache}: ${error?.message ?? error}`);
+    throw new Error(
+      `Codex is not initialized: cannot read the authenticated model catalog at ${cache}. ` +
+      `Install Codex, run \`codex login\` once, then retry \`brick start codex\` (${error?.message ?? error}).`
+    );
+  }
+}
+
+/**
+ * Active pool models that the authenticated Codex catalog does not advertise.
+ * An empty catalog is treated as unknown (returns no names) so a stale or
+ * partially written cache never blocks a working setup.
+ */
+export function missingCatalogModels(config: any, catalog: CodexCatalog): string[] {
+  if (!Array.isArray(catalog?.models) || catalog.models.length === 0) return [];
+  const available = new Set<string>();
+  for (const model of catalog.models) if (typeof model?.slug === 'string' && model.slug) available.add(model.slug);
+  if (available.size === 0) return [];
+  const declared = Array.isArray(config?.skill_router?.models)
+    ? config.skill_router.models.map((entry: any) => entry?.model).filter((id: any) => typeof id === 'string')
+    : [];
+  const active = Array.isArray(config?.skill_router?.active_models) && config.skill_router.active_models.length
+    ? config.skill_router.active_models
+    : declared;
+  return [...new Set<string>(active)].filter((id) => !available.has(id));
+}
+
+/**
+ * Catalog for profile creation and migration. The cache file is the normal
+ * source, but a fresh `codex login` may not have written it yet; in that case
+ * ask the installed Codex client directly so `brick start codex` works on a
+ * clean machine.
+ */
+export async function readCodexCatalogForSetup(): Promise<CodexCatalog> {
+  try {
+    return await readAuthenticatedCodexCatalog();
+  } catch (cacheError) {
+    try {
+      const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
+      const catalog = JSON.parse(stdout) as CodexCatalog;
+      if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
+    } catch { /* keep the actionable cache error below */ }
+    throw cacheError;
   }
 }
 
@@ -64,11 +122,41 @@ export function activeBrickContextWindow(config: any): number {
   return Math.min(...windows);
 }
 
+export function activePoolModels(config: any): string[] {
+  const declared = Array.isArray(config?.skill_router?.models)
+    ? config.skill_router.models.map((entry: any) => entry?.model).filter((id: any) => typeof id === 'string')
+    : [];
+  const active = Array.isArray(config?.skill_router?.active_models) && config.skill_router.active_models.length
+    ? config.skill_router.active_models
+    : declared;
+  return [...new Set<string>(active)];
+}
+
+async function readCatalogFile(target: string): Promise<CodexCatalog | null> {
+  try { return JSON.parse(await readFile(target, 'utf8')) as CodexCatalog; }
+  catch { return null; }
+}
+
+/**
+ * Keep the models this profile actively routes to in the generated catalog
+ * even when the authenticated cache momentarily omits them. A stale or
+ * partially written cache must never remove a working pool model from Codex's
+ * own catalog (that would also break context discovery on the next start).
+ */
+export function preserveRequiredModels(source: CodexCatalog, previous: CodexCatalog | null, required: string[]): CodexCatalog {
+  if (!previous || !Array.isArray(previous.models) || required.length === 0) return source;
+  const available = new Set(source.models.map((model) => model?.slug).filter(Boolean));
+  const keep = previous.models.filter((model) => typeof model?.slug === 'string' && required.includes(model.slug) && !available.has(model.slug));
+  if (keep.length === 0) return source;
+  return { ...source, models: [...source.models, ...keep] };
+}
+
 export async function writeCodexModelCatalog(profile: string, _modelIds?: string[], configOverride?: any): Promise<string> {
   const target = paths(profile).codexCatalog;
-  const source = await readAuthenticatedCodexCatalog();
-
   const config = configOverride ?? yaml.load(await readFile(paths(profile).config, 'utf8')) as any;
+  const required = activePoolModels(config);
+  const source = preserveRequiredModels(await readCodexCatalogForSetup(), await readCatalogFile(target), required);
+
   const catalog = withBrickModel(source, activeBrickContextWindow(config));
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
   const temporary = `${target}.brick.tmp`;

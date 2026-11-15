@@ -39,6 +39,11 @@ LITELLM_FIXTURE = {
         "input_cost_per_token": 5.0e-06,
         "output_cost_per_token": 25.0e-06,
     },
+    "claude-fable-5": {
+        "litellm_provider": "anthropic",
+        "input_cost_per_token": 10.0e-06,
+        "output_cost_per_token": 50.0e-06,
+    },
     # Decoy: an older opus with very different pricing. Selecting the wrong
     # key (e.g. a prefix match) would grab this instead of claude-opus-4-8.
     "claude-opus-4-1": {
@@ -89,7 +94,16 @@ class TestBuildPricingRecordsAnthropic:
         # matcher expects, even though the price is read from a versioned key.
         records = fp.build_pricing_records(LITELLM_FIXTURE, "2026-07-03T00:00:00Z")
         models = {r["model"] for r in records if r["provider"] == "anthropic"}
-        assert models == {"claude-haiku", "claude-sonnet", "claude-opus"}
+        assert models == {"claude-haiku", "claude-sonnet", "claude-opus", "claude-fable"}
+
+    def test_fable_row_is_never_dropped(self):
+        # Regression: a narrower ANTHROPIC_MODELS list silently removed the
+        # claude-fable row from pricing.yaml on the next refresh.
+        for price_map in (LITELLM_FIXTURE, {}, None):
+            records = fp.build_pricing_records(price_map, "2026-07-03T00:00:00Z")
+            fable = next(r for r in records if r["model"] == "claude-fable")
+            assert fable["input_price"] == 10.0
+            assert fable["output_price"] == 50.0
 
     def test_fallback_when_key_missing_from_map(self):
         # An empty map forces every Anthropic row to the static fallback.
@@ -122,18 +136,21 @@ class TestBuildPricingRecordsRegolo:
 
 
 class TestBuildPricingRecordsOpenAI:
-    def test_openai_prices_are_official_curated_and_cache_aware(self):
+    def test_openai_prices_are_cache_aware_and_source_attributed(self):
         records = fp.build_pricing_records(LITELLM_FIXTURE, "2026-08-06T00:00:00Z")
         expected = {
-            "gpt-5.6-sol": (5.0, 0.50, 30.0),
-            "gpt-5.6-terra": (2.50, 0.25, 15.0),
-            "gpt-5.6-luna": (1.0, 0.10, 6.0),
+            "gpt-5.6-sol": (5.0, 0.50, 30.0, "openai_official_curated"),
+            "gpt-5.6-terra": (2.50, 0.25, 15.0, "openai_official_curated"),
+            "gpt-5.6-luna": (1.0, 0.10, 6.0, "openai_official_curated"),
+            "gpt-6.1-terra": (1.0, 0.05, 5.0, "litellm:gpt-6.1-terra"),
+            "gpt-6-luna": (0.10, 0.01, 0.50, "litellm:gpt-6-luna"),
+            "gpt-6.1-sol": (2.0, 0.10, 10.0, "litellm:gpt-6.1-sol"),
         }
-        for model, prices in expected.items():
+        for model, (input_price, cached_input_price, output_price, source) in expected.items():
             row = next(r for r in records if r["model"] == model)
-            assert (row["input_price"], row["cached_input_price"], row["output_price"]) == prices
+            assert (row["input_price"], row["cached_input_price"], row["output_price"]) == (input_price, cached_input_price, output_price)
             assert row["provider"] == "openai"
-            assert row["source"] == "openai_official_curated"
+            assert row["source"] == source
             assert row["source_url"] == fp.OPENAI_PRICING_URL
 
 

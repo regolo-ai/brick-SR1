@@ -98,6 +98,37 @@ brick logs work
 brick stop work
 ```
 
+### Codex in one command
+
+Install Codex, authenticate the subscription once, then start the managed
+profile:
+
+```bash
+npm install -g @regoloai/brick
+codex login
+brick start codex
+```
+
+`brick start codex` creates the `codex` profile when missing, verifies the
+SystemOne checkpoint installed by `npm install`, starts the local router, and
+wires the official Codex client to it. The default pool is `gpt-6.1-terra` and
+`gpt-6-luna`; no Regolo API key is required. Open Codex, select `brick`, and
+turns are routed across the pool.
+
+Skill vectors are not bundled with the package. Profile creation and every
+start download `skill_vectors.csv` from the Hugging Face dataset
+`regolo/brick-skill-tables`, validate it, and cache it under `$BRICK_HOME/cache`
+(`~/.brick/cache` by default). Set `BRICK_SKILLS_OFFLINE=1` to use the cached
+table without network access. The vectors written into a starter template are
+only a schema-valid fallback for a first run with neither network nor cache.
+A failed or invalid download keeps the vectors already in the profile, and a
+model missing from the published table keeps its last known vector instead of
+being dropped from the pool.
+
+Existing Codex profiles keep their pool. `brick start codex --reset-pool`
+switches one to the default `gpt-6.1-terra`/`gpt-6-luna` pool without touching
+providers or credentials.
+
 The profile editor configures providers, the model pool, capability vectors,
 provider-supported thinking modes, and the routing knob. Claude and Codex profiles
 connect their official harnesses through the existing native transports.

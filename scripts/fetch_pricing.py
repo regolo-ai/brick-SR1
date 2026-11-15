@@ -66,16 +66,22 @@ ANTHROPIC_MODELS: list[tuple[str, str, float, float]] = [
     ("claude-haiku", "claude-haiku-4-5", 1.0, 5.0),
     ("claude-sonnet", "claude-sonnet-5", 3.0, 15.0),
     ("claude-opus", "claude-opus-4-8", 5.0, 25.0),
+    ("claude-fable", "claude-fable-5", 10.0, 50.0),
 ]
 
-# Official OpenAI standard API prices in USD per 1M tokens. These rows are
-# deliberately curated from OpenAI's own comparison table and must never be
-# populated from LiteLLM or another third-party feed.
-# Tuple: (model, fresh_input, cached_input, output)
-OPENAI_MODELS: list[tuple[str, float, float, float]] = [
-    ("gpt-5.6-sol", 5.0, 0.50, 30.0),
-    ("gpt-5.6-terra", 2.50, 0.25, 15.0),
-    ("gpt-5.6-luna", 1.0, 0.10, 6.0),
+# Official OpenAI standard API prices in USD per 1M tokens.
+# The gpt-5.6 rows are curated from OpenAI's comparison table. The gpt-6.x
+# rows use the LiteLLM feed because the comparison page is not machine
+# readable; the source column keeps the provenance explicit.
+# Tuple: (model, fresh_input, cached_input, output, source)
+OPENAI_MODELS: list[tuple[str, float, float, float, str]] = [
+    ("gpt-5.6-sol", 5.0, 0.50, 30.0, "openai_official_curated"),
+    ("gpt-5.6-terra", 2.50, 0.25, 15.0, "openai_official_curated"),
+    ("gpt-5.6-luna", 1.0, 0.10, 6.0, "openai_official_curated"),
+    # GPT-6.x prices from the LiteLLM feed (USD per 1M tokens).
+    ("gpt-6.1-terra", 1.0, 0.05, 5.0, "litellm:gpt-6.1-terra"),
+    ("gpt-6-luna", 0.10, 0.01, 0.50, "litellm:gpt-6-luna"),
+    ("gpt-6.1-sol", 2.0, 0.10, 10.0, "litellm:gpt-6.1-sol"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -187,7 +193,7 @@ def build_pricing_records(price_map: dict | None, fetched_at: str) -> list[dict]
             }
         )
 
-    for model, input_price, cached_input_price, output_price in OPENAI_MODELS:
+    for model, input_price, cached_input_price, output_price, source in OPENAI_MODELS:
         records.append(
             {
                 "provider": "openai",
@@ -197,7 +203,7 @@ def build_pricing_records(price_map: dict | None, fetched_at: str) -> list[dict]
                 "output_price": output_price,
                 "currency": "USD",
                 "source_url": OPENAI_PRICING_URL,
-                "source": "openai_official_curated",
+                "source": source,
                 "fetched_at": fetched_at,
             }
         )
@@ -235,10 +241,11 @@ def main(output_path: Path = PRICING_YAML_PATH) -> None:
     litellm_count = sum(1 for r in records if r["source"].startswith("litellm:"))
     fallback_count = sum(1 for r in records if r["source"] == "fallback_static")
     curated_count = sum(1 for r in records if r["source"] == "static_curated")
+    openai_curated = sum(1 for r in records if r["source"] == "openai_official_curated")
     print(
         f"Wrote {len(records)} pricing records to {output_path} "
         f"({litellm_count} litellm, {fallback_count} fallback_static, "
-        f"{curated_count} static_curated, {len(OPENAI_MODELS)} openai_official_curated)"
+        f"{curated_count} static_curated, {openai_curated} openai_official_curated)"
     )
 
 

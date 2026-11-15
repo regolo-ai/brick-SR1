@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { paths, profileExists, readState, updateState } from '../config/paths.js';
 import { migrateCodexProfile } from './migrate.js';
-import { readAuthenticatedCodexCatalog } from './catalog.js';
+import { readCodexCatalogForSetup } from './catalog.js';
+import { applyRemoteSkillVectors } from '../skills/resolver.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = join(__dirname, '..', '..', '..', 'templates');
@@ -16,10 +17,10 @@ export const DEFAULT_CODEX_PROFILE = 'codex';
 export const DEFAULT_CODEX_PORT = 8000;
 
 /** Create the Codex profile with local SystemOne and native transports. */
-export async function ensureDefaultCodexProfile(): Promise<string> {
+export async function ensureDefaultCodexProfile(options: { resetPool?: boolean } = {}): Promise<string> {
   const profile = DEFAULT_CODEX_PROFILE;
   if (profileExists(profile)) {
-    await migrateCodexProfile(profile);
+    await migrateCodexProfile(profile, options);
     return profile;
   }
 
@@ -36,7 +37,8 @@ export async function ensureDefaultCodexProfile(): Promise<string> {
   await ensureCodexLocalKey(profile);
 
   const cfg = yaml.load(readFileSync(pp.config, 'utf8')) as any;
-  addOfficialCodexModels(cfg, await readAuthenticatedCodexCatalog());
+  addOfficialCodexModels(cfg, await readCodexCatalogForSetup());
+  await applyRemoteSkillVectors(cfg);
   writeFileSync(pp.config, yaml.dump(cfg), { mode: 0o600 });
 
   if (!readState().activeProfile) updateState({ activeProfile: profile });
