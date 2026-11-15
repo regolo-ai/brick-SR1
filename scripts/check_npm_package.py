@@ -34,6 +34,7 @@ EXPECTED_COMMANDS = {
     "chat",
     "generate",
     "route",
+    "migrate",
 }
 
 
