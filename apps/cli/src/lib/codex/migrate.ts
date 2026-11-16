@@ -59,16 +59,25 @@ function ensureModelConfig(cfg: any, id: string, fallbackEndpoint?: string): boo
 }
 
 
+/** Fallback vectors keyed by capability (published table order). */
+const CODEX_FALLBACK_VECTORS: Record<string, Record<string, number>> = {
+  'gpt-6-luna': { coding: 0.51, creative_synthesis: 0.59, instruction_following: 0.50, math_reasoning: 0.84, planning_agentic: 0.54, world_knowledge: 0.63 },
+  'gpt-6.1-terra': { coding: 0.50, creative_synthesis: 0.41, instruction_following: 0.50, math_reasoning: 0.49, planning_agentic: 0.38, world_knowledge: 0.39 },
+};
+const CANONICAL_CAPABILITIES = ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'];
+
 function addDefaultPool(cfg: any): boolean {
   const sr = isObject(cfg.skill_router) ? cfg.skill_router : (cfg.skill_router = {});
   sr.active_models = [...CODEX_DEFAULT_MODELS];
-  // Published skill-table vectors, in this profile's capability order.
-  sr.models = [
-    { model: 'gpt-6-luna', skill_vector: [0.51, 0.59, 0.50, 0.84, 0.54, 0.63], use_reasoning: true },
-    { model: 'gpt-6.1-terra', skill_vector: [0.50, 0.41, 0.50, 0.49, 0.38, 0.39], use_reasoning: true },
-  ];
   sr.enabled = sr.enabled !== false;
-  sr.capabilities ??= ['coding', 'creative_synthesis', 'instruction_following', 'math_reasoning', 'planning_agentic', 'world_knowledge'];
+  sr.capabilities ??= [...CANONICAL_CAPABILITIES];
+  // Write each fallback vector in THIS profile's declared capability order so
+  // the offline first start routes correctly even before HF sync reorders it.
+  sr.models = CODEX_DEFAULT_MODELS.map((id) => ({
+    model: id,
+    skill_vector: sr.capabilities.map((cap: string) => CODEX_FALLBACK_VECTORS[id]?.[cap] ?? 0.5),
+    use_reasoning: true,
+  }));
   sr.keywords ??= structuredClone(CODEX_DEFAULT_KEYWORDS);
   sr.systemone ??= { local_path: 'models/systemone' };
   sr.knob ??= 0;

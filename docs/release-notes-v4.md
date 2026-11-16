@@ -26,9 +26,6 @@ prompt retention by the router.
   default model and empty rule list, leaving providers and credentials alone.
   A metadata-only preflight warns when the authenticated Codex catalog does
   not list an active model.
-- **CLI tooling**: `brick doctor`, `brick quickstart`, `brick explain`,
-  `brick savings`, `brick models`, `brick skills audit`, `brick support` and
-  shell completions.
 - **Pricing refresh**: curated Anthropic rows (including `claude-fable`) and
   GPT-6.x OpenAI rows are explicit and regression-tested.
 

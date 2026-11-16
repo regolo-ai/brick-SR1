@@ -54,6 +54,21 @@ describe('Codex profile migration', () => {
     expect(compose).toContain('image: docker.io/regolo/brick-cc-router:old');
   });
 
+  it('aligns fallback vectors to a pre-existing capability order (offline correctness)', async () => {
+    const dir = join(home, 'profiles', 'codex');
+    // Template-style order, different from the canonical published order.
+    const order = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'];
+    await writeFile(join(dir, 'config.yaml'), yaml.dump({
+      model: { name: 'old' },
+      skill_router: { models: [], capabilities: order },
+    }));
+    await migrateCodexProfile('codex');
+    const cfg = yaml.load(await readFile(join(dir, 'config.yaml'), 'utf8')) as any;
+    expect(cfg.skill_router.capabilities).toEqual(order);
+    // instruction_following=0.50, coding=0.51, math=0.84, world=0.63, planning=0.54, creative=0.59
+    expect(cfg.skill_router.models.find((m: any) => m.model === 'gpt-6-luna').skill_vector).toEqual([0.50, 0.51, 0.84, 0.63, 0.54, 0.59]);
+  });
+
   it('rejects an ambiguous legacy pool without deleting it', async () => {
     const dir = join(home, 'profiles', 'codex');
     const original = yaml.dump({ skill_router: { models: [{ model: 'gpt-5.4', skill_vector: [0.1, 0.2,0.3,0.4,0.5,0.6] }] } });
