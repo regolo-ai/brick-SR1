@@ -65,6 +65,46 @@ export async function ensureCodexLocalKey(profile: string): Promise<string> {
   return key.trim();
 }
 
+/**
+ * Drop Codex-endpoint models that the authenticated Codex catalog no longer
+ * advertises. The virtual Brick model, the default model and every model the
+ * user keeps in the active routing pool are never removed; when the pool is
+ * implicit (no `active_models`), every declared pool entry is preserved.
+ * Pruned ids are also detached from `skill_router.models` so the profile stays
+ * internally consistent. An empty catalog is treated as "unknown" and prunes
+ * nothing.
+ */
+export function pruneOfficialCodexModels(
+  cfg: any,
+  catalog: { models: Array<{ slug?: string }> },
+  options: { keep?: Iterable<string> } = {},
+): string[] {
+  const endpoint = cfg.provider_endpoints?.find((e: any) => e.provider_profile === 'openai-codex');
+  if (!endpoint || !cfg.model_config) return [];
+  const available = new Set<string>();
+  for (const model of catalog.models ?? []) if (typeof model?.slug === 'string' && model.slug) available.add(model.slug);
+  if (available.size === 0) return [];
+
+  const sr = cfg.skill_router;
+  const declared = Array.isArray(sr?.models) ? sr.models.map((entry: any) => entry?.model).filter((id: any) => typeof id === 'string') : [];
+  const active = Array.isArray(sr?.active_models) && sr.active_models.length ? sr.active_models : declared;
+  const keep = new Set<string>(['brick', ...(options.keep ?? []), ...active]);
+  if (typeof cfg.default_model === 'string' && cfg.default_model) keep.add(cfg.default_model);
+
+  const removed: string[] = [];
+  for (const [id, conf] of Object.entries(cfg.model_config) as Array<[string, any]>) {
+    if (keep.has(id) || available.has(id)) continue;
+    if (conf?.preferred_endpoints?.[0] !== endpoint.name) continue;
+    delete cfg.model_config[id];
+    removed.push(id);
+  }
+  if (removed.length && Array.isArray(sr?.models)) {
+    const gone = new Set(removed);
+    sr.models = sr.models.filter((entry: any) => !gone.has(entry?.model));
+  }
+  return removed;
+}
+
 /** Official catalog entries remain manually selectable without joining the routing pool. */
 export function addOfficialCodexModels(cfg: any, catalog: { models: Array<{ slug: string; context_window?: number; supported_reasoning_levels?: Array<{ effort: string }> }> }): void {
   const endpoint = cfg.provider_endpoints?.find((e: any) => e.provider_profile === 'openai-codex');

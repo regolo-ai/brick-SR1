@@ -15,19 +15,9 @@ brick:
     k: 8
   ocr_min_text_length: 10
 providers:
-  regolo:
-    base_url: https://api.regolo.ai/v1
   openai-codex:
     base_url: https://chatgpt.com/backend-api/codex
 provider_profiles:
-  regolo:
-    type: openai_compatible
-    base_url: https://api.regolo.ai/v1
-    protocol: chat_completions
-    auth_source: provider_env
-    api_key_env: REGOLO_API_KEY
-    capabilities:
-    - function_tools
   openai-codex:
     type: openai_compatible
     base_url: https://chatgpt.com/backend-api/codex
@@ -47,27 +37,34 @@ provider_profiles:
     - item:additional_tools
     - item:namespace
 provider_endpoints:
-- name: regolo
-  provider_profile: regolo
-  weight: 1
 - name: openai-codex
   provider_profile: openai-codex
   weight: 1
-default_model: qwen3.5-122b
+default_model: gpt-6.1-terra
 model_config:
-  qwen3.5-122b:
-    preferred_endpoints:
-    - regolo
-    param_size: 122b
-    reasoning_family: qwen3
-  gpt-5.6-terra:
+  gpt-6-luna:
     preferred_endpoints:
     - openai-codex
-    param_size: unknown
     reasoning_family: openai_reasoning
+    context_window_size: 258400
+    allowed_thinking_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+  gpt-6.1-terra:
+    preferred_endpoints:
+    - openai-codex
+    reasoning_family: openai_reasoning
+    context_window_size: 475000
+    allowed_thinking_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
 reasoning_families:
-  qwen3:
-    parameter: enable_thinking
   openai_reasoning:
     parameter: reasoning_effort
 skill_router:
@@ -80,28 +77,40 @@ skill_router:
   - planning_agentic
   - creative_synthesis
   models:
-  - model: qwen3.5-122b
+  - model: gpt-6-luna
     skill_vector:
-    - 0.57
     - 0.5
-    - 0.48
-    - 0.68
-    - 0.52
-    - 0.38
+    - 0.51
+    - 0.84
+    - 0.63
+    - 0.54
+    - 0.59
     use_reasoning: true
-  - model: gpt-5.6-terra
+  - model: gpt-6.1-terra
     skill_vector:
-    - 0.8
-    - 0.85
-    - 0.88
-    - 0.88
-    - 0.86
-    - 0.85
+    - 0.5
+    - 0.5
+    - 0.49
+    - 0.39
+    - 0.38
+    - 0.41
     use_reasoning: true
   active_models:
-  - qwen3.5-122b
-  - gpt-5.6-terra
+  - gpt-6-luna
+  - gpt-6.1-terra
+  keywords:
+  - name: strong-agentic
+    model: gpt-6.1-terra
+    keywords:
+    - apply_patch
+    - refactor
+    - debug
+    - bug
+    - bugs
+    - failing test
+    - failing tests
+    - unit test
+    - unit tests
   systemone:
     local_path: models/systemone
   knob: 0
-decisions: []
