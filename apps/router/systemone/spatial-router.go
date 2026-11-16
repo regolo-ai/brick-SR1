@@ -73,6 +73,10 @@ type workerReply struct {
 	Device        string    `json:"device"`
 	Dtype         string    `json:"dtype"`
 	Attention     string    `json:"attention"`
+	Threads       int       `json:"threads"`
+	MaxTokens     int       `json:"max_tokens"`
+	MaxChars      int       `json:"max_chars"`
+	WarmupMS      float64   `json:"warmup_ms"`
 	Probabilities []float64 `json:"probabilities"`
 	Error         string    `json:"error"`
 }
@@ -170,6 +174,21 @@ func Available() bool {
 	return workerStatus.available.Load()
 }
 
+// Close stops the inference worker and clears the cached state. It is safe to
+// call when no worker is running, and it is what keeps a stopped runtime from
+// leaving a loaded model resident in memory.
+func Close() {
+	modelState.Lock()
+	defer modelState.Unlock()
+	if modelState.worker == nil {
+		return
+	}
+	modelState.worker.close()
+	modelState.worker = nil
+	modelState.path = ""
+	workerStatus.available.Store(false)
+}
+
 // LastError returns the most recent worker failure, or an empty string.
 func LastError() string {
 	if value, ok := workerStatus.lastError.Load().(string); ok {
@@ -209,7 +228,9 @@ func Init(modelPath string) error {
 	if python == "" {
 		python = "python3"
 	}
-	worker, err := startWorker(exec.Command(python, "-u", "-c", workerSource, path))
+	command := exec.Command(python, "-u", "-c", workerSource, path)
+	bindToParent(command)
+	worker, err := startWorker(command)
 	if err != nil {
 		error := fmt.Errorf("initialize SystemOne (requires Python, torch and transformers): %w", err)
 		markUnavailable(error)
@@ -317,6 +338,10 @@ func Info() map[string]interface{} {
 		info["device"] = reply.Device
 		info["dtype"] = reply.Dtype
 		info["attention"] = reply.Attention
+		info["threads"] = reply.Threads
+		info["max_tokens"] = reply.MaxTokens
+		info["max_chars"] = reply.MaxChars
+		info["warmup_ms"] = reply.WarmupMS
 	}
 	if err := LastError(); err != "" {
 		info["last_error"] = err

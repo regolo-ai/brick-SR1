@@ -136,6 +136,7 @@ func main() {
 
 	if *routeTest != "" {
 		runRouteTest(ctx, cfg, *routeTest, *routeCands)
+		systemone.Close()
 		return
 	}
 
@@ -152,8 +153,12 @@ func main() {
 		serverCancel()
 	}()
 
-	if err := proxyServer.Start(serverCtx); err != nil {
-		logging.Fatalf("Proxy server error: %v", err)
+	startErr := proxyServer.Start(serverCtx)
+	// Release the inference worker explicitly: a stopped runtime must not leave
+	// a loaded model resident in memory.
+	systemone.Close()
+	if startErr != nil {
+		logging.Fatalf("Proxy server error: %v", startErr)
 	}
 }
 

@@ -40,7 +40,7 @@ One-shot and machine-readable modes:
 ```
 
 `--device cpu|cuda|auto`, `--model` for a local checkout, and
-`BRICK_SYSTEMONE_THREADS` (default `min(4, cores)`) are also available.
+`BRICK_SYSTEMONE_THREADS` (default `min(8, cores)`) are also available.
 
 ## What the numbers mean
 

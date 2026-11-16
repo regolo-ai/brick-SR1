@@ -23,6 +23,9 @@ type Router struct {
 	skillCfg config.SkillRouterConfig
 	classify func(context.Context, string) ([]float64, error)
 
+	cache    *vectorCache
+	inflight classifyGroup
+
 	keywordsOnce sync.Once
 	keywords     []compiledKeywordRule
 }
@@ -86,19 +89,47 @@ func New(cfg *config.RouterConfig) (*Router, error) {
 	if err := systemone.Init(path); err != nil {
 		return nil, err
 	}
-	return &Router{skillCfg: skillCfg, classify: func(ctx context.Context, text string) ([]float64, error) {
-		vector, err := systemone.ClassifyContext(ctx, text)
-		if err == nil || ctx.Err() != nil || systemone.Available() {
-			return vector, err
+	return &Router{
+		skillCfg: skillCfg,
+		cache:    newVectorCache(vectorCacheEntries, vectorCacheTTL),
+		classify: func(ctx context.Context, text string) ([]float64, error) {
+			vector, err := systemone.ClassifyContext(ctx, text)
+			if err == nil || ctx.Err() != nil || systemone.Available() {
+				return vector, err
+			}
+			// The worker is gone (crash, protocol error or timeout). Reload it from
+			// the already-validated checkpoint and retry once, so a single failure
+			// does not disable routing until the process restarts.
+			if reloadErr := systemone.Init(path); reloadErr != nil {
+				return nil, err
+			}
+			return systemone.ClassifyContext(ctx, text)
+		},
+	}, nil
+}
+
+// queryVector classifies text, reusing a recent identical result and sharing a
+// single inference between concurrent duplicates.
+func (r *Router) queryVector(ctx context.Context, text string) ([]float64, error) {
+	key := vectorKey(text)
+	if vector, ok := r.cache.get(key); ok {
+		return append([]float64(nil), vector...), nil
+	}
+	vector, err := r.inflight.do(key, func() ([]float64, error) {
+		if vector, ok := r.cache.get(key); ok {
+			return vector, nil
 		}
-		// The worker is gone (crash, protocol error or timeout). Reload it from
-		// the already-validated checkpoint and retry once, so a single failure
-		// does not disable routing until the process restarts.
-		if reloadErr := systemone.Init(path); reloadErr != nil {
+		vector, err := r.classify(ctx, text)
+		if err != nil {
 			return nil, err
 		}
-		return systemone.ClassifyContext(ctx, text)
-	}}, nil
+		r.cache.put(key, vector)
+		return vector, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]float64(nil), vector...), nil
 }
 
 // canonicalConfig copies and explicitly reorders configured vectors without mutating the profile.
@@ -164,7 +195,7 @@ func (r *Router) RouteWithOptions(ctx context.Context, text string, options Rout
 		return nil, fmt.Errorf("no eligible SystemOne candidates")
 	}
 	started := time.Now()
-	query, err := r.classify(ctx, text)
+	query, err := r.queryVector(ctx, trimRoutingText(text, routingTextLimit))
 	outcome := "success"
 	if err != nil {
 		outcome = "error"

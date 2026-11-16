@@ -36,7 +36,7 @@ def load(model_id, revision, requested_device):
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    cpu_threads = int(os.environ.get("BRICK_SYSTEMONE_THREADS", min(4, os.cpu_count() or 1)))
+    cpu_threads = int(os.environ.get("BRICK_SYSTEMONE_THREADS", min(8, os.cpu_count() or 1)))
     torch.set_num_threads(cpu_threads)
 
     if requested_device == "auto":
