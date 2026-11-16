@@ -57,7 +57,7 @@ func RequiredCapabilities(body []byte) ([]string, error) {
 				case "input_file":
 					feature = "files"
 				default:
-					feature = "item:" + typ
+					feature = "item:" + hostedToolType(typ)
 				}
 				if feature != "" {
 					if err := require(feature); err != nil {
@@ -105,6 +105,35 @@ func RequiredCapabilities(body []byte) ([]string, error) {
 	return result, nil
 }
 
+// hostedToolItems maps the item types a provider-hosted tool emits to the tool
+// type that declares it. Those items are replayed in `input` on every later turn
+// of a session, so they are gated by the hosted tool's own capability (as
+// function_call and custom_tool_call already are) instead of demanding a
+// separate item:<type>_call capability that no profile declares.
+var hostedToolItems = map[string]string{
+	"web_search_call":       "web_search",
+	"web_search_output":     "web_search",
+	"tool_search_call":      "tool_search",
+	"tool_search_output":    "tool_search",
+	"file_search_call":      "file_search",
+	"code_interpreter_call": "code_interpreter",
+	"image_generation_call": "image_generation",
+	"mcp_call":              "mcp",
+	"mcp_list_tools":        "mcp",
+	"mcp_approval_request":  "mcp",
+	"local_shell_call":      "local_shell",
+	"computer_call":         "computer",
+}
+
+// hostedToolType resolves an item type to the hosted tool type whose capability
+// covers it. Unknown types keep their exact name so they still fail closed.
+func hostedToolType(typ string) string {
+	if tool, ok := hostedToolItems[typ]; ok {
+		return tool
+	}
+	return typ
+}
+
 func Compatible(body []byte, capabilities []string) error {
 	required, err := RequiredCapabilities(body)
 	if err != nil {
@@ -126,7 +155,11 @@ func Compatible(body []byte, capabilities []string) error {
 	return nil
 }
 
-// RoutingText provides a separate bounded view; the forwarded history is untouched.
+// RoutingText provides a separate bounded view of the conversation for the
+// classifier; the forwarded history is untouched. Harness instructions (the
+// top-level `instructions` field and developer/system items) are excluded: they
+// are identical on every request of a session, so they carry no routing signal
+// and would crowd out the tail where the actual ask lives.
 func RoutingText(body []byte, window int) string {
 	var raw map[string]json.RawMessage
 	_ = json.Unmarshal(body, &raw)
@@ -139,12 +172,7 @@ func RoutingText(body []byte, window int) string {
 	if window > 0 && len(items) > window {
 		items = items[len(items)-window:]
 	}
-	var instructions string
-	_ = json.Unmarshal(raw["instructions"], &instructions)
 	var parts []string
-	if instructions != "" {
-		parts = append(parts, instructions)
-	}
 	for _, item := range items {
 		var message struct {
 			Role    string          `json:"role"`
@@ -153,6 +181,10 @@ func RoutingText(body []byte, window int) string {
 		}
 		_ = json.Unmarshal(item, &message)
 		if message.Role != "" && (message.Type == "" || message.Type == "message") {
+			switch strings.ToLower(message.Role) {
+			case "system", "developer":
+				continue
+			}
 			var text string
 			if json.Unmarshal(message.Content, &text) != nil {
 				var blocks []struct {

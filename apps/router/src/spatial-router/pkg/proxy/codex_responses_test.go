@@ -180,6 +180,104 @@ func TestCodexRejectedRequestsDoNotIncrementMetrics(t *testing.T) {
 	}
 }
 
+// codexShippedCapabilities is the provider profile capability list Brick ships
+// for the native Codex endpoint.
+var codexShippedCapabilities = []string{"function_tools", "custom_tools", "opaque_reasoning", "images", "audio", "files", "compaction", "item:tool_search", "item:web_search", "item:additional_tools", "item:namespace"}
+
+// allowListRouter selects the first eligible candidate in declaration order.
+type allowListRouter struct{ order []string }
+
+func (r allowListRouter) RouteWithOptions(_ context.Context, _ string, options brickrouting.RoutingOptions) (*brickrouting.Result, error) {
+	for _, model := range r.order {
+		if options.Candidates[model] {
+			return &brickrouting.Result{Model: model}, nil
+		}
+	}
+	return nil, fmt.Errorf("no compatible candidate")
+}
+
+func webSearchReplayBody() string {
+	return `{"model":"brick","tools":[{"type":"web_search"}],"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"search the web"}]},{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"brick"}},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`
+}
+
+func webSearchReplayConfig(endpoint string) *config.RouterConfig {
+	cfg := &config.RouterConfig{CodexRouter: config.CodexRouterConfig{Enabled: true, LocalKeyEnv: "BRICK_TEST_LOCAL"}}
+	cfg.ModelConfig = map[string]config.ModelParams{
+		"chat-small":       {PreferredEndpoints: []string{"chat"}, ContextWindowSize: 1},
+		"native-responses": {PreferredEndpoints: []string{"codex"}, ContextWindowSize: 258400},
+	}
+	cfg.ProviderEndpoints = []config.ProviderEndpoint{
+		{Name: "chat", ProviderProfileName: "chat"},
+		{Name: "codex", ProviderProfileName: "openai-codex"},
+	}
+	cfg.ProviderProfiles = map[string]config.ProviderProfile{
+		"chat":         {BaseURL: endpoint, Protocol: "chat_completions", AuthSource: "provider_env", APIKeyEnv: "BRICK_TEST_EXTERNAL", Capabilities: []string{"function_tools"}},
+		"openai-codex": {BaseURL: endpoint, Protocol: "responses", AuthSource: "provider_env", APIKeyEnv: "BRICK_TEST_EXTERNAL", Capabilities: codexShippedCapabilities},
+	}
+	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "chat-small"}, {Model: "native-responses"}}
+	return cfg
+}
+
+// A hosted tool's own output item is replayed in history on the following turns.
+// It must not make the backend that produced it ineligible.
+func TestCodexRoutesReplayedHostedToolItem(t *testing.T) {
+	metrics.ResetRouting()
+	t.Cleanup(metrics.ResetRouting)
+	t.Setenv("BRICK_TEST_LOCAL", "local")
+	t.Setenv("BRICK_TEST_EXTERNAL", "external")
+
+	var forwarded atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		forwarded.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"response","object":"response","output":[]}`)
+	}))
+	defer upstream.Close()
+
+	cfg := webSearchReplayConfig(upstream.URL)
+	s := &Server{cfg: cfg, brickRouter: allowListRouter{order: []string{"chat-small", "native-responses"}}}
+	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(webSearchReplayBody()))
+	r.Header.Set("X-Brick-Key", "local")
+	w := httptest.NewRecorder()
+	s.handleResponses(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("replayed hosted tool item was rejected: %d %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Brick-Selected-Model"); got != "native-responses" {
+		t.Fatalf("selected model = %q, want native-responses", got)
+	}
+	body, _ := forwarded.Load().(string)
+	if !strings.Contains(body, `"type":"web_search_call"`) {
+		t.Fatalf("forwarded body lost the hosted tool item: %s", body)
+	}
+}
+
+// A rejected candidate reports every concrete reason, so a context-window
+// guard never hides a missing transport capability.
+func TestCodexRejectionReportsAllCauses(t *testing.T) {
+	t.Setenv("BRICK_TEST_LOCAL", "local")
+	t.Setenv("BRICK_TEST_EXTERNAL", "external")
+
+	cfg := webSearchReplayConfig("http://127.0.0.1:1")
+	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "chat-small"}}
+	s := &Server{cfg: cfg, brickRouter: allowListRouter{order: []string{"chat-small"}}}
+	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(webSearchReplayBody()))
+	r.Header.Set("X-Brick-Key", "local")
+	w := httptest.NewRecorder()
+	s.handleResponses(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"item:web_search", "estimated input exceeds context_window_size 1"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("rejection reason %q missing: %s", want, w.Body.String())
+		}
+	}
+}
+
 func TestCodexChatAdapterRecordsRoutedRequest(t *testing.T) {
 	metrics.ResetRouting()
 	t.Cleanup(metrics.ResetRouting)
@@ -591,4 +689,35 @@ with tempfile.TemporaryDirectory(prefix='brick-compact-') as cwd:
 		t.Fatalf("compaction did not perform inference: calls=%d %s", inference.Load(), out)
 	}
 	t.Logf("official compaction and post-compaction context passed: inference=%d, dedicated compact endpoint=%d", inference.Load(), compact.Load())
+}
+
+// The Codex subscription backend rejects persisted responses, so the proxy
+// normalizes store=false before forwarding to a codex_request destination.
+func TestCodexSubscriptionForcesStoreFalse(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		changed bool
+	}{
+		{name: "missing", input: `{"model":"first","input":[]}`, changed: true},
+		{name: "true", input: `{"model":"first","store":true,"input":[]}`, changed: true},
+		{name: "false", input: `{"model":"first","store":false,"input":[]}`, changed: false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(testCase.input), &raw); err != nil {
+				t.Fatal(err)
+			}
+			if got := codexStoreFalse(raw); got != testCase.changed {
+				t.Fatalf("codexStoreFalse changed = %v, want %v", got, testCase.changed)
+			}
+			if string(raw["store"]) != "false" {
+				t.Fatalf("store = %s, want false", raw["store"])
+			}
+			if testCase.name == "missing" && raw["model"] == nil {
+				t.Fatal("normalization dropped unrelated fields")
+			}
+		})
+	}
 }

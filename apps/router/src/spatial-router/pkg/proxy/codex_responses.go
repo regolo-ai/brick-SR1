@@ -66,8 +66,20 @@ func (w *statusWriter) Flush() {
 	}
 }
 
-// observeUsage reads either a complete Responses object or its final SSE event.
+// observeUsage reads either a complete Responses object, its final SSE event,
+// or a whole SSE body. Some upstreams (notably the Codex backend) omit the
+// Content-Type header, so the writer buffers the stream instead of observing
+// each line; this handles that buffered body too.
 func (w *statusWriter) observeUsage(payload []byte) {
+	if bytes.Contains(payload, []byte("\ndata:")) || bytes.HasPrefix(payload, []byte("data:")) || bytes.HasPrefix(payload, []byte("event:")) {
+		for _, line := range bytes.Split(payload, []byte("\n")) {
+			line = bytes.TrimSpace(line)
+			if bytes.HasPrefix(line, []byte("data:")) {
+				w.observeUsage(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:"))))
+			}
+		}
+		return
+	}
 	var envelope struct {
 		Usage    json.RawMessage `json:"usage"`
 		Response struct {
@@ -190,11 +202,21 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 			_, compatibilityErr = codextransport.PrepareChat(body)
 		}
 		if model == "brick" {
+			// The window preflight is a separate, additive reason. It must never
+			// replace an incompatible transport, which is the actionable cause.
 			window := s.cfg.ModelConfig[candidate].ContextWindowSize
+			var windowErr error
 			if window <= 0 {
-				compatibilityErr = fmt.Errorf("context_window_size is not configured")
+				windowErr = fmt.Errorf("context_window_size is not configured")
 			} else if estimatedCodexInputTokens(body) > window {
-				compatibilityErr = fmt.Errorf("estimated input exceeds context_window_size %d", window)
+				windowErr = fmt.Errorf("estimated input exceeds context_window_size %d", window)
+			}
+			switch {
+			case windowErr == nil:
+			case compatibilityErr == nil:
+				compatibilityErr = windowErr
+			default:
+				compatibilityErr = fmt.Errorf("%w; %v", compatibilityErr, windowErr)
 			}
 		}
 		if err := compatibilityErr; err != nil {
@@ -247,6 +269,17 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 	if d.UpstreamModel != model && string(raw["model"]) != `"brick"` {
 		raw["model"], _ = json.Marshal(d.UpstreamModel)
 		body, _ = json.Marshal(raw)
+	}
+	if d.AuthSource == "codex_request" && codexStoreFalse(raw) {
+		// The Codex subscription backend rejects persisted responses even when
+		// the client leaves store unset, while the official client always sends
+		// false. Enforce it for this destination only; other Responses providers
+		// keep their own storage semantics.
+		body, err = json.Marshal(raw)
+		if err != nil {
+			writeError(w, 400, "invalid Responses request")
+			return
+		}
 	}
 	upstreamKey := ""
 	if d.AuthSource == "codex_request" {
@@ -347,6 +380,18 @@ func recordCodexForward(route *brickrouting.Result, model string) {
 		source = "routed"
 	}
 	metrics.BrickRequests.WithLabelValues(source, model).Inc()
+}
+
+// codexStoreFalse reports whether it had to normalize store=false. The Codex
+// subscription backend rejects persisted responses, so a missing or true value
+// must be rewritten before forwarding.
+func codexStoreFalse(raw map[string]json.RawMessage) bool {
+	store, exists := raw["store"]
+	if exists && strings.TrimSpace(string(store)) == "false" {
+		return false
+	}
+	raw["store"] = json.RawMessage("false")
+	return true
 }
 
 func estimatedCodexInputTokens(body []byte) int {
