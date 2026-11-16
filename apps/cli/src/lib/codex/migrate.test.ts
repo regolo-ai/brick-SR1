@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+// Keep catalog reads deterministic: no `codex debug models` subprocess in tests.
+vi.mock('execa', () => ({ execa: vi.fn().mockRejectedValue(new Error('codex unavailable in tests')) }));
 
 let home: string;
 let migrateCodexProfile: (profile: string) => Promise<any>;
