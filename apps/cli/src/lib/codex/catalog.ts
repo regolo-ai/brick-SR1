@@ -61,21 +61,55 @@ export function missingCatalogModels(config: any, catalog: CodexCatalog): string
 
 /**
  * Catalog for profile creation and migration. The cache file is the normal
- * source, but a fresh `codex login` may not have written it yet; in that case
- * ask the installed Codex client directly so `brick start codex` works on a
- * clean machine.
+ * source, but it can be readable yet stale: the Codex client writes a subset
+ * of the full catalog (e.g. only 5.6 models) while `codex debug models` still
+ * advertises the active pool. When any `required` slug is missing from the
+ * cache, merge in the client's full catalog so we neither warn about nor prune
+ * models that are actually available. A fresh `codex login` may not have
+ * written the cache yet; then ask the client directly so `brick start codex`
+ * works on a clean machine.
  */
-export async function readCodexCatalogForSetup(): Promise<CodexCatalog> {
+export async function readCodexCatalogForSetup(required: string[] = []): Promise<CodexCatalog> {
+  let cached: CodexCatalog | undefined;
   try {
-    return await readAuthenticatedCodexCatalog();
+    cached = await readAuthenticatedCodexCatalog();
   } catch (cacheError) {
-    try {
-      const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
-      const catalog = JSON.parse(stdout) as CodexCatalog;
-      if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
-    } catch { /* keep the actionable cache error below */ }
-    throw cacheError;
+    // Cache unreadable — fall through to the client below.
+    if (required.length === 0) {
+      // Preserve the actionable error when no client is available either.
+      try {
+        const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
+        const catalog = JSON.parse(stdout) as CodexCatalog;
+        if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
+      } catch { /* keep the actionable cache error below */ }
+      throw cacheError;
+    }
   }
+
+  const missing = required.filter((id) => !cached?.models?.some((model) => model?.slug === id));
+  if (cached && missing.length === 0) return cached;
+
+  let live: CodexCatalog | undefined;
+  try {
+    const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
+    const parsed = JSON.parse(stdout) as CodexCatalog;
+    if (Array.isArray(parsed?.models) && parsed.models.length > 0) live = parsed;
+  } catch { /* use the cache as-is if the client is unavailable */ }
+
+  if (!live) {
+    if (cached) return cached;
+    throw new Error('Codex is not initialized: no authenticated model catalog and `codex debug models` is unavailable. Run `codex login`, then retry `brick start codex`.');
+  }
+  if (!cached) return live;
+  // Union: client catalog first (fuller), then cache-only entries.
+  const seen = new Set<string>();
+  const models: Model[] = [];
+  for (const model of [...live.models, ...cached.models]) {
+    if (!model?.slug || seen.has(model.slug)) continue;
+    seen.add(model.slug);
+    models.push(model);
+  }
+  return { ...live, models };
 }
 
 /**

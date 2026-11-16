@@ -1,12 +1,17 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const { execaMock } = vi.hoisted(() => ({ execaMock: vi.fn() }));
+vi.mock('execa', () => ({ execa: execaMock }));
+
 import {
   activeBrickContextWindow,
   authenticatedCatalogPath,
   missingCatalogModels,
   preserveRequiredModels,
+  readCodexCatalogForSetup,
   withBrickModel,
 } from './catalog.js';
 
@@ -112,5 +117,30 @@ describe('authenticated catalog source', () => {
     const merged = preserveRequiredModels(source as any, previous as any, ['gpt-6.1-terra']);
     expect(merged.models.map((model: any) => model.slug)).toEqual(['gpt-6-luna', 'gpt-6.1-terra']);
     expect(preserveRequiredModels(source as any, previous as any, ['gpt-6-luna'])).toBe(source);
+  });
+});
+
+describe('readCodexCatalogForSetup stale-cache handling', () => {
+  it('merges the Codex client catalog when the cache omits a required pool model', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'brick-catalog-stale-'));
+    const prevHome = process.env.BRICK_HOME;
+    const prevCodex = process.env.CODEX_HOME;
+    process.env.BRICK_HOME = dir;
+    process.env.CODEX_HOME = join(dir, 'codex-home');
+    await mkdir(process.env.CODEX_HOME, { recursive: true });
+    // Cache lists only old models; the client still advertises the 6.x pool.
+    await writeFile(join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({ models: [{ slug: 'gpt-5.6-terra' }] }));
+    const live = { models: [{ slug: 'gpt-5.6-terra' }, { slug: 'gpt-6-luna' }, { slug: 'gpt-6.1-terra' }] };
+    execaMock.mockResolvedValue({ stdout: JSON.stringify(live) });
+    try {
+      const catalog = await readCodexCatalogForSetup(['gpt-6-luna', 'gpt-6.1-terra']);
+      expect(catalog.models.map((m) => m.slug)).toEqual(['gpt-5.6-terra', 'gpt-6-luna', 'gpt-6.1-terra']);
+      expect(execaMock).toHaveBeenCalledWith('codex', ['debug', 'models'], expect.anything());
+    } finally {
+      execaMock.mockReset();
+      if (prevHome === undefined) delete process.env.BRICK_HOME; else process.env.BRICK_HOME = prevHome;
+      if (prevCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = prevCodex;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

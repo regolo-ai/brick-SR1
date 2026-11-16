@@ -162,7 +162,12 @@ export async function migrateCodexProfile(
   if (JSON.stringify(native) !== JSON.stringify(cfg)) { cfg = native; changed = true; }
 
   if (poolAdded) await applyRemoteSkillVectors(cfg);
-  const authenticatedCatalog = await readCodexCatalogForSetup();
+  // Pass the pool so a stale-but-readable cache cannot prune available models
+  // or fail to supply their context windows.
+  const configuredPool = Array.isArray(cfg.skill_router?.active_models) && cfg.skill_router.active_models.length
+    ? cfg.skill_router.active_models
+    : (cfg.skill_router?.models ?? []).map((entry: any) => entry?.model).filter(Boolean);
+  const authenticatedCatalog = await readCodexCatalogForSetup(configuredPool);
   addOfficialCodexModels(cfg, authenticatedCatalog);
   const pruned = pruneOfficialCodexModels(cfg, authenticatedCatalog);
   changed = changed || JSON.stringify(cfg) !== JSON.stringify(parsed);

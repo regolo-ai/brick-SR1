@@ -12,7 +12,7 @@ import { paths,updateState } from '../config/paths.js';
 import { loadSkillTable, InvalidRemoteSkillTableError, type SkillResolveOptions } from '../skills/resolver.js';
 import { resolveSkillRecord } from '../skills/aliases.js';
 import { skillVectorInOrder } from '../skills/table.js';
-import { missingCatalogModels, readAuthenticatedCodexCatalog } from '../codex/catalog.js';
+import { activePoolModels, missingCatalogModels, readCodexCatalogForSetup } from '../codex/catalog.js';
 import { startPricingWatcher } from '../economy/watch.js';
 import { ok,warn } from '../ui/banners.js';
 import * as p from '../ui/prompts.js';
@@ -96,7 +96,9 @@ export async function ensureServing(
 export async function warnUnavailableCodexModels(cfg: any): Promise<void> {
   if (!cfg?.codex_router?.enabled) return;
   let catalog;
-  try { catalog = await readAuthenticatedCodexCatalog(); } catch { return; }
+  // Merge in `codex debug models` when the cached subset omits pool models,
+  // otherwise a stale cache triggers a spurious "model not listed" warning.
+  try { catalog = await readCodexCatalogForSetup(activePoolModels(cfg)); } catch { return; }
   const missing = missingCatalogModels(cfg, catalog);
   if (missing.length === 0) return;
   warn(`the authenticated Codex catalog does not list ${missing.join(', ')}; if a turn fails, edit the pool (\`brick profile edit\`) or reset it (\`brick start codex --reset-pool\`)`);
