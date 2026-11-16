@@ -8,6 +8,10 @@ export type DiagSystemOne = {
   engine?: string;
   revision?: string;
   device?: string;
+  dtype?: string;
+  threads?: number;
+  max_tokens?: number;
+  warmup_ms?: number;
   model?: string;
   latency_ms?: number;
   error?: string;
@@ -33,6 +37,65 @@ export type HistoryStats = JsonStats & {
 export function historyRoutedRows(s: HistoryStats): RoutingRow[] {
   const total = s.overall.calls || 1;
   return s.models.filter((x) => x.routed_calls > 0).map((x) => ({ label: 'routed', model: x.model, count: x.routed_calls, pct: x.routed_calls * 100 / total }));
+}
+
+/** Total calls recorded in the persistent history. */
+export function totalRequests(s: HistoryStats): number {
+  return s.overall.calls;
+}
+
+/** Calls per model for router decisions (routed), as a share of all calls. */
+export function routedRowsByModel(s: HistoryStats): RoutingRow[] {
+  return aggregateByModel(s, (m) => m.routed_calls);
+}
+
+/** Same split for native traffic, which bypasses the router and is not a routing decision. */
+export function nativeRowsByModel(s: HistoryStats): RoutingRow[] {
+  return aggregateByModel(s, (m) => m.native_calls);
+}
+
+function aggregateByModel(s: HistoryStats, pick: (m: JsonStats['models'][number]) => number): RoutingRow[] {
+  const total = totalRequests(s);
+  return s.models
+    .filter((m) => pick(m) > 0)
+    .map((m) => ({ label: '', model: m.model, count: pick(m), pct: total === 0 ? 0 : (pick(m) / total) * 100 }))
+    // The router returns its rows in a stable order, but sorting here anyway
+    // keeps older routers (random map order in Go) from reshuffling the panel.
+    .sort((a, b) => (b.count - a.count) || a.model.localeCompare(b.model));
+}
+
+/** Reasoning-mode split for one model, as a share of that model's own calls. */
+export function effortRowsForModel(s: HistoryStats, model: string): RoutingRow[] {
+  const row = s.models.find((m) => m.model === model);
+  if (!row) return [];
+  const modes = row.reasoning_modes ?? [];
+  const modelTotal = modes.reduce((sum, mode) => sum + mode.calls, 0);
+  return modes
+    .map((mode) => ({
+      label: mode.mode || 'default',
+      model,
+      count: mode.calls,
+      pct: modelTotal === 0 ? 0 : (mode.calls / modelTotal) * 100,
+    }))
+    .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label));
+}
+
+/** Routing latency in seconds, read from the history percentiles (may be null). */
+export function routingLatency(s: HistoryStats): { mean: number | null; p50: number | null; p95: number | null } {
+  const routing = s.latencies?.routing;
+  const toSeconds = (ms: number | null | undefined) => (ms === null || ms === undefined ? null : ms / 1000);
+  return { mean: toSeconds(routing?.average_ms), p50: toSeconds(routing?.p50_ms), p95: toSeconds(routing?.p95_ms) };
+}
+
+/**
+ * Share of calls that ended in failure. The router does not report a routing
+ * fallback counter anymore (a SystemOne failure aborts the request instead of
+ * silently picking another model), so the CLI derives the degraded-request
+ * share from the history it already receives.
+ */
+export function fallbackPct(s: HistoryStats): number {
+  const total = totalRequests(s);
+  return total === 0 ? 0 : (s.overall.failed_calls / total) * 100;
 }
 
 export async function probeHealth(baseUrl: string): Promise<boolean> {

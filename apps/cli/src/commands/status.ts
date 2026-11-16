@@ -3,7 +3,7 @@ import React from 'react';
 import { render } from 'ink';
 import { runtimeStatus } from '../lib/runtime/process.js';
 import { loadConfig } from '../lib/config/load.js';
-import { resolveProfile, readState, listProfiles } from '../lib/config/paths.js';
+import { resolveProfile } from '../lib/config/paths.js';
 import { info, ok, warn, err, print } from '../lib/ui/banners.js';
 import { fetchStats, formatLatency } from '../lib/claude/metrics.js';
 import { localBaseUrl } from '../lib/net/local.js';
@@ -28,18 +28,26 @@ export default class Status extends Command {
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Status);
-    const state = readState();
-    const profs = listProfiles();
-    const mayRenderDashboard = !!args.profile && !flags.static && !flags.json && !flags["for-agent"] && args.action !== 'static' && process.stdout.isTTY;
-    if (!flags.json && !flags["for-agent"] && !mayRenderDashboard) info(`profiles: ${profs.length === 0 ? '(none)' : profs.map((p) => `${p}${state.activeProfile === p ? ' [active]' : ''}${state.runningProfile === p ? ' [running]' : ''}`).join('  ·  ')}`);
+    const running = await discoverRunningProfiles();
 
-    if (!args.profile) {
-      const running = await discoverRunningProfiles();
-      if (flags.json) { this.log(JSON.stringify(profs.map((name) => ({ profile: name, running: running.some((p) => p.profile === name) })))); return; }
-      if (flags["for-agent"]) { this.log(JSON.stringify({ schema_version: '1.0', profiles: profs.map((name) => ({ profile: name, running: running.some((p) => p.profile === name) })) })); return; }
-      this.log(profs.length ? profs.map((name) => `${running.some((p) => p.profile === name) ? '●' : ' '} ${name}`).join('\n') : 'No profiles configured.');
+    // Without an explicit profile, follow the router that is actually running.
+    // A stale `state.runningProfile` must not open an empty dashboard.
+    const targetProfile: string | undefined = args.profile ?? running[0]?.profile;
+
+    if (!targetProfile) {
+      if (flags.json) {
+        this.log(JSON.stringify({ active: null, running: running.map((p) => p.profile) }));
+        return;
+      }
+      if (flags['for-agent']) {
+        this.log(JSON.stringify({ schema_version: '1.0', active: null, running: running.map((p) => p.profile) }));
+        return;
+      }
+      this.log('no active profiles');
       return;
     }
+
+    args.profile = targetProfile;
     let profile: string;
     try { profile = resolveProfile(args.profile); }
     catch (e: any) { err(e?.message ?? String(e)); return; }
@@ -61,6 +69,13 @@ export default class Status extends Command {
     const wantsLive = !flags.static && !flags.json && args.action !== 'static' && process.stdout.isTTY;
     if (wantsLive) {
       const connection = harnessConnection(profile, baseUrl);
+      const configured = Array.isArray(cfg.skill_router?.models) ? cfg.skill_router.models : [];
+      const active = cfg.skill_router?.active_models?.length ? cfg.skill_router.active_models : configured.map((entry: any) => entry.model);
+      const pool = active.map((id: string) => {
+        const endpoint = cfg.model_config?.[id]?.preferred_endpoints?.[0] ?? '';
+        const provider = endpoint === 'openai-codex' ? 'codex' : endpoint || 'unknown';
+        return { provider, model: id };
+      });
       const { waitUntilExit } = render(
         React.createElement(Dashboard, {
           baseUrl,
@@ -73,6 +88,7 @@ export default class Status extends Command {
           emptyRequestsLabel: 'no router requests served yet',
           nativeLabel: 'native requests (router bypass)',
           economyBaselineModel: cfg.default_model,
+          models: pool,
         }),
       );
       await waitUntilExit();

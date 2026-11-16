@@ -124,6 +124,14 @@ func modes(m map[string]*statCounts) []statMode {
 	for k, v := range m {
 		out = append(out, statMode{Mode: k, statCounts: *v})
 	}
+	// Map iteration order is random in Go; the dashboard renders these rows
+	// directly, so a stable order keeps the panel from reshuffling on refresh.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Calls != out[j].Calls {
+			return out[i].Calls > out[j].Calls
+		}
+		return out[i].Mode < out[j].Mode
+	})
 	return out
 }
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +220,14 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	for _, row := range by {
 		resp.Models = append(resp.Models, *row)
 	}
+	// Same reason as modes(): the payload feeds a live dashboard, so model rows
+	// must not follow Go's randomised map order. Busiest first, name as tie-break.
+	sort.Slice(resp.Models, func(i, j int) bool {
+		if resp.Models[i].Calls != resp.Models[j].Calls {
+			return resp.Models[i].Calls > resp.Models[j].Calls
+		}
+		return resp.Models[i].Model < resp.Models[j].Model
+	})
 	resp.Latencies = latencyStats{Routing: summarizeLatency(routingLatency), Provider: summarizeLatency(providerLatency), Overall: summarizeLatency(overallLatency)}
 	writeJSON(w, 200, resp)
 }
