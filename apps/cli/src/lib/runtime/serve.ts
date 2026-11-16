@@ -13,7 +13,6 @@ import { loadSkillTable, InvalidRemoteSkillTableError, type SkillResolveOptions 
 import { resolveSkillRecord } from '../skills/aliases.js';
 import { skillVectorInOrder } from '../skills/table.js';
 import { activePoolModels, missingCatalogModels, readCodexCatalogForSetup } from '../codex/catalog.js';
-import { startPricingWatcher } from '../economy/watch.js';
 import { ok,warn } from '../ui/banners.js';
 import * as p from '../ui/prompts.js';
 import { runtimeStatus,startRuntime } from './process.js';
@@ -77,14 +76,6 @@ export async function ensureServing(
     if (opts.forceRecreate) await refreshOfficialHarness(profile, port);
   }
   else warn('Runtime is reachable but classification is unavailable; inspect brick logs.');
-  // Prices live in the profile's pricing.yaml and are refreshed by a detached
-  // hourly watcher, so the router keeps them current after this CLI exits.
-  try {
-    const watch = await startPricingWatcher(profile);
-    if (watch.started) ok(`pricing sync scheduled hourly (pid ${watch.pid})`);
-  } catch (error: any) {
-    warn(`pricing watcher failed to start: ${error?.message ?? error}`);
-  }
   return { port, healthy };
 }
 

@@ -93,7 +93,7 @@ describe('unified settings model invariants', () => {
   it('openai-codex catalog provides fallback discoverable models', () => {
     const cat: any = (catalog as any)['openai-codex'];
     expect(cat.models.length).toBeGreaterThan(0);
-    const defaultIds = ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'];
+    const defaultIds = ['gpt-6.1-terra', 'gpt-6-luna', 'gpt-6.1-sol'];
     for (const id of defaultIds) {
       expect(cat.models.some((m: any) => m.id === id)).toBe(true);
     }

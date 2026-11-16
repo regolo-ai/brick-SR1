@@ -1,5 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { nativeCodexTransport, CODEX_UPSTREAM } from './native-transport.js';
+import { nativeCodexTransport, CODEX_UPSTREAM, pruneOfficialCodexModels } from './native-transport.js';
+
+describe('pruneOfficialCodexModels', () => {
+  const config = () => ({
+    provider_endpoints: [{ name: 'codex', provider_profile: 'openai-codex' }, { name: 'regolo', provider_profile: 'regolo' }],
+    default_model: 'gpt-keep',
+    model_config: {
+      'gpt-keep': { preferred_endpoints: ['codex'] },
+      'gpt-stale': { preferred_endpoints: ['codex'] },
+      'gpt-stale-active': { preferred_endpoints: ['codex'] },
+      'regolo-stale': { preferred_endpoints: ['regolo'] },
+      brick: { preferred_endpoints: ['codex'] },
+    },
+    skill_router: {
+      models: [{ model: 'gpt-keep' }, { model: 'gpt-stale' }, { model: 'gpt-stale-active' }, { model: 'regolo-stale' }],
+      active_models: ['gpt-keep', 'gpt-stale-active'],
+    },
+  });
+  const catalog = { models: [{ slug: 'gpt-keep' }, { slug: 'gpt-stale-active' }] };
+
+  it('removes stale Codex models but keeps the default, active pool, Brick and other providers', () => {
+    const cfg = config();
+    const pruned = pruneOfficialCodexModels(cfg, catalog);
+    expect(pruned).toEqual(['gpt-stale']);
+    expect(Object.keys(cfg.model_config).sort()).toEqual(['brick', 'gpt-keep', 'gpt-stale-active', 'regolo-stale'].sort());
+    expect(cfg.skill_router.models.map((entry: any) => entry.model)).toEqual(['gpt-keep', 'gpt-stale-active', 'regolo-stale']);
+  });
+
+  it('prunes nothing when the catalog is empty or the model is still advertised', () => {
+    const cfg = config();
+    expect(pruneOfficialCodexModels(cfg, { models: [] })).toEqual([]);
+    expect(pruneOfficialCodexModels(cfg, { models: [{ slug: 'gpt-keep' }, { slug: 'gpt-stale' }, { slug: 'gpt-stale-active' }] })).toEqual([]);
+  });
+});
 
 describe('native Codex transport migration', () => {
   const source = () => ({
