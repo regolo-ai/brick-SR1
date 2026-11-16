@@ -193,7 +193,9 @@ export async function writeCodexModelCatalog(profile: string, _modelIds?: string
 
   const catalog = withBrickModel(source, activeBrickContextWindow(config));
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-  const temporary = `${target}.brick.tmp`;
+  // Unique temp path so concurrent writers (two `brick start` calls) cannot
+  // clobber each other's partial file before the atomic rename.
+  const temporary = `${target}.brick.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
   await writeFile(temporary, JSON.stringify(catalog, null, 2) + '\n', { mode: 0o600 });
   await rename(temporary, target);
   return target;
