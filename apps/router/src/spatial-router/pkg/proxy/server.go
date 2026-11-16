@@ -18,7 +18,6 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/pricing"
 	systemone "github.com/regolo-ai/brick-SR1/systemone"
 )
 
@@ -52,13 +51,17 @@ type Server struct {
 	// load a PricingTable on demand. Derived from configPath's directory so
 	// it sits next to the router config by convention.
 	pricingPath string
+	// pricingMu guards the parsed table cache. The file is rewritten hourly by
+	// the CLI pricing watcher, so handleEconomics reloads it whenever mtime
+	// moves instead of pinning prices to process start.
+	pricingMu    sync.RWMutex
+	pricingTable *economics.PricingTable
+	pricingMod   time.Time
 	// economicsSnapshotPath is where the economics.Store's usage counters are
 	// periodically persisted, so `brick claude status`'s real-savings figure
 	// survives a router restart instead of resetting to zero. Sits next to
 	// the router config by the same convention as pricingPath.
 	economicsSnapshotPath string
-
-	pricingRefresher *pricing.Refresher
 
 	// callHistory is the durable source of truth for the JSON stats API.
 	callHistory *callHistory
@@ -88,14 +91,6 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 
 	callHistory := newCallHistory(filepath.Join(dataDir, "call_history.jsonl"))
 
-	pricingTable, _ := economics.LoadPricingTable(pricingPath)
-	// Native Go pricing refresher (OpenRouter + Regolo). Replaces the Python
-	// subprocess approach. Fetches directly from OpenRouter API with 1h cache TTL.
-	pricingRefresher := pricing.NewRefresher(os.Getenv("OPENROUTER_API_KEY"))
-	if pricingTable != nil {
-		pricingRefresher.SetTable(pricingTable)
-	}
-
 	return &Server{
 		cfg:                   cfg,
 		configPath:            configPath,
@@ -103,7 +98,6 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 		economicsStore:        store,
 		pricingPath:           pricingPath,
 		economicsSnapshotPath: snapshotPath,
-		pricingRefresher:      pricingRefresher,
 		callHistory:           callHistory,
 	}
 }
@@ -143,10 +137,6 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 	}()
-
-	if s.pricingRefresher != nil {
-		go s.pricingRefresher.Start(ctx)
-	}
 
 	mux := http.NewServeMux()
 

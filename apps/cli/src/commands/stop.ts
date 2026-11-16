@@ -4,6 +4,7 @@ import { resolveProfile, readState, updateState } from '../lib/config/paths.js';
 import { err, ok } from '../lib/ui/banners.js';
 import { print, warn } from '../lib/ui/banners.js';
 import { disconnectOfficialHarness } from '../lib/harness.js';
+import { stopPricingWatcher } from '../lib/economy/watch.js';
 
 export default class Stop extends Command {
   static description = 'Stop a profile router; for Codex, detach future launches while keeping the current bridge alive';
@@ -26,6 +27,8 @@ export default class Stop extends Command {
         err(e?.message ?? String(e));
         this.exit(1);
       }
+      // The Responses bridge stays alive for the current thread, so price
+      // refresh keeps running too; `brick clear codex` tears both down.
       ok('detached future Codex launches from Brick; the local Responses bridge remains running');
       print('This open Codex thread can still use the bridge. Select an official model such as gpt-5.6-terra to forward directly to the official Codex upstream without classifier routing.');
       print('Run `brick clear codex` to terminate the bridge and return fully to vanilla Codex.');
@@ -33,6 +36,7 @@ export default class Stop extends Command {
     }
 
     try { await disconnectOfficialHarness(profile); } catch (e: any) { warn(`harness disconnect failed; continuing teardown: ${e?.message ?? e}`); }
+    await stopPricingWatcher(profile);
     await stopRuntime(profile);
 
     const state = readState();

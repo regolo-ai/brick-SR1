@@ -3,6 +3,7 @@ import { clearRuntime } from '../lib/runtime/process.js';
 import { readState, resolveProfile, updateState } from '../lib/config/paths.js';
 import { disconnectOfficialHarness } from '../lib/harness.js';
 import { stopCodexFlatBridge } from '../lib/codex/flat-bridge.js';
+import { stopPricingWatcher } from '../lib/economy/watch.js';
 import { err, ok, print } from '../lib/ui/banners.js';
 
 export default class Clear extends Command {
@@ -31,6 +32,7 @@ export default class Clear extends Command {
     }
 
     await clearRuntime(profile);
+    await stopPricingWatcher(profile);
 
     if (profile === 'codex' && await stopCodexFlatBridge(profile)) {
       ok('removed a legacy managed Codex bridge');

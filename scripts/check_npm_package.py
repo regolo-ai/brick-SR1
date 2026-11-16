@@ -35,6 +35,8 @@ EXPECTED_COMMANDS = {
     "generate",
     "route",
     "migrate",
+    # Internal hourly price refresh spawned by `brick start`.
+    "pricing",
 }
 
 
