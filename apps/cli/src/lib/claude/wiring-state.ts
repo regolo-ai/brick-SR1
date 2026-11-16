@@ -14,18 +14,12 @@ export interface WiringState {
   mode?: ClaudeMode;
   /** Whether context-awareness (classify on last-K-turns window) is enabled. Optional for backward compat. */
   contextAwareness?: boolean;
-  /** The complexity classifier uses a configured API endpoint. */
-  computeMode?: 'api';
   /** Whether native-model subagent traffic is routed through Brick. Optional for backward compat. */
   routeSubagents?: boolean;
   /** Whether dynamic model routing is on. When false, traffic is pinned to fixedModel. Optional for backward compat. */
   modelRouting?: boolean;
-  /** Whether autonomous thinking-effort routing is on. Optional for backward compat. */
-  thinkingRouting?: boolean;
   /** Model pinned when modelRouting is off (e.g. "claude-opus-4-8"). Optional. */
   fixedModel?: string;
-  /** Cache-aware routing mode: 'off' (default), 'sticky', 'smartsqueeze', or 'orchestrator'. Optional. */
-  routingMode?: 'off' | 'sticky' | 'smartsqueeze' | 'orchestrator';
 }
 
 function wiringPath(): string {
@@ -44,9 +38,6 @@ export function readWiring(): WiringState | null {
       const mode = typeof parsed.mode === 'string' && (MODES as readonly string[]).includes(parsed.mode)
         ? (parsed.mode as ClaudeMode)
         : undefined;
-      const computeMode = parsed.computeMode === 'api'
-        ? (parsed.computeMode as 'api')
-        : undefined;
       return {
         wired: true,
         baseUrl: parsed.baseUrl,
@@ -54,7 +45,6 @@ export function readWiring(): WiringState | null {
         createdEnvBlock: parsed.createdEnvBlock === true,
         ...(mode ? { mode } : {}),
         ...(typeof parsed.contextAwareness === 'boolean' ? { contextAwareness: parsed.contextAwareness } : {}),
-        ...(computeMode ? { computeMode } : {}),
       };
     }
     return null;

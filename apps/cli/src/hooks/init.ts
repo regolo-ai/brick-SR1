@@ -18,7 +18,7 @@ const hook: Hook<'init'> = async function () {
   }
   if (['start', 'restart'].includes(argv[0])) {
     if (argv[1] === 'claude') await ensureDefaultProfile();
-    if (argv[1] === 'codex') await ensureDefaultCodexProfile();
+    if (argv[1] === 'codex') await ensureDefaultCodexProfile({ resetPool: argv[0] === 'start' && argv.includes('--reset-pool') });
   }
 };
 export default hook;

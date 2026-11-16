@@ -10,6 +10,7 @@ import { createServer as httpServer } from 'node:http';
 const packageRoot = resolve(process.argv[2]);
 const home = await mkdtemp(join(tmpdir(), 'brick-native-'));
 process.env.BRICK_HOME = home;
+process.env.HF_TOKEN = "test-install-token-not-for-storage";
 const manager = await import(pathToFileURL(join(packageRoot, 'dist/lib/runtime/process.js')));
 const profile = 'acceptance';
 const dir = join(home, 'profiles', profile);
@@ -25,11 +26,10 @@ const upstream = httpServer((request, response) => {
 });
 await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
 const upstreamURL = `http://127.0.0.1:${upstream.address().port}`;
-const config = { server_port: port, brick: { enabled: true }, model_config: { test: {} }, default_model: 'test', skill_router: {
+const config = { config_version: 2, server_port: port, brick: { enabled: true }, model_config: { test: {} }, default_model: 'test', skill_router: {
   enabled: true, capabilities: ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'],
-  capability_model: { model_id: 'installed' }, models: [{ model: 'test', skill_vector: [.5,.5,.5,.5,.5,.5], base_url: upstreamURL }],
-  complexity_model: { base_url: 'http://127.0.0.1:1', timeout_seconds: 1 },
-} };
+  systemone: { local_path: 'models/systemone' }, models: [{ model: 'test', skill_vector: [.5,.5,.5,.5,.5,.5], base_url: upstreamURL }],
+  } };
 await writeFile(join(dir, 'config.yaml'), JSON.stringify(config));
 await writeFile(join(dir, '.env'), 'PERSISTENT_CREDENTIAL=preserve-me\n');
 await writeFile(join(dir, 'history-fixture.jsonl'), '{"persistent":true}\n');
@@ -38,9 +38,8 @@ try {
   const starts = await Promise.all([manager.startRuntime(profile, port), manager.startRuntime(profile, port)]);
   assert.equal(starts[0].instance, starts[1].instance, 'concurrent starts must share one runtime');
   assert.equal((await manager.runtimeStatus(profile)).routingReady, true);
+  assert.equal(JSON.parse(await readFile(starts[0].envFile, 'utf8')).HF_TOKEN, undefined);
   console.log(JSON.stringify({ startupMilliseconds: performance.now() - began, pid: starts[0].pid }));
-  const rss = (await readFile(`/proc/${starts[0].pid}/status`, 'utf8')).match(/^VmRSS:\s+(.+)$/m)?.[1];
-  console.log(JSON.stringify({ readyResidentMemory: rss }));
   const reply = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-caller-key', 'x-selected-model': 'test' }, body: JSON.stringify({ model: 'brick', messages: [{ role: 'user', content: 'offline request' }] }) });
   assert.equal(reply.status, 200, await reply.text());
   const economics = await (await fetch(`http://127.0.0.1:${port}/api/v1/economics`)).json();

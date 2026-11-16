@@ -29,11 +29,12 @@ type codexTestRouter struct{ calls atomic.Int32 }
 
 type mixedLiveRouter struct{}
 
-func (mixedLiveRouter) RouteWithCandidates(_ context.Context, text string, allow map[string]bool) (*brickrouting.Result, error) {
+func (mixedLiveRouter) RouteWithOptions(_ context.Context, text string, options brickrouting.RoutingOptions) (*brickrouting.Result, error) {
+	allow := options.Candidates
 	model := "terra-live"
 	lines := strings.Split(text, "\n")
 	for index := len(lines) - 1; index >= 0; index-- {
-		if !strings.Contains(lines[index], `"role":"user"`) {
+		if !strings.Contains(lines[index], `"role":"user"`) && !strings.HasPrefix(lines[index], "user: ") {
 			continue
 		}
 		if strings.Contains(lines[index], "regolo-second") {
@@ -44,10 +45,7 @@ func (mixedLiveRouter) RouteWithCandidates(_ context.Context, text string, allow
 	if !allow[model] {
 		return nil, fmt.Errorf("selected model %s is unavailable", model)
 	}
-	return &brickrouting.Result{Model: model, TauQuery: 0.5}, nil
-}
-func (m mixedLiveRouter) RouteWithPreference(ctx context.Context, text string, _ float64) (*brickrouting.Result, error) {
-	return m.RouteWithCandidates(ctx, text, map[string]bool{"terra-live": true, "regolo-live": true})
+	return &brickrouting.Result{Model: model}, nil
 }
 
 type captureResponseWriter struct {
@@ -65,7 +63,8 @@ func (w *captureResponseWriter) Flush() {
 	}
 }
 
-func (c *codexTestRouter) RouteWithCandidates(ctx context.Context, text string, allow map[string]bool) (*brickrouting.Result, error) {
+func (c *codexTestRouter) RouteWithOptions(ctx context.Context, text string, options brickrouting.RoutingOptions) (*brickrouting.Result, error) {
+	allow := options.Candidates
 	if config.ClientAPIKey(ctx) != "" {
 		return nil, fmt.Errorf("session token leaked to classifier")
 	}
@@ -77,14 +76,7 @@ func (c *codexTestRouter) RouteWithCandidates(ctx context.Context, text string, 
 	if !allow[model] {
 		return nil, fmt.Errorf("incompatible candidate")
 	}
-	label := "easy"
-	if model == "second" {
-		label = "hard"
-	}
-	return &brickrouting.Result{Model: model, ComplexityLabel: label, TauQuery: 0.6}, nil
-}
-func (c *codexTestRouter) RouteWithPreference(ctx context.Context, text string, _ float64) (*brickrouting.Result, error) {
-	return c.RouteWithCandidates(ctx, text, nil)
+	return &brickrouting.Result{Model: model}, nil
 }
 func codexTestConfig(endpoint string) *config.RouterConfig {
 	cfg := &config.RouterConfig{CodexRouter: config.CodexRouterConfig{Enabled: true, LocalKeyEnv: "BRICK_TEST_LOCAL"}}
@@ -95,8 +87,8 @@ func codexTestConfig(endpoint string) *config.RouterConfig {
 	return cfg
 }
 func TestCodexDynamicToolCycle(t *testing.T) {
-	metrics.ResetBrickCC()
-	t.Cleanup(metrics.ResetBrickCC)
+	metrics.ResetRouting()
+	t.Cleanup(metrics.ResetRouting)
 	t.Setenv("BRICK_TEST_LOCAL", "local")
 	t.Setenv("BRICK_TEST_EXTERNAL", "external")
 	var count atomic.Int32
@@ -107,6 +99,9 @@ func TestCodexDynamicToolCycle(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		var raw map[string]any
 		json.Unmarshal(body, &raw)
+		if raw["reasoning"] != nil {
+			t.Error("invented request effort")
+		}
 		if raw["instructions"] != "keep rules" {
 			t.Error("lost instructions")
 		}
@@ -116,11 +111,9 @@ func TestCodexDynamicToolCycle(t *testing.T) {
 	}))
 	defer upstream.Close()
 	cfg := codexTestConfig(upstream.URL)
-	cfg.SkillRouter.DynamicEffort = true
 	s := &Server{cfg: cfg}
 	router := &codexTestRouter{}
 	s.brickRouter = router
-	s.brickRouterOnce.Do(func() {})
 	for i, input := range []string{`[{"role":"user","content":"do work"}]`, `[{"role":"user","content":"do work"},{"type":"function_call","call_id":"a","name":"shell","arguments":"{}"},{"type":"function_call_output","call_id":"a","output":"done"}]`} {
 		r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"brick","instructions":"keep rules","input":`+input+`}`))
 		r.Header.Set("X-Brick-Key", "local")
@@ -141,33 +134,18 @@ func TestCodexDynamicToolCycle(t *testing.T) {
 	if router.calls.Load() != 2 || count.Load() != 2 {
 		t.Fatal("missing inference calls")
 	}
-	if got := testutil.ToFloat64(metrics.BrickCCRequests.WithLabelValues("easy", "first")); got != 1 {
+	if got := testutil.ToFloat64(metrics.BrickRequests.WithLabelValues("routed", "first")); got != 1 {
 		t.Fatalf("first routed request count = %v, want 1", got)
 	}
-	if got := testutil.ToFloat64(metrics.BrickCCRequests.WithLabelValues("hard", "second")); got != 1 {
+	if got := testutil.ToFloat64(metrics.BrickRequests.WithLabelValues("routed", "second")); got != 1 {
 		t.Fatalf("tool-result follow-up count = %v, want 1", got)
 	}
-	if got := testutil.ToFloat64(metrics.BrickCCEffort.WithLabelValues("first", "low")); got != 1 {
-		t.Fatalf("first dynamic effort count = %v, want 1", got)
-	}
-	if got := testutil.ToFloat64(metrics.BrickCCRouting.WithLabelValues("hard", "low", "second")); got != 1 {
-		t.Fatalf("follow-up routing count = %v, want 1", got)
-	}
-	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"first","instructions":"keep rules","reasoning":{"effort":"high"},"input":"hi"}`))
-	r.Header.Set("X-Brick-Key", "local")
-	w := httptest.NewRecorder()
-	s.handleResponses(w, r)
-	if w.Code != 200 || router.calls.Load() != 2 || w.Header().Get("X-Brick-Reasoning-Sent") != "high" {
-		t.Fatal("manual model was routed", w.Body.String())
-	}
-	if got := testutil.ToFloat64(metrics.BrickCCRequests.WithLabelValues("native", "first")); got != 1 {
-		t.Fatalf("explicit model request count = %v, want 1", got)
-	}
+
 }
 
 func TestCodexRejectedRequestsDoNotIncrementMetrics(t *testing.T) {
-	metrics.ResetBrickCC()
-	t.Cleanup(metrics.ResetBrickCC)
+	metrics.ResetRouting()
+	t.Cleanup(metrics.ResetRouting)
 	t.Setenv("BRICK_TEST_LOCAL", "local")
 	t.Setenv("BRICK_TEST_EXTERNAL", "external")
 
@@ -197,14 +175,112 @@ func TestCodexRejectedRequestsDoNotIncrementMetrics(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("adapter preparation failure returned %d", w.Code)
 	}
-	if got := testutil.CollectAndCount(metrics.BrickCCRequests); got != 0 {
+	if got := testutil.CollectAndCount(metrics.BrickRequests); got != 0 {
 		t.Fatalf("rejected requests created %d metric series", got)
 	}
 }
 
+// codexShippedCapabilities is the provider profile capability list Brick ships
+// for the native Codex endpoint.
+var codexShippedCapabilities = []string{"function_tools", "custom_tools", "opaque_reasoning", "images", "audio", "files", "compaction", "item:tool_search", "item:web_search", "item:additional_tools", "item:namespace"}
+
+// allowListRouter selects the first eligible candidate in declaration order.
+type allowListRouter struct{ order []string }
+
+func (r allowListRouter) RouteWithOptions(_ context.Context, _ string, options brickrouting.RoutingOptions) (*brickrouting.Result, error) {
+	for _, model := range r.order {
+		if options.Candidates[model] {
+			return &brickrouting.Result{Model: model}, nil
+		}
+	}
+	return nil, fmt.Errorf("no compatible candidate")
+}
+
+func webSearchReplayBody() string {
+	return `{"model":"brick","tools":[{"type":"web_search"}],"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"search the web"}]},{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"brick"}},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]}`
+}
+
+func webSearchReplayConfig(endpoint string) *config.RouterConfig {
+	cfg := &config.RouterConfig{CodexRouter: config.CodexRouterConfig{Enabled: true, LocalKeyEnv: "BRICK_TEST_LOCAL"}}
+	cfg.ModelConfig = map[string]config.ModelParams{
+		"chat-small":       {PreferredEndpoints: []string{"chat"}, ContextWindowSize: 1},
+		"native-responses": {PreferredEndpoints: []string{"codex"}, ContextWindowSize: 258400},
+	}
+	cfg.ProviderEndpoints = []config.ProviderEndpoint{
+		{Name: "chat", ProviderProfileName: "chat"},
+		{Name: "codex", ProviderProfileName: "openai-codex"},
+	}
+	cfg.ProviderProfiles = map[string]config.ProviderProfile{
+		"chat":         {BaseURL: endpoint, Protocol: "chat_completions", AuthSource: "provider_env", APIKeyEnv: "BRICK_TEST_EXTERNAL", Capabilities: []string{"function_tools"}},
+		"openai-codex": {BaseURL: endpoint, Protocol: "responses", AuthSource: "provider_env", APIKeyEnv: "BRICK_TEST_EXTERNAL", Capabilities: codexShippedCapabilities},
+	}
+	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "chat-small"}, {Model: "native-responses"}}
+	return cfg
+}
+
+// A hosted tool's own output item is replayed in history on the following turns.
+// It must not make the backend that produced it ineligible.
+func TestCodexRoutesReplayedHostedToolItem(t *testing.T) {
+	metrics.ResetRouting()
+	t.Cleanup(metrics.ResetRouting)
+	t.Setenv("BRICK_TEST_LOCAL", "local")
+	t.Setenv("BRICK_TEST_EXTERNAL", "external")
+
+	var forwarded atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		forwarded.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"response","object":"response","output":[]}`)
+	}))
+	defer upstream.Close()
+
+	cfg := webSearchReplayConfig(upstream.URL)
+	s := &Server{cfg: cfg, brickRouter: allowListRouter{order: []string{"chat-small", "native-responses"}}}
+	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(webSearchReplayBody()))
+	r.Header.Set("X-Brick-Key", "local")
+	w := httptest.NewRecorder()
+	s.handleResponses(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("replayed hosted tool item was rejected: %d %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Brick-Selected-Model"); got != "native-responses" {
+		t.Fatalf("selected model = %q, want native-responses", got)
+	}
+	body, _ := forwarded.Load().(string)
+	if !strings.Contains(body, `"type":"web_search_call"`) {
+		t.Fatalf("forwarded body lost the hosted tool item: %s", body)
+	}
+}
+
+// A rejected candidate reports every concrete reason, so a context-window
+// guard never hides a missing transport capability.
+func TestCodexRejectionReportsAllCauses(t *testing.T) {
+	t.Setenv("BRICK_TEST_LOCAL", "local")
+	t.Setenv("BRICK_TEST_EXTERNAL", "external")
+
+	cfg := webSearchReplayConfig("http://127.0.0.1:1")
+	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "chat-small"}}
+	s := &Server{cfg: cfg, brickRouter: allowListRouter{order: []string{"chat-small"}}}
+	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(webSearchReplayBody()))
+	r.Header.Set("X-Brick-Key", "local")
+	w := httptest.NewRecorder()
+	s.handleResponses(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"item:web_search", "estimated input exceeds context_window_size 1"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("rejection reason %q missing: %s", want, w.Body.String())
+		}
+	}
+}
+
 func TestCodexChatAdapterRecordsRoutedRequest(t *testing.T) {
-	metrics.ResetBrickCC()
-	t.Cleanup(metrics.ResetBrickCC)
+	metrics.ResetRouting()
+	t.Cleanup(metrics.ResetRouting)
 	t.Setenv("BRICK_TEST_LOCAL", "local")
 	t.Setenv("BRICK_TEST_EXTERNAL", "external")
 
@@ -219,7 +295,6 @@ func TestCodexChatAdapterRecordsRoutedRequest(t *testing.T) {
 	profile.Protocol = "chat_completions"
 	cfg.ProviderProfiles["external"] = profile
 	s := &Server{cfg: cfg, brickRouter: &codexTestRouter{}}
-	s.brickRouterOnce.Do(func() {})
 
 	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"brick","input":"hi"}`))
 	r.Header.Set("X-Brick-Key", "local")
@@ -228,7 +303,7 @@ func TestCodexChatAdapterRecordsRoutedRequest(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("chat adapter returned %d: %s", w.Code, w.Body.String())
 	}
-	if got := testutil.ToFloat64(metrics.BrickCCRequests.WithLabelValues("easy", "first")); got != 1 {
+	if got := testutil.ToFloat64(metrics.BrickRequests.WithLabelValues("routed", "first")); got != 1 {
 		t.Fatalf("chat-adapted routed request count = %v, want 1", got)
 	}
 }
@@ -450,14 +525,13 @@ func TestCodexOfficialMixedProviderContinuation(t *testing.T) {
 	}
 	cfg.SkillRouter.Models = []config.SkillRouterModelConfig{{Model: "terra-live"}, {Model: "regolo-live"}}
 	s := &Server{cfg: cfg, brickRouter: mixedLiveRouter{}}
-	s.brickRouterOnce.Do(func() {})
 	var mu sync.Mutex
 	selected := []string{}
 	cachedUsageEvents := 0
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestBody, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(requestBody))
-		predicted, _ := (mixedLiveRouter{}).RouteWithCandidates(r.Context(), codextransport.RoutingText(requestBody, 0), map[string]bool{"terra-live": true, "regolo-live": true})
+		predicted, _ := (mixedLiveRouter{}).RouteWithOptions(r.Context(), codextransport.RoutingText(requestBody, 0), brickrouting.RoutingOptions{Candidates: map[string]bool{"terra-live": true, "regolo-live": true}})
 		mu.Lock()
 		if predicted != nil {
 			selected = append(selected, predicted.Model)
@@ -615,4 +689,35 @@ with tempfile.TemporaryDirectory(prefix='brick-compact-') as cwd:
 		t.Fatalf("compaction did not perform inference: calls=%d %s", inference.Load(), out)
 	}
 	t.Logf("official compaction and post-compaction context passed: inference=%d, dedicated compact endpoint=%d", inference.Load(), compact.Load())
+}
+
+// The Codex subscription backend rejects persisted responses, so the proxy
+// normalizes store=false before forwarding to a codex_request destination.
+func TestCodexSubscriptionForcesStoreFalse(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		changed bool
+	}{
+		{name: "missing", input: `{"model":"first","input":[]}`, changed: true},
+		{name: "true", input: `{"model":"first","store":true,"input":[]}`, changed: true},
+		{name: "false", input: `{"model":"first","store":false,"input":[]}`, changed: false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(testCase.input), &raw); err != nil {
+				t.Fatal(err)
+			}
+			if got := codexStoreFalse(raw); got != testCase.changed {
+				t.Fatalf("codexStoreFalse changed = %v, want %v", got, testCase.changed)
+			}
+			if string(raw["store"]) != "false" {
+				t.Fatalf("store = %s, want false", raw["store"])
+			}
+			if testCase.name == "missing" && raw["model"] == nil {
+				t.Fatal("normalization dropped unrelated fields")
+			}
+		})
+	}
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 )
 
-func TestRegoloDeploymentFixedReasoning(t *testing.T) {
+func TestRegoloDeploymentPreservesClientReasoning(t *testing.T) {
 	for _, multimodal := range []bool{false, true} {
 		for _, enabled := range []bool{false, true} {
 			t.Run(fmt.Sprintf("multimodal=%v/reasoning=%v", multimodal, enabled), func(t *testing.T) {
@@ -23,7 +23,6 @@ func TestRegoloDeploymentFixedReasoning(t *testing.T) {
 					t.Fatal(err)
 				}
 				cfg.SkillRouter.Models[0].UseReasoning = &enabled
-				cfg.SkillRouter.Models[0].ReasoningEffort = "medium"
 				cfg.SkillRouter.Models[0].HandlesImages = multimodal
 				var calls atomic.Int32
 				interceptRegolo(t, func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +32,7 @@ func TestRegoloDeploymentFixedReasoning(t *testing.T) {
 						t.Error(err)
 					}
 					if enabled {
-						if body["thinking"] != true || body["reasoning_effort"] != "medium" {
+						if body["thinking"] != true || body["reasoning_effort"] != "high" {
 							t.Error("fixed per-model reasoning was not applied")
 						}
 					} else {
@@ -56,7 +55,6 @@ func TestRegoloDeploymentFixedReasoning(t *testing.T) {
 					content = `[{"type":"text","text":"describe this"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]`
 				}
 				s := &Server{cfg: cfg, brickRouter: fixedAuthTestRouter{}}
-				s.brickRouterOnce.Do(func() {})
 				request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(fmt.Sprintf(`{"model":"brick-v1-beta","thinking":true,"reasoning_effort":"high","messages":[{"role":"user","content":%s}]}`, content)))
 				request.Header.Set("Authorization", "Bearer user-key")
 				w := httptest.NewRecorder()
@@ -233,7 +231,6 @@ func TestRegoloDeploymentPublicModelAndRejections(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Server{cfg: cfg, brickRouter: fixedAuthTestRouter{}}
-	s.brickRouterOnce.Do(func() {})
 	catalog := httptest.NewRecorder()
 	s.handleModels(catalog, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
 	var listed struct {

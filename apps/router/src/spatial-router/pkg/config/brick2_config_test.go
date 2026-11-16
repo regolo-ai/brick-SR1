@@ -74,8 +74,8 @@ func TestParseRegoloDeploymentConfig(t *testing.T) {
 	if cfg.TrustedProxyHeader != "X-Regolo-User-Key" {
 		t.Fatalf("Regolo deployment trusted proxy header = %q", cfg.TrustedProxyHeader)
 	}
-	if !reflect.DeepEqual(cfg.SkillRouter.CapabilityModel.Labels, []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"}) {
-		t.Fatal("capability labels must follow the Regolo checkpoint's id2label order")
+	if !reflect.DeepEqual(cfg.SkillRouter.Capabilities, []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"}) {
+		t.Fatal("capability labels must follow the SystemOne checkpoint's id2label order")
 	}
 	wantModels := []string{"glm5.2", "qwen3.5-122b", "qwen3.5-9b"}
 	gotModels := make([]string, 0, len(cfg.ModelConfig))
@@ -107,36 +107,10 @@ func TestParseRegoloDeploymentConfig(t *testing.T) {
 	if !reflect.DeepEqual(gotSkills, wantModels) {
 		t.Fatalf("unexpected skill model pool: %v", gotSkills)
 	}
-	for _, rule := range cfg.SkillRouter.KeywordRules {
-		if rule.Model != "" {
-			if _, ok := cfg.ModelConfig[rule.Model]; !ok {
-				t.Fatalf("keyword override references model outside pool: %s", rule.Model)
-			}
-		}
-	}
 	if _, ok := cfg.ModelConfig[cfg.DefaultModel]; !ok {
 		t.Fatal("default model is outside the pool")
 	}
 	if cfg.AnthropicPassthrough.Enabled || strings.Contains(strings.ToLower(cfg.AnthropicPassthrough.UpstreamURL), "anthropic") {
 		t.Fatal("Regolo deployment config must not enable Anthropic pass-through")
-	}
-}
-
-func TestRegoloClassifierUsesClientKey(t *testing.T) {
-	cfg, err := Parse("../../../../../../examples/regolo.config.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.ComplexityService.UseClientKey || !cfg.SkillRouter.ComplexityModel.UseClientKey {
-		t.Fatal("both classifier blocks must use the current user's key")
-	}
-	if cfg.ComplexityService.BearerToken != "" || cfg.SkillRouter.ComplexityModel.BearerToken != "" {
-		t.Fatal("Regolo profile must not configure a server token")
-	}
-	if cfg.ComplexityService.BaseURL != "https://api.regolo.ai" ||
-		cfg.SkillRouter.ComplexityModel.BaseURL != "https://api.regolo.ai" ||
-		cfg.ComplexityService.ModelName != "brick-complexity-pro" ||
-		cfg.SkillRouter.ComplexityModel.ModelName != "brick-complexity-pro" {
-		t.Fatal("classification must use the hosted Regolo model")
 	}
 }

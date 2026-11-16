@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 )
@@ -56,6 +58,9 @@ func anthropicMessagesToOpenAI(body []byte, model string) ([]byte, bool, error) 
 		messages = append(messages, message{Role: m.Role, Content: text})
 	}
 	out := map[string]any{"model": model, "messages": messages, "stream": in.Stream}
+	if effort := requestEffort(body); effort != "" {
+		out["reasoning_effort"] = effort
+	}
 	if in.MaxTokens > 0 {
 		out["max_tokens"] = in.MaxTokens
 	}
@@ -125,8 +130,37 @@ func openAIToAnthropicMessages(body []byte, model string) ([]byte, error) {
 func (s *Server) forwardAnthropicToOpenAI(
 	w http.ResponseWriter, r *http.Request,
 	modelCfg *config.SkillRouterModelConfig,
-	body []byte, selectedModel, label, effort string,
+	body []byte, selectedModel, effort string, route *brickrouting.Result, acceptedAt time.Time, routingLatency *int64,
 ) {
+	providerStarted := time.Now()
+	usage := openAIUsage{}
+	success := false
+	defer func() {
+		fresh, cached, output := splitOpenAIUsage(usage)
+		s.recordEconomicsUsage(selectedModel, fresh, 0, cached, output)
+		if s.callHistory == nil {
+			return
+		}
+		finished := time.Now().UTC()
+		providerMS := time.Since(providerStarted).Milliseconds()
+		overallMS := finished.Sub(acceptedAt).Milliseconds()
+		status := "failed"
+		if success {
+			status = "completed"
+		}
+		source := "native"
+		if route != nil {
+			source = "routed"
+		}
+		record := callRecord{CallID: newBrickCallID(), StartedAt: acceptedAt, FinishedAt: finished, Model: selectedModel, ReasoningMode: effort, RoutingSource: source, Status: status, ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS, RoutingLatencyMS: routingLatency}
+		if fresh+cached+output > 0 {
+			input := fresh + cached
+			record.InputTokens = &input
+			record.OutputTokens = &output
+		}
+		applyRouteObservation(&record, route)
+		_ = s.callHistory.append(record)
+	}()
 	translated, streaming, err := anthropicMessagesToOpenAI(body, selectedModel)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot translate Anthropic request for %s: %v", selectedModel, err))
@@ -146,6 +180,7 @@ func (s *Server) forwardAnthropicToOpenAI(
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("configured credential source is missing for provider-backed model %q", selectedModel))
 		return
 	}
+	translated = adaptClientReasoning(translated, s.cfg, selectedModel)
 	url := strings.TrimRight(modelCfg.BaseURL, "/") + "/chat/completions"
 	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
@@ -171,7 +206,8 @@ func (s *Server) forwardAnthropicToOpenAI(
 		return
 	}
 	if streaming {
-		s.streamOpenAIAsAnthropic(w, resp.Body, selectedModel, label, effort)
+		usage = s.streamOpenAIAsAnthropic(w, resp.Body, selectedModel, effort)
+		success = true
 		return
 	}
 	responseBody, err := io.ReadAll(resp.Body)
@@ -179,6 +215,9 @@ func (s *Server) forwardAnthropicToOpenAI(
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("reading provider response: %v", err))
 		return
 	}
+	var envelope openAIUsageEnvelope
+	_ = json.Unmarshal(responseBody, &envelope)
+	usage = envelope.Usage
 	converted, err := openAIToAnthropicMessages(responseBody, selectedModel)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("translating provider response: %v", err))
@@ -186,22 +225,22 @@ func (s *Server) forwardAnthropicToOpenAI(
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Brick-Selected-Model", selectedModel)
-	w.Header().Set("X-Brick-Complexity", label)
 	if effort != "" {
 		w.Header().Set("X-Brick-Effort", effort)
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(converted)
+	success = true
 }
 
 // streamOpenAIAsAnthropic performs the text-only SSE translation needed by
 // Claude Code's normal streaming path. Unsupported tool/image deltas are not
 // synthesized; they remain a deliberate validation error in request parsing.
-func (s *Server) streamOpenAIAsAnthropic(w http.ResponseWriter, body io.Reader, model, label, effort string) {
+func (s *Server) streamOpenAIAsAnthropic(w http.ResponseWriter, body io.Reader, model, effort string) openAIUsage {
+	var usage openAIUsage
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Brick-Selected-Model", model)
-	w.Header().Set("X-Brick-Complexity", label)
 	if effort != "" {
 		w.Header().Set("X-Brick-Effort", effort)
 	}
@@ -232,13 +271,20 @@ func (s *Server) streamOpenAIAsAnthropic(w http.ResponseWriter, body io.Reader, 
 			break
 		}
 		var chunk struct {
+			Usage   openAIUsage `json:"usage"`
 			Choices []struct {
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
 			} `json:"choices"`
 		}
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			continue
+		}
+		if chunk.Usage.PromptTokens != 0 || chunk.Usage.CompletionTokens != 0 {
+			usage = chunk.Usage
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		if text := chunk.Choices[0].Delta.Content; text != "" {
@@ -247,6 +293,7 @@ func (s *Server) streamOpenAIAsAnthropic(w http.ResponseWriter, body io.Reader, 
 		}
 	}
 	write("content_block_stop", map[string]any{"type": "content_block_stop", "index": 0})
-	write("message_delta", map[string]any{"type": "message_delta", "delta": map[string]string{"stop_reason": "end_turn"}, "usage": map[string]int{"output_tokens": 0}})
+	write("message_delta", map[string]any{"type": "message_delta", "delta": map[string]string{"stop_reason": "end_turn"}, "usage": map[string]int64{"output_tokens": usage.CompletionTokens}})
 	write("message_stop", map[string]string{"type": "message_stop"})
+	return usage
 }

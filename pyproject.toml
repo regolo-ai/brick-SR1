@@ -26,6 +26,16 @@ baselines = [
     "sentence-transformers",
 ]
 
+[tool.uv]
+constraint-dependencies = [
+    "torch==2.11.0",
+    "transformers==5.20.2",
+    "safetensors==0.8.0",
+    "tokenizers==0.23.3",
+    "numpy==1.26.4",
+    "huggingface-hub==2.2.0",
+]
+
 [tool.uv.sources]
 brick-evals = { workspace = true }
 routellm = { git = "https://github.com/lm-sys/RouteLLM", rev = "0b64fdafe049e596a3f5657c219329f24af24198" }

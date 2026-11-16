@@ -18,11 +18,11 @@ const probe = createServer();
 await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
 const port = probe.address().port;
 await new Promise(resolve => probe.close(resolve));
-const config = { config_version: 1, server_port: port, brick: { enabled: true }, codex_router: { enabled: true, local_key_env: 'BRICK_TEST_LOCAL_KEY' },
+const config = { config_version: 2, server_port: port, brick: { enabled: true }, codex_router: { enabled: true, local_key_env: 'BRICK_TEST_LOCAL_KEY' },
   model_config: { test: { context_window_size: 32000, preferred_endpoints: ['test'] } }, default_model: 'test',
   provider_profiles: { test: { type: 'openai_compatible', base_url: `http://127.0.0.1:${upstream.address().port}`, protocol: 'responses', auth_source: 'provider_env', api_key_env: 'BRICK_TEST_PROVIDER_KEY', responses_path: 'responses' } },
   provider_endpoints: [{ name: 'test', provider_profile: 'test' }],
-  skill_router: { enabled: true, complexity_model: { base_url: `http://127.0.0.1:${upstream.address().port}`, protocol: 'openai', model_name: 'classifier-test' }, capabilities: ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'], capability_model: { model_id: 'missing' }, models: [{ model: 'test', skill_vector: [.5,.5,.5,.5,.5,.5] }] },
+  skill_router: { enabled: true, capabilities: ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'], systemone: { local_path: 'models/systemone' }, models: [{ model: 'test', skill_vector: [.5,.5,.5,.5,.5,.5] }] },
 };
 await writeFile(join(directory, 'config.yaml'), JSON.stringify(config));
 const child = spawn(binary, ['--config', join(directory, 'config.yaml'), '--model-dir', join(directory, 'missing'), '--data-dir', directory, '--metrics-port', '0'], { env: { ...process.env, BRICK_TEST_LOCAL_KEY: 'local-key', BRICK_TEST_PROVIDER_KEY: 'provider-key' }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -46,7 +46,7 @@ try {
   assert.equal((await direct.json()).id, 'response-test');
   assert.equal(log.includes('session-key'), false);
   assert.equal(log.includes('local-key'), false);
-  console.log('PASS: missing BERT reports unready, routing returns 503, direct Responses forwarding remains available');
+  console.log('PASS: missing SystemOne reports unready, routing returns 503, direct Responses forwarding remains available');
 } finally {
   child.kill('SIGTERM');
   await exited;

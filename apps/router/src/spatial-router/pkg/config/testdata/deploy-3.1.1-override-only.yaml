@@ -1,0 +1,140 @@
+# Brick production profile for Regolo-managed servers.
+#
+# Every inference request (including the complexity classifier) is sent to the
+# Regolo OpenAI-compatible API.  There is intentionally no Anthropic, OpenAI,
+# OpenRouter, or local-model provider in this file.
+#
+# Each request supplies its own user credential; no server inference key is used.
+# The gateway must strip client-supplied X-Regolo-User-Key before forwarding it.
+
+server_port: 18000
+auto_model_name: brick-v1-beta
+trusted_proxy_header: X-Regolo-User-Key
+
+brick:
+  enabled: true
+
+providers:
+  regolo:
+    base_url: https://api.regolo.ai/v1
+
+provider_profiles:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+
+provider_endpoints:
+  - name: regolo
+    provider_profile: regolo
+    weight: 1
+
+default_model: qwen3.5-122b
+
+# A deliberately small LLM-only pool, authenticated with the caller credential.
+model_config:
+  qwen3.5-9b:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+  qwen3.8-27b:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+    reasoning_family: qwen3
+  gemma4-31b:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+  mistral-small-4-119b:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+  qwen3.5-122b:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+    reasoning_family: qwen3
+  glm5.2:
+    preferred_endpoints: [regolo]
+    use_client_key: true
+
+reasoning_families:
+  qwen3:
+    parameter: enable_thinking
+default_reasoning_effort: medium
+
+# The hosted classifier is itself a Regolo model. This avoids operating a
+# separate GPU sidecar on the production servers.
+complexity_service:
+  enabled: true
+  base_url: https://api.regolo.ai
+  protocol: openai
+  model_name: brick-complexity-pro
+  use_client_key: true
+  timeout_seconds: 8
+
+skill_router:
+  enabled: true
+  capabilities: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
+  capability_model:
+    model_id: models/modernbert-capability-classifier
+    labels: [instruction_following, coding, math_reasoning, world_knowledge, planning_agentic, creative_synthesis]
+  complexity_model:
+    model_id: regolo/brick-complexity-pro
+    base_url: https://api.regolo.ai
+    protocol: openai
+    model_name: brick-complexity-pro
+    use_client_key: true
+    timeout_seconds: 8
+  math:
+    routing_preference: 0.9
+    tau: {easy: 0.55, medium: 0.72, hard: 0.88}
+    complexity_mu: 0.345170
+    complexity_bias: 0.822235
+    cost_penalty_beta: 0.230778
+    over_penalty_lambda: 0.045207
+    preference_power: 2.920351
+    max_mu_multiplier: 13.034935
+    max_bias_shift: 5.294173
+    max_cost_relief: 6559.073066
+    max_over_relief: 49.547940
+    min_mu_multiplier: 0.081493
+    min_bias_shift: -1.349259
+    min_cost_boost: 8.834043
+    min_over_boost: 1002.068256
+    tie_epsilon: 0.03
+    clip_min: 0.02
+    clip_max: 0.98
+  models:
+    - model: qwen3.5-9b
+      skill_vector: [0.810109, 0.714788, 0.912146, 0.179876, 0.577072, 0.511538]
+      use_reasoning: false
+      cost_weight: 0.10
+    - model: qwen3.8-27b
+      skill_vector: [0.80, 0.62, 0.76, 0.89, 0.71, 0.76]
+      use_reasoning: true
+      reasoning_effort: medium
+      cost_weight: 0.45
+    - model: gemma4-31b
+      skill_vector: [0.66, 0.58, 0.58, 0.72, 0.58, 0.62]
+      use_reasoning: false
+      cost_weight: 0.40
+    - model: mistral-small-4-119b
+      skill_vector: [0.60, 0.60, 0.79, 0.73, 0.46, 0.46]
+      use_reasoning: false
+      cost_weight: 0.50
+    - model: qwen3.5-122b
+      skill_vector: [0.70, 0.62, 0.58, 0.78, 0.66, 0.48]
+      use_reasoning: true
+      reasoning_effort: medium
+      cost_weight: 1.00
+    - model: glm5.2
+      skill_vector: [0.68, 0.78, 0.89, 0.83, 0.73, 0.72]
+      use_reasoning: true
+      reasoning_effort: medium
+      cost_weight: 2.00
+  keyword_rules:
+    - name: force_coder
+      mode: override
+      importance: 10
+      model: glm5.2
+      operator: OR
+      keywords: [debug, refactor, compile, runtime, write a function, function that, class called]
+      case_sensitive: false
+
+# Deliberately no legacy decisions or anthropic_passthrough block.

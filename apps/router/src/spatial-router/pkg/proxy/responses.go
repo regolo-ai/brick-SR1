@@ -128,7 +128,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		"stream":   false,
 	}
 	// Carry the reasoning effort through in the OpenAI-compatible field the core
-	// already understands; the router may still override it autonomously.
+	// understands. This also overrides the profile routing knob for this request.
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
 		chatBody["reasoning_effort"] = req.Reasoning.Effort
 	}

@@ -131,17 +131,7 @@ func validateCredentials(cfg *RouterConfig) error {
 			}
 		}
 	}
-	if cfg.ComplexityService != nil && !cfg.ComplexityService.UsesClientKey() {
-		if _, err := cfg.ComplexityService.ResolveBearerToken(); err != nil {
-			return fmt.Errorf("complexity_service: %w", err)
-		}
-	}
-	m := cfg.SkillRouter.ComplexityModel
-	if !m.UseClientKey && (m.BearerToken != "" || m.BearerTokenFile != "") {
-		if _, err := (&ComplexityServiceConfig{BearerToken: m.BearerToken, BearerTokenFile: m.BearerTokenFile}).ResolveBearerToken(); err != nil {
-			return fmt.Errorf("skill_router.complexity_model: %w", err)
-		}
-	}
+
 	return nil
 }
 
@@ -157,9 +147,4 @@ func WithClientAPIKey(ctx context.Context, key string) context.Context {
 func ClientAPIKey(ctx context.Context) string {
 	key, _ := ctx.Value(clientAPIKeyContextKey{}).(string)
 	return key
-}
-
-// UsesClientKey reports whether classification uses the current user credential.
-func (c *ComplexityServiceConfig) UsesClientKey() bool {
-	return c != nil && c.UseClientKey
 }

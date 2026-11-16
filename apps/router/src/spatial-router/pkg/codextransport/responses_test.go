@@ -114,6 +114,19 @@ func TestNoRedirectAndAuthAttribution(t *testing.T) {
 	}
 }
 
+func TestRoutingTextExcludesHarnessInstructions(t *testing.T) {
+	body := []byte(`{"instructions":"You are Codex. Follow the harness rules.","input":[{"type":"message","role":"developer","content":[{"type":"input_text","text":"AGENTS repository rules"}]},{"type":"message","role":"system","content":"system rules"},{"type":"message","role":"user","content":[{"type":"input_text","text":"explain this stack trace"}]}]}`)
+	view := RoutingText(body, 0)
+	for _, hidden := range []string{"You are Codex", "AGENTS repository rules", "system rules"} {
+		if strings.Contains(view, hidden) {
+			t.Fatalf("routing view leaked harness instructions (%q): %s", hidden, view)
+		}
+	}
+	if !strings.Contains(view, "explain this stack trace") {
+		t.Fatalf("routing view dropped the user ask: %s", view)
+	}
+}
+
 func TestCompatibilityAndRoutingView(t *testing.T) {
 	body := []byte(`{"input":[{"type":"message","role":"developer","content":"rules"},{"type":"function_call_output","call_id":"a","output":"done"}],"tools":[{"type":"function","name":"shell","parameters":{"type":"object","properties":{"x":{"type":"unknown-schema-type"}}}}]}`)
 	if Compatible(body, nil) == nil {
@@ -130,6 +143,32 @@ func TestCompatibilityAndRoutingView(t *testing.T) {
 		if Compatible([]byte(body), []string{"function_tools"}) == nil {
 			t.Fatal("accepted incompatible request", body)
 		}
+	}
+}
+
+func TestHostedToolCallItemsFollowTheirToolCapability(t *testing.T) {
+	// Codex replays the output item of a hosted tool in `input` on every later
+	// turn of the session. It is gated by the tool's capability, not by an
+	// undeclared item:<type>_call capability.
+	replayed := []byte(`{"input":[{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"brick"}},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}],"tools":[{"type":"web_search"}]}`)
+	if err := Compatible(replayed, []string{"item:web_search"}); err != nil {
+		t.Fatalf("declared hosted tool did not cover its own call item: %v", err)
+	}
+	if err := Compatible(replayed, []string{"function_tools"}); err == nil || err.Error() != "backend is missing transport capabilities: item:web_search" {
+		t.Fatalf("undeclared hosted tool accepted: %v", err)
+	}
+	for _, typ := range []string{"tool_search_call", "tool_search_output"} {
+		body := []byte(`{"input":[{"type":"` + typ + `"}]}`)
+		if err := Compatible(body, []string{"item:tool_search"}); err != nil {
+			t.Fatalf("%s not covered by its tool capability: %v", typ, err)
+		}
+		if err := Compatible(body, []string{"item:web_search"}); err == nil || err.Error() != "backend is missing transport capabilities: item:tool_search" {
+			t.Fatalf("%s accepted without its own capability: %v", typ, err)
+		}
+	}
+	// Types with no declared tool keep their exact name and still fail closed.
+	if err := Compatible([]byte(`{"input":[{"type":"unknown_call"}]}`), []string{"item:unknown"}); err == nil || err.Error() != "backend is missing transport capabilities: item:unknown_call" {
+		t.Fatalf("unknown item type no longer fails closed: %v", err)
 	}
 }
 

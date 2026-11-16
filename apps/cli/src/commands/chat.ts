@@ -15,14 +15,14 @@ export default class Chat extends Command {
     system: Flags.string({ description: 'system prompt' }),
     'show-thinking': Flags.boolean({ default: false, description: 'show reasoning content from the start' }),
     'max-tokens': Flags.integer({ default: 4096, description: 'max tokens for response' }),
-    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|xhigh|max|auto)' }),
+    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max'], description: 'request effort (off|low|medium|high|xhigh|max)' }),
   };
   async run(): Promise<void> {
     const { flags } = await this.parse(Chat);
     const target = await requireExactlyOneRunning();
     const cfg = await loadConfig(target);
     const baseUrl = localBaseUrl(cfg.server_port);
-    const initialThinking = (flags.thinking as ThinkingMode | undefined) ?? 'auto';
+    const initialThinking = (flags.thinking as ThinkingMode | undefined) ?? null;
 
     if (!process.stdin.isTTY) {
       this.error('brick chat requires an interactive TTY. Use `brick generate "<prompt>"` for non-interactive use.', { exit: 2 });

@@ -17,13 +17,13 @@ func skillRouterCfg(active ...string) *RouterConfig {
 		},
 		SkillRouter: SkillRouterConfig{
 			Enabled:      true,
-			Capabilities: []string{"coding", "world_knowledge"},
-			CapabilityModel: SkillRouterCapabilityModelConfig{
-				ModelID: "models/cap",
+			Capabilities: []string{"instruction_following", "coding", "math_reasoning", "world_knowledge", "planning_agentic", "creative_synthesis"},
+			SystemOne: SystemOneConfig{
+				LocalPath: "models/systemone",
 			},
 			Models: []SkillRouterModelConfig{
-				{Model: "opus", SkillVector: []float64{0.9, 0.9}},
-				{Model: "sonnet", SkillVector: []float64{0.8, 0.8}},
+				{Model: "opus", SkillVector: []float64{0.9, 0.9, 0.9, 0.9, 0.9, 0.9}},
+				{Model: "sonnet", SkillVector: []float64{0.8, 0.8, 0.8, 0.8, 0.8, 0.8}},
 			},
 			ActiveModels: active,
 		},
@@ -46,7 +46,7 @@ var _ = Describe("validateSkillRouterConfig active_models", func() {
 	It("rejects an active model not declared in skill_router.models", func() {
 		err := validateSkillRouterConfig(skillRouterCfg("ghost"))
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("is not defined in skill_router.models"))
+		Expect(err.Error()).To(ContainSubstring("invalid or duplicate active model"))
 	})
 
 	It("rejects duplicate active models", func() {

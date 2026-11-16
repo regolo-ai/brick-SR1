@@ -18,63 +18,51 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/pricing"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/sticky"
+	systemone "github.com/regolo-ai/brick-SR1/systemone"
 )
 
 type brickModelRouter interface {
-	RouteWithCandidates(context.Context, string, map[string]bool) (*brickrouting.Result, error)
-	RouteWithPreference(context.Context, string, float64) (*brickrouting.Result, error)
+	RouteWithOptions(context.Context, string, brickrouting.RoutingOptions) (*brickrouting.Result, error)
 }
 
 // Server is the Brick HTTP proxy server.
-// It exposes OpenAI-compatible endpoints and routes requests through Brick2.
+// It exposes OpenAI-compatible endpoints and routes requests through SystemOne.
 type Server struct {
 	instanceID     string
 	profile        string
 	version        string
-	routingReady   atomic.Bool
 	routingChecked atomic.Bool
 	cfg            *config.RouterConfig
 	configPath     string
 	port           int
 	httpServer     *http.Server
 
-	brickRouterOnce sync.Once
-	brickRouter     brickModelRouter
-	brickRouterErr  error
+	// routerMu guards lazy (re)initialization of the SystemOne-backed router.
+	// It replaces a sync.Once so a transient failure or a dead worker can be
+	// recovered without restarting the process.
+	routerMu           sync.Mutex
+	brickRouter        brickModelRouter
+	brickRouterErr     error
+	brickRouterRetryAt time.Time
+	brickRouterBackoff time.Duration
 
 	economicsStore *economics.Store
 	// pricingPath is where pricing.yaml lives, used by handleEconomics to
 	// load a PricingTable on demand. Derived from configPath's directory so
 	// it sits next to the router config by convention.
 	pricingPath string
+	// pricingMu guards the parsed table cache. The file is rewritten hourly by
+	// the CLI pricing watcher, so handleEconomics reloads it whenever mtime
+	// moves instead of pinning prices to process start.
+	pricingMu    sync.RWMutex
+	pricingTable *economics.PricingTable
+	pricingMod   time.Time
 	// economicsSnapshotPath is where the economics.Store's usage counters are
 	// periodically persisted, so `brick claude status`'s real-savings figure
 	// survives a router restart instead of resetting to zero. Sits next to
 	// the router config by the same convention as pricingPath.
 	economicsSnapshotPath string
 
-	// stickyStore holds per-conversation cache-aware routing state for
-	// RoutingModeSticky. Always constructed; only consulted when the Anthropic
-	// passthrough routing mode is "sticky". See pkg/proxy/sticky_routing.go.
-	stickyStore *sticky.Store
-	// pricingTable is loaded once at startup so the sticky hysteresis can price
-	// the prompt-cache invalidation cost of a switch without an on-demand load
-	// per request. Nil when pricing.yaml is absent/unparseable, in which case
-	// sticky hysteresis is skipped (the router's candidate model stands).
-	pricingTable     *economics.PricingTable
-	pricingRefresher *pricing.Refresher
-
-	// routingEventLog appends one JSONL record per routed request (mode,
-	// candidate/served model, session identity, sticky switch delta, e2e
-	// latency), feeding the offline promotion-gate aggregator. Nil when the
-	// sink cannot be opened; append is then a no-op. Never affects serving.
-	routingEventLog *routingEventLogger
-	// routingEventPath is where routingEventLog writes, kept separately so the
-	// /api/v1/routing/stats handler can read+aggregate the log even when the
-	// writer is disabled (e.g. a prior run's file still on disk).
-	routingEventPath string
 	// callHistory is the durable source of truth for the JSON stats API.
 	callHistory *callHistory
 }
@@ -83,14 +71,6 @@ type Server struct {
 // disk while the server is running, in addition to the flush performed on
 // graceful shutdown.
 const economicsSnapshotInterval = 30 * time.Second
-
-// stickyPruneInterval is how often expired sticky-store entries are swept.
-// Lazy eviction on GetAt never fires for keys that are never re-read (e.g.
-// one-shot routed subagents), so a periodic prune bounds memory. Cadence is a
-// pure memory/CPU tradeoff, never correctness: Prune uses the same TTL
-// predicate as GetAt, so a swept entry is one a read would already treat as
-// absent.
-const stickyPruneInterval = 60 * time.Second
 
 // NewServer creates a new Brick proxy server. If a prior economics snapshot
 // exists on disk (economics_snapshot.json next to configPath), it is loaded
@@ -109,35 +89,7 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 
 	pricingPath := filepath.Join(dataDir, "pricing.yaml")
 
-	// Append-only routing event log, next to the config by the same convention
-	// as the economics snapshot. Best-effort: a failed open disables it.
-	routingEventPath := filepath.Join(dataDir, "routing_events.jsonl")
-	routingEventLog := newRoutingEventLogger(routingEventPath)
 	callHistory := newCallHistory(filepath.Join(dataDir, "call_history.jsonl"))
-
-	// Sticky routing state. The TTL comes from config so it can track the
-	// upstream prompt-cache TTL (default 6 min, just over the 5-min cache TTL).
-	stickyTTLSeconds := cfg.Brick.EffectiveStickyTTLSeconds()
-	if cfg.AnthropicPassthrough.Enabled {
-		stickyTTLSeconds = cfg.AnthropicPassthrough.EffectiveStickyTTLSeconds()
-	}
-	stickyTTL := time.Duration(stickyTTLSeconds) * time.Second
-
-	// Preload the pricing table so sticky hysteresis can price a switch without
-	// a per-request file read. Best-effort: a missing/invalid pricing.yaml just
-	// disables the hysteresis (candidate model stands), it is never fatal.
-	pricingTable, perr := economics.LoadPricingTable(pricingPath)
-	if perr != nil {
-		logging.Warnf("Sticky routing: pricing table not loaded (%v); cache-aware hysteresis disabled until pricing.yaml exists", perr)
-		pricingTable = nil
-	}
-
-	// Native Go pricing refresher (OpenRouter + Regolo). Replaces the Python
-	// subprocess approach. Fetches directly from OpenRouter API with 1h cache TTL.
-	pricingRefresher := pricing.NewRefresher(os.Getenv("OPENROUTER_API_KEY"))
-	if pricingTable != nil {
-		pricingRefresher.SetTable(pricingTable)
-	}
 
 	return &Server{
 		cfg:                   cfg,
@@ -146,11 +98,6 @@ func NewServer(cfg *config.RouterConfig, configPath string, port int, dataDirs .
 		economicsStore:        store,
 		pricingPath:           pricingPath,
 		economicsSnapshotPath: snapshotPath,
-		stickyStore:           sticky.New(stickyTTL),
-		pricingTable:          pricingTable,
-		pricingRefresher:      pricingRefresher,
-		routingEventLog:       routingEventLog,
-		routingEventPath:      routingEventPath,
 		callHistory:           callHistory,
 	}
 }
@@ -171,18 +118,25 @@ func (s *Server) Start(ctx context.Context) error {
 	ctx = runCtx
 
 	go func() {
-		_, err := s.getBrickRouter(s.cfg)
-		s.routingReady.Store(err == nil)
-		s.routingChecked.Store(true)
-		if err != nil {
-			logging.Warnf("Routing unavailable: %v", err)
+		if !s.routingNeedsInference() {
+			s.routingChecked.Store(true)
+			return
+		}
+		for {
+			if _, err := s.getBrickRouter(s.cfg); err == nil {
+				s.routingChecked.Store(true)
+				return
+			} else {
+				logging.Warnf("Routing unavailable: %v", err)
+			}
+			s.routingChecked.Store(true)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
 		}
 	}()
-
-	if s.pricingRefresher != nil {
-		go s.pricingRefresher.Start(ctx)
-		go stopWhenPricingStale(ctx, cancelRun, s.pricingRefresher, time.Minute)
-	}
 
 	mux := http.NewServeMux()
 
@@ -202,10 +156,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/v1/routing/test", s.handleRoutingTest)
-	mux.HandleFunc("/api/v1/diag/classifier", s.handleDiagClassifier)
-	mux.HandleFunc("/api/v1/metrics/reset", s.handleMetricsReset) // clear brick_cc_* routing counters
+	mux.HandleFunc("/api/v1/diag/systemone", s.handleDiagSystemOne)
+	mux.HandleFunc("/api/v1/metrics/reset", s.handleMetricsReset) // clear Brick routing routing counters
 	mux.HandleFunc("/api/v1/economics", s.handleEconomics)        // token usage + real savings vs. all-expensive baseline
-	mux.HandleFunc("/api/v1/routing/stats", s.handleRoutingStats) // per-mode routing event aggregates (promotion-gate harness)
 	mux.HandleFunc("/api/v1/stats", s.handleStats)
 	mux.HandleFunc("/api/v1/stats/all", s.handleStats)
 	mux.HandleFunc("/api/v1/stats/clear", s.handleStats)
@@ -256,27 +209,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Periodically sweep expired sticky-store entries. Lazy eviction only fires
-	// when a key is re-read; one-shot conversations (routed subagents) never
-	// are, so without this the map grows monotonically. Behavior-preserving:
-	// Prune uses the same TTL predicate as GetAt.
-	pruneTicker := time.NewTicker(stickyPruneInterval)
-	defer pruneTicker.Stop()
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-pruneTicker.C:
-				if s.stickyStore != nil {
-					if n := s.stickyStore.Prune(time.Now()); n > 0 {
-						logging.Debugf("sticky: pruned %d expired entries (live=%d)", n, s.stickyStore.Len())
-					}
-				}
-			}
-		}
-	}()
-
 	// Wait for context cancellation or server error
 	select {
 	case err := <-errCh:
@@ -291,23 +223,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 }
 
-func stopWhenPricingStale(ctx context.Context, cancel context.CancelFunc, refresher *pricing.Refresher, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if refresher.CacheAge() > pricing.CacheTTL {
-				logging.Errorf("pricing: cache stale (>1h) and refresh failed — stopping router")
-				cancel()
-				return
-			}
-		}
-	}
-}
-
 // saveEconomicsSnapshot persists the economics usage counters to disk,
 // logging (but not failing) on error. Safe to call with a nil store.
 func (s *Server) saveEconomicsSnapshot() {
@@ -319,10 +234,27 @@ func (s *Server) saveEconomicsSnapshot() {
 	}
 }
 
+// routingNeedsInference reports whether this profile routes through SystemOne.
+func (s *Server) routingNeedsInference() bool {
+	cfg := s.cfg
+	return cfg != nil && cfg.SkillRouter.Enabled &&
+		((cfg.Brick.Enabled || cfg.CodexRouter.Enabled) && cfg.Brick.ModelRoutingEnabled() ||
+			cfg.AnthropicPassthrough.Enabled && cfg.AnthropicPassthrough.ModelRoutingEnabled())
+}
+
+// routingReady reflects the live worker state instead of a one-shot startup
+// flag, so a worker that died mid-run is reported as not ready.
+func (s *Server) routingReady() bool {
+	if !s.routingNeedsInference() {
+		return true
+	}
+	return systemone.Available()
+}
+
 // handleHealth returns a simple health check response.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	body := map[string]interface{}{"status": "ok", "instance_id": s.instanceID, "profile": s.profile, "version": s.version, "pid": os.Getpid(), "config": s.configPath, "routing_ready": s.routingReady.Load(), "routing_checked": s.routingChecked.Load()}
+	body := map[string]interface{}{"status": "ok", "instance_id": s.instanceID, "profile": s.profile, "version": s.version, "pid": os.Getpid(), "config": s.configPath, "routing_ready": s.routingReady(), "routing_checked": s.routingChecked.Load()}
 	if s.cfg != nil && s.cfg.CodexRouter.Enabled {
 		body["codex_router"] = "native-responses-v1"
 		body["authentication"] = "not_probed"
@@ -332,19 +264,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMetricsReset clears the Brick→Claude Code pass-through routing counters
-// (requests, effort, routing heatmap, classifier latency, fallback) AND the
-// economics token/cost usage store, so `brick claude status` shows a fully
-// fresh dashboard without restarting the router. POST-only. Only the
-// brick_cc_* metrics and economics usage are cleared; all other Prometheus
-// series are left intact. The economics snapshot on disk is rewritten
-// immediately so a router restart does not silently reload the pre-reset
-// totals (see saveEconomicsSnapshot).
+// request and SystemOne latency metrics, together with economics usage.
 func (s *Server) handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	metrics.ResetBrickCC()
+	metrics.ResetRouting()
 	if s.economicsStore != nil {
 		s.economicsStore.Reset()
 		s.saveEconomicsSnapshot()
@@ -513,7 +439,7 @@ func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.cfg == nil || !s.cfg.Brick.Enabled || !s.cfg.SkillRouter.Enabled {
+	if s.cfg == nil || !s.cfg.SkillRouter.Enabled {
 		writeError(w, http.StatusBadRequest, "Brick routing is not enabled")
 		return
 	}
@@ -522,27 +448,55 @@ func (s *Server) handleRoutingTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reading request body: %v", err))
 		return
 	}
-	brickRouter, err := s.getBrickRouter(s.cfg)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", err))
+	fixed := ""
+	if s.cfg.AnthropicPassthrough.Enabled && !s.cfg.AnthropicPassthrough.ModelRoutingEnabled() {
+		fixed = s.cfg.AnthropicPassthrough.EffectiveFixedModel()
+	} else if !s.cfg.Brick.ModelRoutingEnabled() {
+		fixed = s.cfg.Brick.EffectiveFixedModel(s.cfg.DefaultModel)
+	}
+	if fixed != "" {
+		writeJSON(w, 200, map[string]interface{}{"selected_model": fixed, "source": "fixed_model", "knob": s.cfg.SkillRouter.Knob})
 		return
 	}
-	route, err := brickRouter.RouteWithCandidates(r.Context(), extractOpenAIRoutingText(body, s.cfg), brickFixedModelAllow(s.cfg))
+	brickRouter, err := s.getBrickRouter(s.cfg)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("brick router unavailable: %v", err))
 		return
+	}
+	options, err := requestRoutingOptions(r, body, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	options.KeywordText = keywordText(extractOpenAILastUserText(body))
+	route, err := brickRouter.RouteWithOptions(r.Context(), extractOpenAIRoutingText(body, s.cfg), options)
+	if err != nil {
+		writeRoutingError(w, err, "SystemOne routing failed")
+		return
+	}
+	effort := clampEffortToAllowed(knobToEffort(route.Knob), s.cfg.GetAllowedThinkingModes(route.Model))
+	knobSource := "profile"
+	if options.Knob != nil {
+		knobSource = "request"
+		if r.Header.Get(KnobHeader) != "" {
+			knobSource = "header"
+		} else {
+			knobSource = "effort"
+		}
+	}
+	source := route.Reason
+	if source == "" {
+		source = "classifier"
 	}
 	resp := map[string]interface{}{
 		"selected_model": route.Model,
-		"reason":         route.Reason,
-		"keyword_rule":   route.MatchedKeyword,
-		"capability":     route.Capability,
-		"complexity": map[string]interface{}{
-			"label":      route.ComplexityLabel,
-			"confidence": route.ComplexityConfidence,
-			"tau":        route.TauQuery,
-		},
-		"scores": route.Scores,
+		"source":         source,
+		"matched_rule":   route.MatchedRule,
+		"query_vector":   route.QueryVector, "scaled_vector": route.ScaledVector,
+		"knob": route.Knob, "effort": effort, "knob_source": knobSource, "distances": route.Distances,
+	}
+	if forwarded := requestEffort(applyKnobEffort(body, s.cfg, route.Model, route.Knob)); forwarded != "" {
+		resp["forwarded_effort"] = forwarded
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

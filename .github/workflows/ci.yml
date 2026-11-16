@@ -26,15 +26,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
-      - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: pip install yamllint
       - run: npm install --global markdownlint-cli@0.44.0
       - run: npm ci --ignore-scripts
-      - run: cargo build --manifest-path apps/router/candle-binding/Cargo.toml --locked --release --no-default-features
       - run: pre-commit run --all-files --show-diff-on-failure
-        env:
-          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/router/candle-binding/target/release"
 
   repo-hygiene:
     name: repo hygiene (no internal plans)
@@ -66,11 +62,9 @@ jobs:
           go-version: "1.24"
           cache: true
           cache-dependency-path: apps/router/src/spatial-router/go.sum
-      - name: Install Rust (for CGO bindings build artifacts)
-        uses: dtolnay/rust-toolchain@stable
-      - name: Build CPU inference from source
-        working-directory: apps/router/candle-binding
-        run: cargo build --locked --release --no-default-features
+      - name: Test local SystemOne worker adapter
+        working-directory: apps/router/systemone
+        run: go test ./...
       - name: Verify CLI schema matches the runtime
         working-directory: apps/router/src/spatial-router
         run: |
@@ -81,29 +75,7 @@ jobs:
         run: go vet ./...
       - name: go test
         working-directory: apps/router/src/spatial-router
-        env:
-          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/router/candle-binding/target/release"
         run: go test ./... -short
-
-  rust-test:
-    name: cargo test (${{ matrix.crate }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [candle-binding]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/router/${{ matrix.crate }} -> target
-      - name: cargo check
-        working-directory: apps/router/${{ matrix.crate }}
-        run: cargo check --locked --no-default-features
-      - name: cargo test
-        working-directory: apps/router/${{ matrix.crate }}
-        run: cargo test --locked --no-default-features
 
   python-test:
     name: pytest (packages/evals)
@@ -144,6 +116,9 @@ jobs:
   linux-package:
     name: Linux x64 installed package and real inference
     runs-on: ubuntu-24.04
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      BRICK_SYSTEMONE_PYTHON: ${{ github.workspace }}/.venv/bin/python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
@@ -152,7 +127,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.11" }
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen --all-packages
       - run: npm ci --ignore-scripts
       - run: python3 scripts/build_runtime.py
       - name: Validate public native configuration examples
@@ -181,16 +159,13 @@ jobs:
         run: node scripts/test_native_unavailable.mjs dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/brick-runtime
       - name: Verify update failure and explicit rollback
         run: node scripts/test_native_update.mjs dist/installed/node_modules/@regoloai/brick
-      - name: Verify real inference corpus and C ABI
+      - name: Verify real SystemOne inference and routing labels
         run: |
           models=$(node -e "process.stdout.write(require('./dist/installed/node_modules/@regoloai/brick/scripts/runtime-install.cjs').installedRuntime().models)")
-          python3 scripts/test_native_model.py dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/libcandle_spatial_router.so "$models"
-          python3 scripts/test_native_labels.py dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/brick-runtime "$models"
-      - name: Verify runtime native dependencies and exports
-        run: |
-          ldd dist/runtime-linux-x64/bin/brick-runtime
-          ldd dist/runtime-linux-x64/bin/libcandle_spatial_router.so
-          nm -D --defined-only dist/runtime-linux-x64/bin/libcandle_spatial_router.so
+          "$BRICK_SYSTEMONE_PYTHON" scripts/test_systemone_stack.py "$models"
+          "$BRICK_SYSTEMONE_PYTHON" scripts/test_native_labels.py dist/installed/node_modules/@regoloai/brick/runtimes/linux-x64/bin/brick-runtime "$models"
+      - name: Verify the Go runtime artifact
+        run: file dist/runtime-linux-x64/bin/brick-runtime
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64-npm
@@ -217,7 +192,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci --ignore-scripts
       - run: python3 scripts/build_runtime.py
       - name: Execute and package the native runtime

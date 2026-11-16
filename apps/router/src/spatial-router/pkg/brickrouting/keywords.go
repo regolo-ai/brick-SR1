@@ -1,133 +1,138 @@
 package brickrouting
 
 import (
-	"math"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 )
 
-type keywordMatch struct {
-	rule        config.SkillRouterKeywordRule
-	order       int
-	importance  int
-	matched     int
-	specificity int
+// compiledKeywordRule is the immutable matching form of a strict keyword rule.
+type compiledKeywordRule struct {
+	name          string
+	model         string
+	caseSensitive bool
+	all           bool
+	needles       []string
 }
 
-func (r *Router) matchKeywords(text string) []keywordMatch {
-	matches := make([]keywordMatch, 0)
-	for i, rule := range r.skillCfg.KeywordRules {
-		if len(rule.Keywords) == 0 {
-			continue
+func compileKeywordRules(rules []config.SkillRouterKeywordRuleConfig) []compiledKeywordRule {
+	compiled := make([]compiledKeywordRule, 0, len(rules))
+	for _, rule := range rules {
+		entry := compiledKeywordRule{
+			name:          rule.Name,
+			model:         rule.Model,
+			caseSensitive: rule.CaseSensitive,
+			all:           strings.EqualFold(strings.TrimSpace(rule.Operator), "AND"),
 		}
-		haystack := text
-		if !rule.CaseSensitive {
-			haystack = strings.ToLower(haystack)
-		}
-
-		requiredAll := strings.EqualFold(rule.Operator, "AND")
-		matched := 0
-		specificity := 0
 		for _, keyword := range rule.Keywords {
-			needle := keyword
+			needle := strings.TrimSpace(keyword)
+			if needle == "" {
+				continue
+			}
 			if !rule.CaseSensitive {
 				needle = strings.ToLower(needle)
 			}
-			if strings.TrimSpace(needle) == "" {
-				continue
+			entry.needles = append(entry.needles, needle)
+		}
+		if len(entry.needles) == 0 {
+			continue
+		}
+		compiled = append(compiled, entry)
+	}
+	return compiled
+}
+
+func (r *Router) compiledKeywords() []compiledKeywordRule {
+	r.keywordsOnce.Do(func() {
+		r.keywords = compileKeywordRules(r.skillCfg.Keywords)
+	})
+	return r.keywords
+}
+
+// matchKeyword returns the first rule, in file order, that matches the text.
+func (r *Router) matchKeyword(text string) *compiledKeywordRule {
+	var lowered string
+	var lowerDone bool
+	rules := r.compiledKeywords()
+	for i := range rules {
+		rule := &rules[i]
+		haystack := text
+		if !rule.caseSensitive {
+			if !lowerDone {
+				lowered = strings.ToLower(text)
+				lowerDone = true
 			}
-			if strings.Contains(haystack, needle) {
-				matched++
-				specificity += len(needle)
-			} else if requiredAll {
-				matched = 0
-				break
+			haystack = lowered
+		}
+		if rule.matches(haystack) {
+			return rule
+		}
+	}
+	return nil
+}
+
+func (rule *compiledKeywordRule) matches(text string) bool {
+	if rule.all {
+		for _, needle := range rule.needles {
+			if !containsBounded(text, needle) {
+				return false
 			}
 		}
-		if matched == 0 {
-			continue
-		}
-		importance := rule.Importance
-		if importance == 0 {
-			importance = 5
-		}
-		matches = append(matches, keywordMatch{
-			rule:        rule,
-			order:       i,
-			importance:  importance,
-			matched:     matched,
-			specificity: specificity,
-		})
+		return true
 	}
-	return matches
+	for _, needle := range rule.needles {
+		if containsBounded(text, needle) {
+			return true
+		}
+	}
+	return false
 }
 
-func bestOverride(matches []keywordMatch) *keywordMatch {
-	var best *keywordMatch
-	for i := range matches {
-		match := matches[i]
-		if !strings.EqualFold(match.rule.Mode, "override") {
-			continue
-		}
-		if best == nil || betterKeyword(match, *best) {
-			best = &matches[i]
-		}
+// containsBounded reports whether text contains needle at a word boundary.
+// Boundaries are only asserted for keyword edges that are word characters, so
+// phrases and symbols (for example "c++") keep their natural semantics.
+func containsBounded(text, needle string) bool {
+	if needle == "" || len(needle) > len(text) {
+		return false
 	}
-	return best
-}
-
-func betterKeyword(a, b keywordMatch) bool {
-	if a.importance != b.importance {
-		return a.importance > b.importance
-	}
-	if a.matched != b.matched {
-		return a.matched > b.matched
-	}
-	if a.specificity != b.specificity {
-		return a.specificity > b.specificity
-	}
-	return a.order < b.order
-}
-
-func (r *Router) applyKeywordBiases(probabilities []float64, matches []keywordMatch) []float64 {
-	out := append([]float64(nil), probabilities...)
-	for _, match := range matches {
-		mode := strings.ToLower(strings.TrimSpace(match.rule.Mode))
-		if mode == "" {
-			mode = "bias"
+	first, _ := utf8.DecodeRuneInString(needle)
+	last, _ := utf8.DecodeLastRuneInString(needle)
+	startBoundary := isWordRune(first)
+	endBoundary := isWordRune(last)
+	for offset := 0; offset < len(text); {
+		index := strings.Index(text[offset:], needle)
+		if index < 0 {
+			return false
 		}
-		if mode != "bias" {
-			continue
-		}
-		scale := float64(match.importance) / 10.0
-		if len(match.rule.Bias) > 0 {
-			for capName, value := range match.rule.Bias {
-				if idx, ok := r.capIndex[capName]; ok {
-					out[idx] += scale * math.Max(0, value)
-				}
+		start := offset + index
+		end := start + len(needle)
+		ok := true
+		if startBoundary && start > 0 {
+			previous, _ := utf8.DecodeLastRuneInString(text[:start])
+			if isWordRune(previous) {
+				ok = false
 			}
-			continue
 		}
-		if idx, ok := r.capIndex[match.rule.Capability]; ok {
-			out[idx] += scale
+		if ok && endBoundary && end < len(text) {
+			next, _ := utf8.DecodeRuneInString(text[end:])
+			if isWordRune(next) {
+				ok = false
+			}
 		}
+		if ok {
+			return true
+		}
+		_, size := utf8.DecodeRuneInString(text[start:])
+		if size == 0 {
+			return false
+		}
+		offset = start + size
 	}
-	return normalize(out)
+	return false
 }
 
-func joinedRuleNames(matches []keywordMatch) string {
-	if len(matches) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(matches))
-	seen := map[string]bool{}
-	for _, match := range matches {
-		if match.rule.Name == "" || seen[match.rule.Name] {
-			continue
-		}
-		names = append(names, match.rule.Name)
-		seen[match.rule.Name] = true
-	}
-	return strings.Join(names, ",")
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }

@@ -10,18 +10,13 @@ import { isRegoloEndpoint,validateCredential } from '../../lib/config/credential
 import { readEnvValue } from '../../lib/config/env-file.js';
 import { paths } from '../../lib/config/paths.js';
 import { ConfigSchema,type BrickConfig } from '../../lib/config/schema.js';
+import { migrateNativeProfile } from './native-migration.js';
 import { saveProfileSettings } from '../../lib/config/settings.js';
 import { resolveSkillCards } from '../../lib/skills/resolver.js';
+import { skillVectorInOrder } from '../skills/table.js';
 import * as p from '../../lib/ui/prompts.js';
-import { applyComputeToConfig } from './classifier.js';
 
 const AutoCompletePrompt: any = (Enquirer as any).AutoComplete;
-
-export const CACHE_ROUTING_OPTIONS = [
-  { value: 'off', label: 'off (route each request independently)' },
-  { value: 'sticky', label: 'sticky (keep a conversation on the same model)' },
-  { value: 'smartsqueeze', label: 'smartsqueeze (compact context when switching models)' },
-] as const;
 
 /** A searchable one-of-many menu whose filled square follows keyboard focus. */
 export class SquareAutocomplete extends AutoCompletePrompt {
@@ -130,9 +125,10 @@ export async function hasPendingEnvChanges(
   return false;
 }
 
-/** One transactional settings session. Unknown YAML keys are retained because
- * the raw object is mutated and written only once, on Save. */
+/** One transactional settings session after validated, backed-up profile migration.
+ * Edits remain in memory until Save. */
 export async function editConfigProfile(profile: string, title = `Brick settings  (profile: ${profile})`): Promise<void> {
+    await migrateNativeProfile(profile);
     const pp = paths(profile);
     let cfg: BrickConfig;
     let raw: any;
@@ -161,7 +157,7 @@ export async function editConfigProfile(profile: string, title = `Brick settings
           { value: 'providers', label: 'Providers', hint: `${Object.keys(cfg.providers ?? {}).length} configured — incl. Claude/Codex` },
           { value: 'models', label: 'Models', hint: modelSummary(cfg) },
           { value: 'thinking', label: 'Thinking modes', hint: 'per-model allowed modes' },
-          { value: 'cache_routing', label: 'Cache-aware routing', hint: (cfg as any).brick?.routing_mode ?? 'off' },
+          { value: 'knob', label: 'Routing knob', hint: String(cfg.skill_router?.knob ?? 0) },
           { value: 'advanced', label: 'Advanced' },
           { value: 'save', label: dirty ? 'Save changes and exit' : 'Exit (no changes)' },
           { value: 'discard', label: 'Discard changes and exit' },
@@ -192,7 +188,7 @@ export async function editConfigProfile(profile: string, title = `Brick settings
       if (sec === 'discard') { p.outro('discarded'); return; }
 
       if (sec === 'thinking') await editThinkingGlobal(cfg);
-      else if (sec === 'cache_routing') await editCacheRouting(cfg);
+      else if (sec === 'knob') await editKnob(cfg);
       else if (sec === 'advanced') await editAdvanced(cfg);
       else await editSection(cfg, sec as string);
     }
@@ -203,7 +199,6 @@ async function editSection(cfg: BrickConfig, section: string): Promise<boolean> 
     case 'providers': return await editProvidersForConfig(cfg, currentEnvPath);
     case 'models': return await editModels(cfg);
     case 'server_port': return await editServerPort(cfg);
-    case 'complexity': return await editComplexity(cfg);
     case 'brick': return await editBrick(cfg);
     default: return false;
   }
@@ -265,13 +260,13 @@ export async function editProvidersForConfig(cfg: BrickConfig, envPath = current
       (cfg.provider_profiles as any)[id] = { type: known.type, base_url: known.base_url };
       if (!cfg.provider_endpoints.find((v: any) => v.name === id)) cfg.provider_endpoints.push({ name: id, provider_profile: id, weight: 1 });
       if (isClaudeApi && !(cfg as any).anthropic_passthrough) {
-        (cfg as any).anthropic_passthrough = { enabled: true, use_skill_router: true, route_subagents: false, upstream_url: 'https://api.anthropic.com', model_map: { easy: cfg.default_model, medium: cfg.default_model, hard: cfg.default_model }, model_map_1m: { easy: cfg.default_model, medium: cfg.default_model, hard: cfg.default_model } };
+        (cfg as any).anthropic_passthrough = { enabled: true, route_subagents: false, upstream_url: 'https://api.anthropic.com' };
       }
       if (isClaudeCode && !(cfg as any).anthropic_passthrough) {
-        (cfg as any).anthropic_passthrough = { enabled: true, use_skill_router: true, route_subagents: false, upstream_url: 'https://api.anthropic.com', model_map: { easy: cfg.default_model, medium: cfg.default_model, hard: cfg.default_model }, model_map_1m: { easy: cfg.default_model, medium: cfg.default_model, hard: cfg.default_model } };
+        (cfg as any).anthropic_passthrough = { enabled: true, route_subagents: false, upstream_url: 'https://api.anthropic.com' };
       }
       if (isCodex && !(cfg as any).brick) {
-        (cfg as any).brick = { enabled: true, use_model_routing: true, routing_mode: 'smartsqueeze', context_window: { enabled: true, k: 8 }, ocr_min_text_length: 10 };
+        (cfg as any).brick = { enabled: true, use_model_routing: true, context_window: { enabled: true, k: 8 }, ocr_min_text_length: 10 };
       }
       changed = true;
     }
@@ -601,7 +596,7 @@ export function addModelAtomic(
   if (!cfg.skill_router) throw new Error('profile has no skill_router block; initialize routing before adding catalog models');
   const existing = cfg.skill_router.models.find((entry) => entry.model === model);
   if (existing) {
-    existing.skill_vector = [...card.skill_vector];
+    existing.skill_vector = skillVectorInOrder(card, cfg.skill_router!.capabilities);
     // Keep the established primary transport when this model is attached to a
     // second endpoint. model_config retains all endpoint associations.
     if (!existing.base_url && transport?.baseUrl) existing.base_url = transport.baseUrl;
@@ -609,8 +604,7 @@ export function addModelAtomic(
   } else {
     cfg.skill_router.models.push({
       model,
-      skill_vector: [...card.skill_vector],
-      use_reasoning: false,
+      skill_vector: skillVectorInOrder(card, cfg.skill_router!.capabilities),
       ...(transport?.baseUrl ? { base_url: transport.baseUrl } : {}),
       ...(transport?.apiKeyEnv ? { api_key_env: transport.apiKeyEnv } : {}),
     });
@@ -624,10 +618,6 @@ export function removeModelAtomic(cfg: BrickConfig, model: string): void {
   if (cfg.skill_router) {
     cfg.skill_router.models = cfg.skill_router.models.filter((entry) => entry.model !== model);
     cfg.skill_router.active_models = activeModels(cfg).filter((id) => id !== model);
-  }
-  for (const map of [cfg.anthropic_passthrough?.model_map, cfg.anthropic_passthrough?.model_map_1m]) {
-    if (!map) continue;
-    for (const key of Object.keys(map)) if ((map as any)[key] === model) delete (map as any)[key];
   }
   if (cfg.anthropic_passthrough?.fixed_model === model) delete cfg.anthropic_passthrough.fixed_model;
   if (cfg.brick?.fixed_model === model) delete cfg.brick.fixed_model;
@@ -684,15 +674,6 @@ async function searchableSelect(message: string, choices: Array<{ value: string;
   } catch (e: any) { if (e === '' || String(e).includes('canceled')) return null; throw e; }
 }
 
-async function editCacheRouting(cfg: BrickConfig): Promise<boolean> {
-  if (!(cfg as any).brick) (cfg as any).brick = { enabled: true, routing_mode: 'off' };
-  const cur = (cfg as any).brick.routing_mode ?? 'off';
-  const sel = await p.select({ message: 'Cache-aware routing:', options: [...CACHE_ROUTING_OPTIONS], initialValue: cur });
-  if (isCancel(sel) || sel === cur) return false;
-  (cfg as any).brick.routing_mode = sel as string;
-  return true;
-}
-
 async function editThinkingModes(cfg: BrickConfig, model: string): Promise<boolean> {
   const current = cfg.model_config?.[model]?.allowed_thinking_modes ?? [];
   const modes = await p.multiselect({
@@ -713,7 +694,6 @@ async function editAdvanced(cfg: BrickConfig): Promise<boolean> {
     message: 'Advanced:',
     options: [
       { value: 'server_port', label: 'Server port', hint: String(cfg.server_port) },
-      { value: 'complexity', label: 'Complexity service', hint: cfg.complexity_service?.enabled ? 'on' : 'off' },
       { value: 'brick', label: 'Multimodal Brick', hint: cfg.brick?.enabled ? 'on' : 'off' },
       { value: 'back', label: '← back' },
     ],
@@ -732,50 +712,6 @@ async function editServerPort(cfg: BrickConfig): Promise<boolean> {
   const n = Number(v);
   if (n === cfg.server_port) return false;
   cfg.server_port = n;
-  return true;
-}
-
-
-async function editComplexity(cfg: BrickConfig): Promise<boolean> {
-  const mode = await p.select({
-    message: 'Complexity classifier:',
-    options: [
-      { value: 'remote', label: 'Remote (OpenAI-compatible API)', hint: 'custom /v1/chat/completions endpoint' },
-      { value: 'off', label: 'Disable', hint: 'no complexity signal' },
-    ],
-    initialValue: cfg.complexity_service?.enabled
-      ? 'remote'
-      : 'off',
-  });
-  if (isCancel(mode)) abort();
-
-  if (mode === 'off') {
-    if (!cfg.complexity_service?.enabled) return false;
-    cfg.complexity_service = undefined as any;
-    return true;
-  }
-
-  if (mode === 'remote') {
-    const baseUrl = await p.text({ message: 'Remote base_url:', defaultValue: cfg.complexity_service?.base_url ?? '' });
-    if (isCancel(baseUrl)) abort();
-    const modelName = await p.text({ message: 'Model name (sent to the API):', defaultValue: cfg.complexity_service?.model_name ?? 'brick-complexity-pro' });
-    if (isCancel(modelName)) abort();
-    const token = await p.password({ message: 'Bearer token (blank to keep current / skip):' });
-    if (isCancel(token)) abort();
-    const envKey = isRegoloEndpoint(String(baseUrl).trim()) ? 'REGOLO_API_KEY' : 'COMPLEXITY_API_KEY';
-    const keepToken = cfg.complexity_service?.bearer_token;
-    if (String(token).trim()) {
-      // Validate before mutating the in-memory YAML; the profile .env is the
-      // only persistence location for a custom classifier secret.
-      await validateCredential(String(baseUrl).trim(), String(token).trim(), 'openai', String(modelName).trim());
-      pendingEnvValues[envKey] = String(token).trim();
-    }
-    applyComputeToConfig(cfg, 'api', { baseUrl: String(baseUrl).trim(), model: String(modelName).trim() });
-    if (!String(token).trim() && keepToken && !isRegoloEndpoint(String(baseUrl).trim())) {
-      cfg.complexity_service!.bearer_token = keepToken;
-      if (cfg.skill_router?.complexity_model) cfg.skill_router.complexity_model.bearer_token = keepToken;
-    }
-  }
   return true;
 }
 
@@ -813,4 +749,14 @@ async function editBrick(cfg: BrickConfig): Promise<boolean> {
     ocr_min_text_length: Number(minTextLen),
   };
   return true;
+}
+
+async function editKnob(cfg: BrickConfig): Promise<boolean> {
+  if (!cfg.skill_router) return false;
+  const value = await p.text({ message: 'Routing knob (-1 to +1):', defaultValue: String(cfg.skill_router.knob),
+    validate: (text) => text.trim() && Number.isFinite(Number(text)) && Number(text) >= -1 && Number(text) <= 1 ? undefined : 'Enter a number between -1 and +1' });
+  if (isCancel(value)) return false;
+  const changed = cfg.skill_router.knob !== Number(value);
+  cfg.skill_router.knob = Number(value);
+  return changed;
 }

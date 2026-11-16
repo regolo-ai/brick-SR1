@@ -1,5 +1,10 @@
 # Skill-Vector Router Math (6D)
 
+> Historical pre-SystemOne research and evaluation. This document does not
+> describe the current runtime; see the repository README for current behavior.
+
+Historical source snapshot: `355bbaf90f4984cf155661dce9aa1110c9aa0f9a`.
+
 > Source: consolidated English translation and synthesis of
 > `/root/forkGO/router_skill_vector_math.md` (583 lines, Italian, mathematical
 > know-how of the 6D skill-vector router) and `/root/forkGO/script.md` (90

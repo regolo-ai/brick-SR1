@@ -29,16 +29,18 @@ def cli_tarball(tmp_path: Path, runtime_version: str = VERSION) -> Path:
     with tarfile.open(path, "w:gz") as archive:
         add(archive, "package/package.json", json.dumps({"name": "@regoloai/brick", "version": VERSION}).encode())
         add(archive, "package/oclif.manifest.json", b'{"commands":["start"]}')
-        for target, (system, arch, marker) in TARGETS.items():
+        for target, (system, arch) in TARGETS.items():
             prefix = f"package/runtimes/{target}/"
             manifest = {
                 "name": f"@regoloai/brick-runtime-{target}",
                 "version": runtime_version,
                 "os": [system],
                 "cpu": [arch],
+                "inference_engine": "pytorch-transformers",
             }
             add(archive, prefix + "package.json", json.dumps(manifest).encode())
-            add(archive, prefix + "bin/brick-runtime", b"binary:" + marker)
+            add(archive, prefix + "bin/brick-runtime", b"static Go runtime")
+            add(archive, prefix + "requirements.txt", b"torch>=2.2\ntransformers==5.16.1\n")
     return path
 
 
@@ -64,7 +66,7 @@ def test_rejects_filename_mismatch(tmp_path: Path) -> None:
         validate_archives([wrong], project(tmp_path), execute=False)
 
 
-def test_rejects_absolute_runtime_loader_path(tmp_path: Path) -> None:
+def test_rejects_absolute_runtime_build_path(tmp_path: Path) -> None:
     path = cli_tarball(tmp_path)
     replacement = tmp_path / "replacement.tgz"
     with tarfile.open(path) as source, tarfile.open(replacement, "w:gz") as destination:
@@ -92,3 +94,34 @@ def test_rejects_incomplete_universal_package(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="missing runtimes: darwin-arm64"):
         validate_archives([path], project(tmp_path), execute=False)
     validate_archives([path], project(tmp_path / "partial"), execute=False, allow_partial_runtimes=True)
+
+
+def test_pytorch_runtime_requires_dependency_manifest(tmp_path: Path) -> None:
+    from check_npm_package import validate_runtime
+
+    def bundle(include_requirements):
+        data = io.BytesIO()
+        with tarfile.open(fileobj=data, mode="w") as archive:
+            add(
+                archive,
+                "package/package.json",
+                json.dumps(
+                    {
+                        "name": "@regoloai/brick-runtime-linux-x64",
+                        "version": VERSION,
+                        "os": ["linux"],
+                        "cpu": ["x64"],
+                        "inference_engine": "pytorch-transformers",
+                    }
+                ).encode(),
+            )
+            add(archive, "package/bin/brick-runtime", b"static Go binary")
+            if include_requirements:
+                add(archive, "package/requirements.txt", b"torch>=2.2\ntransformers==5.16.1\n")
+        data.seek(0)
+        return tarfile.open(fileobj=data)
+
+    with bundle(True) as archive:
+        validate_runtime(archive, "package/", "linux-x64", VERSION, execute=False)
+    with bundle(False) as archive, pytest.raises(ValueError, match="missing requirements.txt"):
+        validate_runtime(archive, "package/", "linux-x64", VERSION, execute=False)

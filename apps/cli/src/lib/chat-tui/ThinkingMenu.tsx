@@ -8,17 +8,18 @@ type Action = 'visibility' | 'mode' | 'cancel';
 
 const ACTIONS: { value: Action; label: string; hint: (state: { showThinking: boolean; mode: ThinkingMode | null }) => string }[] = [
   { value: 'visibility', label: 'Visibility', hint: (s) => `currently: ${s.showThinking ? 'show' : 'hidden'}` },
-  { value: 'mode', label: 'Brick-thinking mode', hint: (s) => `currently: ${s.mode ?? 'router-default'}` },
+  { value: 'mode', label: 'Request effort', hint: (s) => `currently: ${s.mode ?? 'profile knob'}` },
   { value: 'cancel', label: '← back', hint: () => '' },
 ];
 
 const MODES: { value: ThinkingMode | 'unset'; label: string; hint: string }[] = [
-  { value: 'unset', label: 'router-default', hint: 'no override; pipeline decides per decision' },
+  { value: 'unset', label: 'profile knob', hint: 'no effort override; use the profile routing knob' },
   { value: 'off', label: 'off', hint: 'enable_thinking=false on every backend' },
   { value: 'low', label: 'low effort', hint: '' },
   { value: 'medium', label: 'medium effort', hint: '' },
   { value: 'high', label: 'high effort', hint: '' },
-  { value: 'auto', label: 'auto (brick-thinking)', hint: 'effort chosen by complexity classifier per query' },
+  { value: 'xhigh', label: 'xhigh effort', hint: '' },
+  { value: 'max', label: 'max effort', hint: '' },
 ];
 
 export function ThinkingMenu(props: {
@@ -74,7 +75,7 @@ export function ThinkingMenu(props: {
         </Box>
       ) : (
         <Box flexDirection="column">
-          <Text dimColor>Pick brick-thinking mode for next turns:</Text>
+          <Text dimColor>Pick request effort for next turns:</Text>
           {MODES.map((m, i) => (
             <Text key={m.value} color={i === modeIdx ? accent : undefined}>
               {i === modeIdx ? '› ' : '  '}{m.label}  {m.hint ? <Text dimColor>— {m.hint}</Text> : null}

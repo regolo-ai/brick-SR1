@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"net/http"
+	"os"
 	"sort"
+	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 )
@@ -65,6 +67,36 @@ const opusBaselineModel = "claude-opus"
 // produce a 200 response with as much information as can be computed,
 // rather than an error, since this endpoint is meant to be safely pollable
 // by the CLI at any point in the router's lifecycle.
+// pricing returns the current price table, reloading it whenever pricing.yaml
+// changes on disk. The CLI rewrites that file hourly, so pinning prices to
+// process start would leave the dashboard reporting yesterday's numbers.
+func (s *Server) pricing() (*economics.PricingTable, error) {
+	info, statErr := os.Stat(s.pricingPath)
+	s.pricingMu.RLock()
+	table, mod := s.pricingTable, s.pricingMod
+	s.pricingMu.RUnlock()
+	if table != nil && statErr == nil && info.ModTime().Equal(mod) {
+		return table, nil
+	}
+	loaded, err := economics.LoadPricingTable(s.pricingPath)
+	if err != nil {
+		// A rewrite is atomic, so this only triggers when the file is gone:
+		// keep the last known prices rather than dropping every figure.
+		if table != nil {
+			return table, nil
+		}
+		return nil, err
+	}
+	var mtime time.Time
+	if statErr == nil {
+		mtime = info.ModTime()
+	}
+	s.pricingMu.Lock()
+	s.pricingTable, s.pricingMod = loaded, mtime
+	s.pricingMu.Unlock()
+	return loaded, nil
+}
+
 func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -85,10 +117,10 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 
 	snap := store.Snapshot()
 
-	table, err := economics.LoadPricingTable(s.pricingPath)
+	table, err := s.pricing()
 	if err != nil {
 		resp := economicsResponseTokensOnly(snap, false,
-			"pricing table not available; token counts only (run scripts/fetch_pricing.py)")
+			"pricing table not available; token counts only (run brick profile pricing --sync)")
 		resp.BaselineModel = baselineModel
 		writeJSON(w, http.StatusOK, resp)
 		return

@@ -22,6 +22,36 @@ describe('CSV skill-card resolver', () => {
     expect(Object.keys(card ?? {})).toEqual(['model', 'skill_vector']);
   });
 
+  it('resolves Regolo API ids through the canonical skill-table alias', async () => {
+    const csv = [
+      'model,coding,creative_synthesis,instruction_following,math_reasoning,planning_agentic,world_knowledge',
+      'qwen3.5-122b-a10b,0.70,0.55,0.82,0.82,0.72,0.84',
+      'glm-5.2,0.80,0.70,0.74,0.92,0.80,0.88',
+    ].join('\n');
+    const cards = await resolveSkillCards(['qwen3.5-122b', 'glm5.2'], {
+      refresh: true,
+      cacheDir: `/tmp/brick-alias-${process.pid}`,
+      fetchImpl: async () => new Response(csv),
+    });
+
+    expect(cards.get('qwen3.5-122b')?.model).toBe('qwen3.5-122b-a10b');
+    expect(cards.get('qwen3.5-122b')?.skill_vector).toEqual([0.70, 0.55, 0.82, 0.82, 0.72, 0.84]);
+    expect(cards.get('glm5.2')?.model).toBe('glm-5.2');
+  });
+
+  it('matches provider-cased ids case-insensitively', async () => {
+    const csv = [
+      'model,coding,creative_synthesis,instruction_following,math_reasoning,planning_agentic,world_knowledge',
+      'Llama-3.3-70B-Instruct,0.5,0.5,0.5,0.5,0.5,0.5',
+    ].join('\n');
+    const cards = await resolveSkillCards(['llama-3.3-70b-instruct'], {
+      refresh: true,
+      cacheDir: `/tmp/brick-case-${process.pid}`,
+      fetchImpl: async () => new Response(csv),
+    });
+    expect(cards.get('llama-3.3-70b-instruct')?.model).toBe('Llama-3.3-70B-Instruct');
+  });
+
   it('falls back to an indefinitely old valid cache and warns with its date', async () => {
     const dir = join(tmpdir(), `brick-cache-${process.pid}-${Date.now()}`);
     await mkdir(dir, { recursive: true });

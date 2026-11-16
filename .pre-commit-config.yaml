@@ -85,30 +85,14 @@ repos:
         exclude: ^apps/cli/(node_modules|dist)/
         pass_filenames: false
 
-  # Rust specific hooks (apps/router/candle-binding)
-  - repo: local
-    hooks:
-      - id: cargo-fmt
-        name: cargo fmt
-        entry: bash -c 'cd apps/router/candle-binding && cargo fmt --check'
-        language: system
-        files: ^apps/router/candle-binding/.*\.rs$
-        pass_filenames: false
-      - id: cargo-check
-        name: cargo check
-        entry: bash -c 'cd apps/router/candle-binding && cargo check --locked --no-default-features'
-        language: system
-        files: ^apps/router/candle-binding/.*\.rs$
-        pass_filenames: false
-
   # Python: ruff (lint + format)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
       - id: ruff
         args: ["--fix"]
-        files: ^(packages|scripts)/.*\.py$
+        files: ^(packages|scripts|apps/router/systemone)/.*\.py$
         exclude: ^(packages/evals/external/|packages/evals/vendor/|packages/.*/.venv/)
       - id: ruff-format
-        files: ^(packages|scripts)/.*\.py$
+        files: ^(packages|scripts|apps/router/systemone)/.*\.py$
         exclude: ^(packages/evals/external/|packages/evals/vendor/|packages/.*/.venv/)

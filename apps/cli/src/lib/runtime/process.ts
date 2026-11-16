@@ -10,6 +10,7 @@ import { migrateNativeProfile } from '../config/native-migration.js';
 import { paths, validateProfileName } from '../config/paths.js';
 const require = createRequire(import.meta.url);
 const installer = require('../../../scripts/runtime-install.cjs');
+const pythonEnv = require('../../../scripts/python-env.cjs');
 export interface RuntimeState {
   pid: number; birth: string; executableDevice: number; executableInode: number; instance: string; profile: string; version: string;
   binary: string; models: string; config: string; digest: string; port: number; envFile: string;
@@ -127,7 +128,11 @@ async function terminate(state: RuntimeState): Promise<void> {
 async function launch(profile: string, bundle: any, config: string, digest: string, port: number, env: NodeJS.ProcessEnv, requireRouting = false): Promise<RuntimeState> {
   const instance = randomUUID();
   const envFile = resolve(paths(profile).runtime, `environment-${instance}.json`);
-  await atomicJSON(envFile, env);
+  const persistedEnv = { ...env };
+  // Hub download credentials are unnecessary for local inference and never enter snapshots.
+  delete persistedEnv.HF_TOKEN;
+  delete persistedEnv.HF_HUB_TOKEN;
+  await atomicJSON(envFile, persistedEnv);
   const log = await open(logPath(profile), 'a', 0o600);
   const args = ['--config', config, '--data-dir', resolve(paths(profile).profileDir), '--port', String(port), '--metrics-port', '0', '--model-dir', bundle.models, '--instance-id', instance, '--profile', profile];
   const child = spawn(bundle.binary, args, { env, detached: true, stdio: ['ignore', log.fd, log.fd], cwd: paths(profile).profileDir });
@@ -159,6 +164,10 @@ export async function startRuntime(profile: string, port: number, restart = fals
     await migrateNativeProfile(profile);
     await ensureProfilePricing(profile);
     const env = await environment(profile);
+    if (!env.BRICK_SYSTEMONE_PYTHON) {
+      try { env.BRICK_SYSTEMONE_PYTHON = pythonEnv.ensurePython((message: string) => console.log(`[brick] ${message}`)); }
+      catch (error) { void error; }
+    }
     const content = await readFile(paths(profile).config);
     const digest = createHash('sha256').update(content).digest('hex');
     const snapshot = resolve(paths(profile).runtime, `config-${digest}.yaml`);

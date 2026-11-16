@@ -25,9 +25,21 @@ export function parseSkillTableCsv(input: string): Map<string, SkillTableRecord>
     if (!model) throw new Error(`empty model id at row ${row + 1}`);
     if (records.has(model)) throw new Error(`duplicate model id '${model}'`);
     const skill_vector = skillFields.map((field) => Number(field.trim()));
-    if (skill_vector.some((value) => !Number.isFinite(value) || value <= 0 || value >= 1))
-      throw new Error(`invalid skill vector for '${model}' (values must be finite and strictly between 0 and 1)`);
+    if (skillFields.some((field) => !field.trim()) || skill_vector.some((value) => !Number.isFinite(value) || value < 0 || value > 1))
+      throw new Error(`invalid skill vector for '${model}' (values must be finite and in [0, 1])`);
     records.set(model, { model, skill_vector });
   }
   return records;
+}
+
+export const SYSTEMONE_CAPABILITIES = ['instruction_following', 'coding', 'math_reasoning', 'world_knowledge', 'planning_agentic', 'creative_synthesis'] as const;
+
+/** Published CSV columns retain their historical order; profiles declare their own order. */
+export function skillVectorInOrder(record: SkillTableRecord, capabilities: readonly string[]): number[] {
+  if (capabilities.length !== 6 || new Set(capabilities).size !== 6) throw new Error('Invalid SystemOne dimensions');
+  return capabilities.map((name) => {
+    const index = (SKILL_CAPABILITIES as readonly string[]).indexOf(name);
+    if (index < 0) throw new Error(`Unknown SystemOne dimension: ${name}`);
+    return record.skill_vector[index];
+  });
 }

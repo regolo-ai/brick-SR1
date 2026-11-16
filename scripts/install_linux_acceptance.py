@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install real tarballs with only Node/npm/sh visible, as an ordinary user."""
+"""Install real tarballs with Node/npm/sh and an explicitly configured Python environment, as an ordinary user."""
 
 import argparse
 import os
@@ -15,7 +15,7 @@ args = parser.parse_args()
 root = Path(tempfile.mkdtemp(prefix="brick-install-linux-"))
 for name in ["bin", "cache", "installed", "profiles", "tarballs"]:
     (root / name).mkdir()
-for name in ["node", "npm", "sh"]:
+for name in ["node", "npm", "sh", "python3"]:
     source = shutil.which(name)
     if not source:
         raise SystemExit(f"Required acceptance-test tool missing: {name}")
@@ -42,6 +42,7 @@ def identity():
 env = {
     key: value for key, value in os.environ.items() if key not in ["LD_LIBRARY_PATH", "NODE_PATH", "DYLD_LIBRARY_PATH"]
 }
+env["BRICK_SYSTEMONE_PYTHON"] = os.environ.get("BRICK_SYSTEMONE_PYTHON", str(root / "bin/python3"))
 env.update(
     PATH=str(root / "bin"),
     npm_config_cache=str(root / "cache"),

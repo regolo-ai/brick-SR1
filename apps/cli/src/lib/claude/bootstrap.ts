@@ -20,8 +20,8 @@ export async function ensureDefaultProfile(): Promise<string> {
   const configTemplate = readFileSync(join(TEMPLATE_DIR, 'claude-default.config.yaml'), 'utf8');
   writeFileSync(pp.config, configTemplate, { mode: 0o600 });
 
-  // The classifier key is filled by the profile editor before first start.
-  writeFileSync(pp.env, '# Regolo complexity classifier credential\nREGOLO_API_KEY=\n', { mode: 0o600 });
+  // Generation provider credentials are optional until those providers are selected.
+  writeFileSync(pp.env, '# Generation provider credentials\nREGOLO_API_KEY=\n', { mode: 0o600 });
 
 
   if (!readState().activeProfile) updateState({ activeProfile: profile });

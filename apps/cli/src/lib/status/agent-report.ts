@@ -13,12 +13,14 @@ import { runtimeStatus } from '../runtime/process.js';
 import { harnessConnection } from '../harness.js';
 import type { BrickConfig } from '../config/schema.js';
 
-export const AGENT_REPORT_SCHEMA_VERSION = '1.0';
+export const AGENT_REPORT_SCHEMA_VERSION = '2.0';
 
 export type AgentSelection = {
   default_model: string;
   active_models: string[];
   skill_vectors: Record<string, number[]>;
+  capabilities: string[];
+  knob: number;
 };
 
 export type AgentRuntime = {
@@ -47,7 +49,7 @@ export type AgentReport = {
   runtime: AgentRuntime;
   router: HealthResponse | null;
   harness: AgentHarness;
-  classifier: Snapshot['diag'];
+  systemone: Snapshot['diag'];
   stats: Snapshot['stats'];
   economy: UnifiedEconomy;
   context_discovery: ContextWindowResolution[];
@@ -79,6 +81,8 @@ export async function buildAgentReport(profile: string, cfg: BrickConfig): Promi
     port,
     selection: {
       default_model: cfg.default_model,
+      capabilities: cfg.skill_router?.capabilities ?? [],
+      knob: cfg.skill_router?.knob ?? 0,
       active_models: cfg.skill_router?.active_models ?? [],
       skill_vectors: Object.fromEntries(
         (cfg.skill_router?.models ?? []).map((m) => [m.model, m.skill_vector]),
@@ -97,7 +101,7 @@ export async function buildAgentReport(profile: string, cfg: BrickConfig): Promi
     } : null,
     router: health,
     harness: harnessConnection(profile, baseUrl),
-    classifier: snapshot.diag,
+    systemone: snapshot.diag,
     stats: snapshot.stats,
     economy: unifyEconomy(econ, snapshot.stats ?? EMPTY_STATS, cfg.default_model),
     context_discovery: contextDiscovery,
