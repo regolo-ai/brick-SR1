@@ -287,3 +287,6 @@ apps/cli/.entrypoint-test-*/
 # Local non-publishable archive (brevetto, history logs, research mounts) — NEVER commit
 /local/
 /local/**/*.tar.gz
+
+# Foreman loop runtime state (per-plan loops, worktrees, ledger)
+.foreman/
