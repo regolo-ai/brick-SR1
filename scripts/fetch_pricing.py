@@ -82,6 +82,8 @@ OPENAI_MODELS: list[tuple[str, float, float, float, str]] = [
     ("gpt-6.1-terra", 1.0, 0.05, 5.0, "litellm:gpt-6.1-terra"),
     ("gpt-6-luna", 0.10, 0.01, 0.50, "litellm:gpt-6-luna"),
     ("gpt-6.1-sol", 2.0, 0.10, 10.0, "litellm:gpt-6.1-sol"),
+    ("gpt-6.2-sol", 2.0, 0.10, 10.0, "litellm:gpt-6.2-sol"),
+    ("gpt-6.2-astra", 8.0, 0.40, 40.0, "litellm:gpt-6.2-astra"),
 ]
 
 # ---------------------------------------------------------------------------

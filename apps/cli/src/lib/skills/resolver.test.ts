@@ -39,6 +39,22 @@ describe('CSV skill-card resolver', () => {
     expect(cards.get('glm5.2')?.model).toBe('glm-5.2');
   });
 
+  it('falls back to the same-tier Codex vector while the table lags 6.2', async () => {
+    const csv = [
+      'model,coding,creative_synthesis,instruction_following,math_reasoning,planning_agentic,world_knowledge',
+      'gpt-6.1-sol,0.73,0.80,0.5,0.94,0.66,0.86',
+      'gpt-6-astra,0.26,0.27,0.5,0.31,0.42,0.65',
+    ].join('\n');
+    const cards = await resolveSkillCards(['gpt-6.2-sol', 'gpt-6.2-astra'], {
+      refresh: true,
+      cacheDir: `/tmp/brick-alias-62-${process.pid}`,
+      fetchImpl: async () => new Response(csv),
+    });
+
+    expect(cards.get('gpt-6.2-sol')?.model).toBe('gpt-6.1-sol');
+    expect(cards.get('gpt-6.2-astra')?.model).toBe('gpt-6-astra');
+  });
+
   it('matches provider-cased ids case-insensitively', async () => {
     const csv = [
       'model,coding,creative_synthesis,instruction_following,math_reasoning,planning_agentic,world_knowledge',

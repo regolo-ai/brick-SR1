@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import yaml from 'js-yaml';
 import { paths } from '../config/paths.js';
@@ -60,48 +61,75 @@ export function missingCatalogModels(config: any, catalog: CodexCatalog): string
 }
 
 /**
- * Catalog for profile creation and migration. The cache file is the normal
- * source, but it can be readable yet stale: the Codex client writes a subset
- * of the full catalog (e.g. only 5.6 models) while `codex debug models` still
- * advertises the active pool. When any `required` slug is missing from the
- * cache, merge in the client's full catalog so we neither warn about nor prune
- * models that are actually available. A fresh `codex login` may not have
- * written the cache yet; then ask the client directly so `brick start codex`
- * works on a clean machine.
+ * Ask the installed Codex client for the account's live catalog.
+ *
+ * `codex debug models` honours `model_catalog_json` from config.toml, and while
+ * Brick is wired that path is Brick's own generated catalog: calling it from the
+ * real home would echo our previous output back, so a model Codex added after
+ * the last setup (for example a new 6.2 release) would never appear. The CLI
+ * refuses an empty override, so the probe runs with a throwaway CODEX_HOME that
+ * shares the account credentials and has no catalog override, which makes the
+ * client refresh the real one from the backend. The probe keeps its own cache so
+ * repeated starts do not hit the network.
  */
-export async function readCodexCatalogForSetup(required: string[] = []): Promise<CodexCatalog> {
+let clientCatalog: Promise<CodexCatalog | undefined> | undefined;
+
+async function readClientCatalog(): Promise<CodexCatalog | undefined> {
+  // One probe per CLI run: start, migration and the preflight all ask.
+  clientCatalog ??= probeClientCatalog();
+  return clientCatalog;
+}
+
+async function probeClientCatalog(): Promise<CodexCatalog | undefined> {
+  const auth = join(codexHome(), 'auth.json');
+  try {
+    await readFile(auth);
+  } catch {
+    return undefined; // not logged in yet
+  }
+  const base = process.env.BRICK_HOME ?? join(homedir(), '.brick');
+  const probe = join(base, 'cache', 'codex-catalog-probe');
+  await mkdir(probe, { recursive: true, mode: 0o700 });
+  const linked = join(probe, 'auth.json');
+  try { await unlink(linked); } catch { /* first run */ }
+  try { await symlink(auth, linked); } catch { await copyFile(auth, linked); }
+  await writeFile(join(probe, 'config.toml'), 'model = "gpt-6.1-terra"\n', { mode: 0o600 });
+  try {
+    const stdout = (await execa('codex', ['debug', 'models'], {
+      reject: true,
+      timeout: 20_000,
+      env: { ...process.env, CODEX_HOME: probe },
+    })).stdout;
+    const catalog = JSON.parse(stdout) as CodexCatalog;
+    if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
+  } catch { /* fall back to the cache below */ }
+  return undefined;
+}
+
+/**
+ * Catalog for profile creation and migration.
+ *
+ * The account cache is the offline fallback, but it can be written by an older
+ * Codex client and list only a subset of what the account can use. Prefer the
+ * client's live catalog and union in cache-only entries so neither a stale cache
+ * nor a lagging backend can hide a model the other side knows about.
+ */
+export async function readCodexCatalogForSetup(): Promise<CodexCatalog> {
   let cached: CodexCatalog | undefined;
   try {
     cached = await readAuthenticatedCodexCatalog();
-  } catch (cacheError) {
-    // Cache unreadable — fall through to the client below.
-    if (required.length === 0) {
-      // Preserve the actionable error when no client is available either.
-      try {
-        const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
-        const catalog = JSON.parse(stdout) as CodexCatalog;
-        if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
-      } catch { /* keep the actionable cache error below */ }
-      throw cacheError;
-    }
-  }
+  } catch { /* cache unreadable: the client below may still work */ }
 
-  const missing = required.filter((id) => !cached?.models?.some((model) => model?.slug === id));
-  if (cached && missing.length === 0) return cached;
-
-  let live: CodexCatalog | undefined;
-  try {
-    const stdout = (await execa('codex', ['debug', 'models'], { reject: true, timeout: 15_000 })).stdout;
-    const parsed = JSON.parse(stdout) as CodexCatalog;
-    if (Array.isArray(parsed?.models) && parsed.models.length > 0) live = parsed;
-  } catch { /* use the cache as-is if the client is unavailable */ }
-
+  const live = await readClientCatalog();
   if (!live) {
     if (cached) return cached;
-    throw new Error('Codex is not initialized: no authenticated model catalog and `codex debug models` is unavailable. Run `codex login`, then retry `brick start codex`.');
+    throw new Error(
+      'Codex is not initialized: no authenticated model catalog. Run `codex login`, then retry `brick start codex`.'
+    );
   }
   if (!cached) return live;
-  // Union: client catalog first (fuller), then cache-only entries.
+
+  // Union: live catalog first (authoritative), then cache-only entries.
   const seen = new Set<string>();
   const models: Model[] = [];
   for (const model of [...live.models, ...cached.models]) {

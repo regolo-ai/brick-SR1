@@ -5,7 +5,7 @@
   currency: USD
   source_url: https://platform.claude.com/docs/en/about-claude/pricing
   source: litellm:claude-haiku-4-5
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: anthropic
   model: claude-sonnet
   input_price: 2.0
@@ -13,7 +13,7 @@
   currency: USD
   source_url: https://platform.claude.com/docs/en/about-claude/pricing
   source: litellm:claude-sonnet-5
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: anthropic
   model: claude-opus
   input_price: 5.0
@@ -21,7 +21,7 @@
   currency: USD
   source_url: https://platform.claude.com/docs/en/about-claude/pricing
   source: litellm:claude-opus-4-8
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: anthropic
   model: claude-fable
   input_price: 10.0
@@ -29,7 +29,7 @@
   currency: USD
   source_url: https://platform.claude.com/docs/en/about-claude/pricing
   source: litellm:claude-fable-5
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-5.6-sol
   input_price: 5.0
@@ -38,7 +38,7 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: openai_official_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-5.6-terra
   input_price: 2.5
@@ -47,7 +47,7 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: openai_official_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-5.6-luna
   input_price: 1.0
@@ -56,7 +56,7 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: openai_official_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-6.1-terra
   input_price: 1.0
@@ -65,7 +65,7 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: litellm:gpt-6.1-terra
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-6-luna
   input_price: 0.1
@@ -74,7 +74,7 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: litellm:gpt-6-luna
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: openai
   model: gpt-6.1-sol
   input_price: 2.0
@@ -83,7 +83,25 @@
   currency: USD
   source_url: https://developers.openai.com/api/docs/models/compare
   source: litellm:gpt-6.1-sol
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
+- provider: openai
+  model: gpt-6.2-sol
+  input_price: 2.0
+  cached_input_price: 0.1
+  output_price: 10.0
+  currency: USD
+  source_url: https://developers.openai.com/api/docs/models/compare
+  source: litellm:gpt-6.2-sol
+  fetched_at: '2026-11-17T22:00:13Z'
+- provider: openai
+  model: gpt-6.2-astra
+  input_price: 8.0
+  cached_input_price: 0.4
+  output_price: 40.0
+  currency: USD
+  source_url: https://developers.openai.com/api/docs/models/compare
+  source: litellm:gpt-6.2-astra
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: qwen3.5-9b
   input_price: 0.07
@@ -91,7 +109,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: gpt-oss-20b
   input_price: 0.1
@@ -99,7 +117,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: apertus-70b
   input_price: 0.4
@@ -107,7 +125,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: gemma4-31b
   input_price: 0.4
@@ -115,7 +133,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: mistral-small-4-119b
   input_price: 0.5
@@ -123,7 +141,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: qwen3-coder-next
   input_price: 0.5
@@ -131,7 +149,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: mistral-small3.2
   input_price: 0.5
@@ -139,7 +157,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: minimax-m2.5
   input_price: 0.6
@@ -147,7 +165,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: Llama-3.3-70B-Instruct
   input_price: 0.6
@@ -155,7 +173,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: qwen3.5-122b
   input_price: 1.0
@@ -163,7 +181,7 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'
 - provider: regolo
   model: gpt-oss-120b
   input_price: 1.0
@@ -171,4 +189,4 @@
   currency: EUR
   source_url: https://regolo.ai/pricing/
   source: static_curated
-  fetched_at: '2026-11-14T23:43:25Z'
+  fetched_at: '2026-11-17T22:00:13Z'

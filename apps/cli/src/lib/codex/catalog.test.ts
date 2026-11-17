@@ -120,8 +120,8 @@ describe('authenticated catalog source', () => {
   });
 });
 
-describe('readCodexCatalogForSetup stale-cache handling', () => {
-  it('merges the Codex client catalog when the cache omits a required pool model', async () => {
+describe('readCodexCatalogForSetup live catalog', () => {
+  it('prefers the client catalog and keeps cache-only models', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'brick-catalog-stale-'));
     const prevHome = process.env.BRICK_HOME;
     const prevCodex = process.env.CODEX_HOME;
@@ -130,10 +130,11 @@ describe('readCodexCatalogForSetup stale-cache handling', () => {
     await mkdir(process.env.CODEX_HOME, { recursive: true });
     // Cache lists only old models; the client still advertises the 6.x pool.
     await writeFile(join(process.env.CODEX_HOME, 'models_cache.json'), JSON.stringify({ models: [{ slug: 'gpt-5.6-terra' }] }));
+    await writeFile(join(process.env.CODEX_HOME, 'auth.json'), '{}');
     const live = { models: [{ slug: 'gpt-5.6-terra' }, { slug: 'gpt-6-luna' }, { slug: 'gpt-6.1-terra' }] };
     execaMock.mockResolvedValue({ stdout: JSON.stringify(live) });
     try {
-      const catalog = await readCodexCatalogForSetup(['gpt-6-luna', 'gpt-6.1-terra']);
+      const catalog = await readCodexCatalogForSetup();
       expect(catalog.models.map((m) => m.slug)).toEqual(['gpt-5.6-terra', 'gpt-6-luna', 'gpt-6.1-terra']);
       expect(execaMock).toHaveBeenCalledWith('codex', ['debug', 'models'], expect.anything());
     } finally {

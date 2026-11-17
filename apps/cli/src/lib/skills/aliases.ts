@@ -13,9 +13,13 @@ export const SKILL_MODEL_ALIASES: Record<string, string> = {
   'mistral-small-4-119b': 'mistral-small-4',
   // The published table should list these Codex tiers directly; exact matches
   // win when present, and the aliases only prevent a silent pool drop if the
-  // table lags the catalog.
+  // table lags the catalog. The 6.2 tiers are new enough that the benchmark
+  // feeds behind the table do not list them yet, so route them with the
+  // published vector of the same price tier instead of dropping the model.
   'gpt-6.1-terra': 'gpt-5.6-terra',
   'gpt-6-luna': 'gpt-5.6-luna',
+  'gpt-6.2-sol': 'gpt-6.1-sol',
+  'gpt-6.2-astra': 'gpt-6-astra',
 };
 
 export function skillModelCandidates(model: string): string[] {

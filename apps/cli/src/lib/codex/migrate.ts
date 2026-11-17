@@ -27,6 +27,8 @@ export const CODEX_DEFAULT_KEYWORDS = [
 const CODEX_CONTEXT_DEFAULTS: Record<string, number> = {
   'gpt-6-luna': 258400,
   'gpt-6.1-terra': 475000,
+  'gpt-6.2-sol': 475000,
+  'gpt-6.2-astra': 258400,
 };
 const CODEX_THINKING_MODES = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -171,12 +173,9 @@ export async function migrateCodexProfile(
   if (JSON.stringify(native) !== JSON.stringify(cfg)) { cfg = native; changed = true; }
 
   if (poolAdded) await applyRemoteSkillVectors(cfg);
-  // Pass the pool so a stale-but-readable cache cannot prune available models
+  // The account's live catalog, so a stale cache cannot prune available models
   // or fail to supply their context windows.
-  const configuredPool = Array.isArray(cfg.skill_router?.active_models) && cfg.skill_router.active_models.length
-    ? cfg.skill_router.active_models
-    : (cfg.skill_router?.models ?? []).map((entry: any) => entry?.model).filter(Boolean);
-  const authenticatedCatalog = await readCodexCatalogForSetup(configuredPool);
+  const authenticatedCatalog = await readCodexCatalogForSetup();
   addOfficialCodexModels(cfg, authenticatedCatalog);
   const pruned = pruneOfficialCodexModels(cfg, authenticatedCatalog);
   changed = changed || JSON.stringify(cfg) !== JSON.stringify(parsed);

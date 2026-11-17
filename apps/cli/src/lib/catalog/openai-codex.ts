@@ -8,9 +8,13 @@ export const openaiCodexCatalog: CatalogProvider = {
   env_key: '',
   optional: true,
   models: [
+    { id: 'gpt-6.2-sol', label: 'GPT-6.2 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6.2-astra', label: 'GPT-6.2 Astra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-6-luna', label: 'GPT-6 Luna', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6-astra', label: 'GPT-6 Astra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6-sol', label: 'GPT-6 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
