@@ -22,7 +22,7 @@ Useful overrides: `VENV=/path/to/venv`, `FORCE_CPU=1`, `TORCH_VERSION=2.11.0`.
 .venv-systemone/bin/python examples/systemone/chat.py
 ```
 
-```
+```text
 query> write a python parser that streams csv rows
   instruction_following 0.5117  ##########..........
   coding                0.9258  ###################.

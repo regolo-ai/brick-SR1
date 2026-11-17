@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Verify the production SystemOne worker against Transformers FP32."""
+"""Verify the production SystemOne worker against Transformers FP32.
+
+The worker auto-selects bfloat16 on CPUs with BF16 matrix hardware, so the parity
+check pins FP32 explicitly; the bf16 path is exercised end to end by the native
+runtime label test.
+"""
 
 import argparse
 import gc
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -39,11 +45,13 @@ def main():
     del model
     gc.collect()
     worker = Path(__file__).resolve().parents[1] / "apps/router/systemone/systemone_worker.py"
+    env = {**os.environ, "BRICK_SYSTEMONE_DTYPE": "float32"}
     with subprocess.Popen(
         [sys.executable, "-u", str(worker), str(args.assets.resolve())],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,
+        env=env,
     ) as process:
         try:
             ready = json.loads(process.stdout.readline())

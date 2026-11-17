@@ -2,6 +2,7 @@
 """Verify real SystemOne vectors retain their label order through Go routing."""
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -45,8 +46,13 @@ def main():
             }
             path = Path(directory) / "config.yaml"
             path.write_text(json.dumps(config))
+            # The worker auto-selects bfloat16 on CPUs with BF16 matrix hardware;
+            # pin FP32 so the vectors are comparable with the reference model.
+            env = {**os.environ, "BRICK_SYSTEMONE_DTYPE": "float32"}
             output = subprocess.check_output(
-                [binary, "--config", str(path), "--metrics-port", "0", "--route-test", "Hello."], text=True
+                [binary, "--config", str(path), "--metrics-port", "0", "--route-test", "Hello."],
+                text=True,
+                env=env,
             )
             result = json.loads(output)
             assert result["model"] == "test" and result["knob"] == 0

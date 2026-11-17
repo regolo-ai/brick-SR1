@@ -26,8 +26,9 @@ brick start codex
 
 `brick start codex` creates the `codex` profile when it does not exist, verifies
 the SystemOne checkpoint installed by `npm install`, starts the local router,
-and wires the official Codex client to it. The default pool is two Codex subscription models,
-`gpt-6.1-terra` and `gpt-6-luna`; no Regolo API key is required. Open Codex,
+and wires the official Codex client to it. The default pool is two Codex
+subscription models, `gpt-6.1-terra` and `gpt-6-luna`; no Regolo API key is
+required. Open Codex,
 select the `brick` model, and every turn is routed on the subscription.
 
 An existing profile keeps its user-owned pool. To switch it to the default
@@ -173,9 +174,9 @@ template's provisional vectors with the published CSV, cached under
 `$BRICK_HOME/cache`. `BRICK_SKILLS_OFFLINE=1` uses the cache only. A download
 failure, an invalid published table, or a model missing from the table never
 blocks the start and never drops a pool model: Brick keeps the vectors already
-in the profile and reports what it kept. Official Codex catalog entries declare their reasoning
-levels (both of these models support `max`), and the proxy clamps an effort only
-when the selected model's declared modes exclude it.
+in the profile and reports what it kept. Official Codex catalog entries declare
+their reasoning levels (both of these models support `max`), and the proxy
+clamps an effort only when the selected model's declared modes exclude it.
 
 Request effort also drives the routing knob (`low=-1`, `medium=-0.5`, `high=0`,
 `xhigh=0.5`, `max=1`). The knob scales the request vector up, and at `max` the
@@ -206,8 +207,9 @@ Explicit live tests are opt-in in `pkg/proxy/codex_responses_test.go` and
   proves a tool turn edits the workspace through the routed model, and checks
   the effort normalization the harness configures.
 - `BRICK_CODEX_POOL_POLL_LIVE_TEST=1`: five bounded coding tasks (Python, Go
-  and Node) run through the official Codex client and a pinned luna/terra pool; the log records each task's routed model sequence, duration and whether
-  its own tests pass, and protected test files are checked so a model cannot
+  and Node) run through the official Codex client and a pinned luna/terra pool;
+  the log records each task's routed model sequence, duration and whether its
+  own tests pass, and protected test files are checked so a model cannot
   "fix" a task by rewriting the test. The companion
   `TestCheapPoolFixturesFailBeforeFix` runs offline and proves every fixture
   fails before the edit.

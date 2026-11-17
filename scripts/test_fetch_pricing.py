@@ -148,7 +148,11 @@ class TestBuildPricingRecordsOpenAI:
         }
         for model, (input_price, cached_input_price, output_price, source) in expected.items():
             row = next(r for r in records if r["model"] == model)
-            assert (row["input_price"], row["cached_input_price"], row["output_price"]) == (input_price, cached_input_price, output_price)
+            assert (row["input_price"], row["cached_input_price"], row["output_price"]) == (
+                input_price,
+                cached_input_price,
+                output_price,
+            )
             assert row["provider"] == "openai"
             assert row["source"] == source
             assert row["source_url"] == fp.OPENAI_PRICING_URL

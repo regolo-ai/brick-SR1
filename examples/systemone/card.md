@@ -1,3 +1,5 @@
+# SystemOne
+
 ## Quickstart
 
 Install (PyTorch index follows the local CUDA driver, CPU fallback):
@@ -46,7 +48,7 @@ while True:
     print(f"  vector: [{', '.join(f'{v:.4f}' for v in vector)}]")
 ```
 
-```
+```text
 query> write a python parser that streams csv rows
   instruction_following 0.5117
   coding                0.9258
