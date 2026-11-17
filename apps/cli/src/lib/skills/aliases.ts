@@ -12,10 +12,9 @@ export const SKILL_MODEL_ALIASES: Record<string, string> = {
   'gemma4-31b': 'gemma-4-31b',
   'mistral-small-4-119b': 'mistral-small-4',
   // The published table should list these Codex tiers directly; exact matches
-  // win when present, and the aliases only prevent a silent pool drop if the
-  // table lags the catalog. The 6.2 tiers are new enough that the benchmark
-  // feeds behind the table do not list them yet, so route them with the
-  // published vector of the same price tier instead of dropping the model.
+  // win when present. The 6.2 rows are currently sparse estimates from the
+  // benchmark feeds (several dimensions are neutral 0.5), so keep the same-tier
+  // alias as a fallback for a table that has not caught up yet.
   'gpt-6.1-terra': 'gpt-5.6-terra',
   'gpt-6-luna': 'gpt-5.6-luna',
   'gpt-6.2-sol': 'gpt-6.1-sol',
