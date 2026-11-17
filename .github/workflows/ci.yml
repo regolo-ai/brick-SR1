@@ -182,7 +182,7 @@ jobs:
           - target: darwin-x64
             runner: macos-15-intel
           - target: darwin-arm64
-            runner: macos-14
+            runner: macos-15
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
