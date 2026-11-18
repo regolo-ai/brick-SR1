@@ -1,5 +1,33 @@
 # Brick
 
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+
+<!-- markdownlint-disable-next-line MD013 -->
+<img width="1640" height="393" alt="Brick (6)" src="https://github.com/user-attachments/assets/4b9dc94a-4767-4d0c-80e7-73f77517d8ce" />
+
+## One Query, One Endpoint, Every LLM on Earth
+
+<!-- markdownlint-disable MD013 -->
+[![CI](https://img.shields.io/github/actions/workflow/status/regolo-ai/brick-SR1/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/regolo-ai/brick-SR1/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@regoloai/brick?style=flat-square&logo=npm&label=npm)](https://www.npmjs.com/package/@regoloai/brick)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/regolo-ai/brick-SR1?style=flat-square&logo=git&logoColor=white)](https://github.com/regolo-ai/brick-SR1/commits)
+[![Stars](https://img.shields.io/github/stars/regolo-ai/brick-SR1?style=flat-square&logo=github)](https://github.com/regolo-ai/brick-SR1/stargazers)
+[![Issues](https://img.shields.io/github/issues/regolo-ai/brick-SR1?style=flat-square&logo=github)](https://github.com/regolo-ai/brick-SR1/issues)
+
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
+[![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
+[![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](https://huggingface.co/regolo/brick-sysone-V1)
+
+**[Routing](#routing) · [Install](#install-and-run-locally) · [Codex](#codex-in-one-command) · [Configuration](#configuration-and-migration) · [Development](#development-and-historical-research)**
+<!-- markdownlint-enable MD013 -->
+
+</div>
+
+---
+
 Brick routes a query to a model using a local six-dimensional SystemOne capability
 vector. It provides OpenAI Chat Completions, Anthropic Messages, and native
 Responses gateways, with streaming, authentication, tools, and multimodal transport.
