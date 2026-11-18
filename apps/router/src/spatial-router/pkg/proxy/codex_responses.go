@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,30 @@ import (
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
 )
+
+// upstreamHeaderTimeout bounds how long a Codex forward waits for the first
+// upstream response headers. A provider can leave a keep-alive connection
+// half-open after a stream cut (no FIN, no RST, read loop gone): requests
+// written into that connection would otherwise hang forever. LLM streams send
+// their headers immediately, so only this initial wait is bounded here, and a
+// failed attempt falls back to the client retry budget on a fresh connection.
+var upstreamHeaderTimeout = 120 * time.Second
+
+// newUpstreamTransport builds the transport shared by the Codex forward
+// paths. SSE gains nothing from gzip and transparent decompression breaks
+// Flush semantics, so compression is disabled like on the Anthropic client.
+func newUpstreamTransport(headerTimeout time.Duration) *http.Transport {
+	return &http.Transport{
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		MaxIdleConns:          50,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       30 * time.Second,
+		DisableCompression:    true,
+		ResponseHeaderTimeout: headerTimeout,
+	}
+}
+
+var codexUpstreamClient = &http.Client{Transport: newUpstreamTransport(upstreamHeaderTimeout)}
 
 // statusWriter preserves streaming while exposing the final HTTP status to the
 // durable call-history recorder.
@@ -316,13 +341,13 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 		}
 		recordCodexForward(route, model)
 		s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, route != nil, route, func(sw http.ResponseWriter) {
-			codextransport.ForwardChat(sw, r, &http.Client{}, d.URL, d.Provider, upstreamKey, adapted)
+			codextransport.ForwardChat(sw, r, codexUpstreamClient, d.URL, d.Provider, upstreamKey, adapted)
 		})
 		return
 	}
 	recordCodexForward(route, model)
 	s.forwardCodexWithHistory(w, r, acceptedAt, model, selectedEffort, route != nil, route, func(sw http.ResponseWriter) {
-		codextransport.Forward(sw, r, &http.Client{}, d.URL, d.Provider, upstreamKey, d.AuthSource == "codex_request", body)
+		codextransport.Forward(sw, r, codexUpstreamClient, d.URL, d.Provider, upstreamKey, d.AuthSource == "codex_request", body)
 	})
 }
 
