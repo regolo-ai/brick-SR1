@@ -493,7 +493,7 @@ func ForwardChat(w http.ResponseWriter, r *http.Request, client *http.Client, en
 		Model  string `json:"model"`
 	}
 	_ = json.Unmarshal(adapted.Body, &request)
-	state := chatEvents{w: w, stream: request.Stream, model: request.Model, tools: adapted.Tools, calls: map[int]*pendingCall{}, status: "in_progress"}
+	state := chatEvents{w: w, stream: request.Stream, model: request.Model, tools: adapted.Tools, calls: map[int]*pendingCall{}, status: "in_progress", reasoningIndex: -1}
 	if !request.Stream {
 		var value map[string]any
 		if err := json.NewDecoder(io.LimitReader(response.Body, 32<<20)).Decode(&value); err != nil {
@@ -577,6 +577,8 @@ type chatEvents struct {
 	tools                   *ToolRegistry
 	seq                     int
 	usage                   any
+	reasoning               string
+	reasoningIndex          int
 }
 
 func stableID(prefix, responseID string, index int, name string) string {
@@ -663,6 +665,9 @@ func (s *chatEvents) consume(value map[string]any, stream bool) error {
 		if text, ok := message["content"].(string); ok && text != "" {
 			s.consumeText(text)
 		}
+		if reasoning, ok := message["reasoning_content"].(string); ok && reasoning != "" {
+			s.consumeReasoning(reasoning)
+		}
 		toolCalls, _ := message["tool_calls"].([]any)
 		for position, rawCall := range toolCalls {
 			call, ok := rawCall.(map[string]any)
@@ -725,6 +730,26 @@ func (s *chatEvents) consumeText(delta string) {
 	item["content"] = []any{map[string]any{"type": "output_text", "text": s.text, "annotations": []any{}}}
 	s.emit("response.output_text.delta", map[string]any{"item_id": item["id"], "output_index": index, "content_index": 0, "delta": delta})
 }
+// consumeReasoning maps upstream reasoning deltas onto the Responses protocol
+// as a reasoning item with a summary part. Reasoning models think for minutes
+// before any content delta: without these events the client-side stream
+// stays silent for the whole reasoning phase and idle timeouts kill the turn
+// even though the upstream is streaming continuously.
+func (s *chatEvents) consumeReasoning(delta string) {
+	if s.reasoningIndex < 0 {
+		index := len(s.items)
+		item := map[string]any{"type": "reasoning", "id": stableID("rs_", s.id, index, "reasoning"), "summary": []any{}, "status": "in_progress"}
+		s.items = append(s.items, item)
+		s.reasoningIndex = index
+		s.emit("response.output_item.added", map[string]any{"output_index": index, "item": item})
+		s.emit("response.reasoning_summary_part.added", map[string]any{"item_id": item["id"], "output_index": index, "summary_index": 0})
+	}
+	s.reasoning += delta
+	item := s.items[s.reasoningIndex]
+	item["summary"] = []any{map[string]any{"type": "summary_text", "text": s.reasoning}}
+	s.emit("response.reasoning_summary_text.delta", map[string]any{"item_id": item["id"], "output_index": s.reasoningIndex, "summary_index": 0, "delta": delta})
+}
+
 func (s *chatEvents) materializeCall(index int, pending *pendingCall) error {
 	if pending.name == "" {
 		return nil
@@ -789,6 +814,9 @@ func (s *chatEvents) finishItems() {
 	for index, item := range s.items {
 		item["status"] = "completed"
 		switch item["type"] {
+		case "reasoning":
+			s.emit("response.reasoning_summary_text.done", map[string]any{"item_id": item["id"], "output_index": index, "summary_index": 0, "text": s.reasoning})
+			s.emit("response.reasoning_summary_part.done", map[string]any{"item_id": item["id"], "output_index": index, "summary_index": 0})
 		case "function_call":
 			s.emit("response.function_call_arguments.done", map[string]any{"item_id": item["id"], "output_index": index, "arguments": item["arguments"]})
 		case "custom_tool_call":

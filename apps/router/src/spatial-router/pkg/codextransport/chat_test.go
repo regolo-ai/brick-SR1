@@ -164,3 +164,60 @@ func TestIncompleteStreamIsNotCompleted(t *testing.T) {
 		t.Fatal(recorder.Body.String())
 	}
 }
+
+func TestChatStreamsReasoningDeltas(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, "data: "+`{"id":"chat1","choices":[{"delta":{"reasoning_content":"think "},"finish_reason":null}]}`+"\n\n")
+		io.WriteString(w, "data: "+`{"id":"chat1","choices":[{"delta":{"reasoning_content":"hard"},"finish_reason":null}]}`+"\n\n")
+		io.WriteString(w, "data: "+`{"id":"chat1","choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}`+"\n\ndata: [DONE]\n\n")
+	}))
+	defer upstream.Close()
+	rec := httptest.NewRecorder()
+	adapted, err := PrepareChat([]byte(`{"model":"m","input":"x","stream":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ForwardChat(rec, httptest.NewRequest("POST", "/", nil), upstream.Client(), upstream.URL, "external", "external", adapted)
+	body := rec.Body.String()
+	for _, want := range []string{
+		"response.reasoning_summary_part.added",
+		`"delta":"think "`,
+		`"delta":"hard"`,
+		"response.reasoning_summary_text.done",
+		"response.output_text.delta",
+		"response.completed",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in stream:\n%s", want, body)
+		}
+	}
+	var completed map[string]any
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var event map[string]any
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) != nil {
+			continue
+		}
+		if event["type"] == "response.completed" {
+			completed = event
+		}
+	}
+	if completed == nil {
+		t.Fatal("no response.completed event")
+	}
+	output, _ := completed["response"].(map[string]any)["output"].([]any)
+	if len(output) != 2 {
+		t.Fatalf("expected reasoning and message items, got %d", len(output))
+	}
+	reasoning, _ := output[0].(map[string]any)
+	if reasoning["type"] != "reasoning" {
+		t.Fatalf("first item should be reasoning, got %v", reasoning["type"])
+	}
+	summary, _ := reasoning["summary"].([]any)
+	text, _ := summary[0].(map[string]any)["text"].(string)
+	if text != "think hard" {
+		t.Fatalf("reasoning summary text %q", text)
+	}
+}
