@@ -181,8 +181,11 @@ jobs:
             runner: ubuntu-24.04-arm
           - target: darwin-x64
             runner: macos-15-intel
+          # macos-latest (macOS 26, arm64): the macos-15 ARM pool was starved
+          # twice in a row (job cancelled after 15 minutes with no runner
+          # ever assigned), while macos-latest acquires immediately.
           - target: darwin-arm64
-            runner: macos-15
+            runner: macos-latest
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
