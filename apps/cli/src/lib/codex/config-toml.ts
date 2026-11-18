@@ -166,6 +166,8 @@ function managedBlock(baseUrl: string, localKey: string): string {
   const url = new URL(baseUrl);
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash) throw new Error('Codex router must use a loopback URL');
   const root = baseUrl.replace(/\/+$/, '');
+  // A short retry budget absorbs transient local hiccups (a restart between
+  // turns, a brief port closure) instead of failing the user's turn hard.
   return [
     BEGIN,
     '[model_providers.brick]',
@@ -174,8 +176,8 @@ function managedBlock(baseUrl: string, localKey: string): string {
     'wire_api = "responses"',
     'requires_openai_auth = true',
     'supports_websockets = false',
-    'request_max_retries = 0',
-    'stream_max_retries = 0',
+    'request_max_retries = 2',
+    'stream_max_retries = 2',
     `http_headers = { "X-Brick-Key" = ${JSON.stringify(localKey)} }`,
     END,
   ].join('\n');

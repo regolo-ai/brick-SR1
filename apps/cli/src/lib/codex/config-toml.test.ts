@@ -41,6 +41,8 @@ describe('codex config.toml wiring', () => {
     expect(text).toContain('wire_api = "responses"');
     expect(text).toContain('requires_openai_auth = true');
     expect(text).toContain('base_url = "http://localhost:8000/v1"');
+    expect(text).toContain('request_max_retries = 2');
+    expect(text).toContain('stream_max_retries = 2');
     expect(text).not.toContain('[profiles.brick]');
     expect(text).not.toContain('REGOLO_API_KEY');
     expect(text).not.toContain('CODEX_FLAT_BRIDGE_TOKEN');

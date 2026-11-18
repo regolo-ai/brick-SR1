@@ -18,14 +18,20 @@ export interface RuntimeState {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function statePath(profile: string): string { return join(paths(profile).runtime, 'process.json'); }
 export function logPath(profile: string): string { return join(paths(profile).runtime, 'router.log'); }
-async function processBirth(pid: number): Promise<string | null> {
+export async function processBirth(pid: number): Promise<string | null> {
   // Linux process start time prevents a recycled PID from being treated as Brick.
   if (process.platform !== 'linux') throw new Error('Native process management is currently verified only on Linux.');
   try { const stat = await readFile(`/proc/${pid}/stat`, 'utf8'); return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]; }
   catch (error: any) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return null; throw error; }
 }
-async function waitForExit(state: RuntimeState): Promise<void> {
-  for (let i = 0; i < 100; i++) {
+async function waitForExit(state: RuntimeState, graceMs = 10_000): Promise<void> {
+  // A replaced runtime must never strand the profile without a router. Give the
+  // graceful SIGTERM drain a short window (the Go runtime keeps serving
+  // in-flight streams), then escalate to SIGKILL so a long stream cannot hold
+  // the port, or the restart, hostage.
+  const graceful = Math.max(1, Math.ceil(graceMs / 100));
+  const hard = 200; // 20s for a killed thread group to release its sockets.
+  for (let i = 0; i < graceful + hard; i++) {
     if (await processBirth(state.pid) !== state.birth) return;
     try {
       const status = await readFile(`/proc/${state.pid}/stat`, 'utf8');
@@ -33,6 +39,9 @@ async function waitForExit(state: RuntimeState): Promise<void> {
       // own sockets. Wait for the whole thread group to release resources.
       if (['Z', 'X'].includes(status.slice(status.lastIndexOf(')') + 2).split(' ')[0]) && (await readdir(`/proc/${state.pid}/task`)).length <= 1) return;
     } catch (error: any) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return; throw error; }
+    if (i === graceful - 1) {
+      try { process.kill(state.pid, 'SIGKILL'); } catch (error: any) { if (error.code !== 'ESRCH') throw error; }
+    }
     await delay(100);
   }
   throw new Error(`Previous runtime ${state.instance} has not finished exiting; state retained.`);
@@ -119,11 +128,17 @@ async function environment(profile: string): Promise<NodeJS.ProcessEnv> {
   Object.assign(env, parseProfileEnv(content));
   return env;
 }
-async function terminate(state: RuntimeState): Promise<void> {
+/**
+ * Stop a runtime process: graceful SIGTERM first, then SIGKILL after the grace
+ * window. A slow drain (for example an in-flight stream) must abort the turn,
+ * never the restart: abandoning the old process here once left the profile
+ * with no router at all.
+ */
+export async function terminate(state: RuntimeState, options: { graceMs?: number } = {}): Promise<void> {
   if (!await sameProcess(state)) return;
   try { process.kill(state.pid, 'SIGTERM'); }
   catch (error: any) { if (error.code === 'ESRCH') return; throw error; }
-  await waitForExit(state);
+  await waitForExit(state, options.graceMs);
 }
 async function launch(profile: string, bundle: any, config: string, digest: string, port: number, env: NodeJS.ProcessEnv, requireRouting = false): Promise<RuntimeState> {
   const instance = randomUUID();
