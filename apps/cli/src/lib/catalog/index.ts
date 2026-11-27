@@ -5,6 +5,7 @@ import { anthropicCatalog } from './anthropic.js';
 import { claudeApiCatalog } from './claude-api.js';
 import { claudeCodeCatalog } from './claude-code.js';
 import { openrouterCatalog } from './openrouter.js';
+import { opencodeCatalog } from './opencode.js';
 
 export interface CatalogModel {
   id: string;
@@ -41,6 +42,7 @@ export const catalog: Record<string, CatalogProvider> = {
   'claude-api': claudeApiCatalog,
   'claude-code': claudeCodeCatalog,
   openrouter: openrouterCatalog,
+  opencode: opencodeCatalog,
 };
 
 export const reasoningFamiliesDefault = {
