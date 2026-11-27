@@ -1,280 +1,476 @@
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  renameSync,
+  existsSync,
+  chmodSync,
+  rmSync,
+} from 'node:fs';
+import {
+  readOpencodeWiring,
+  writeOpencodeWiring,
+  clearOpencodeWiring,
+  type OpencodeWiringState,
+} from './wiring-state.js';
 
-// Minimal, formatting-preserving editor for ~/.config/opencode/opencode.json(c).
+// Minimal, dependency-free JSONC editor for ~/.config/opencode/opencode.json.
 //
-// OpenCode config files are JSONC: they carry comments and user formatting that
-// a parse-and-reserialize round trip would destroy. Brick owns only a single
-// `provider.brick` key, marked with a fenced comment so its own writes can be
-// found and removed again without touching any other byte.
+// Brick owns exactly one provider entry, fenced by comment markers. Comments and
+// third-party keys are preserved because every edit is a surgical splice: we
+// parse the document only to learn source offsets, never to re-serialize it.
 
-const MARK_START = '/* >>> brick opencode managed block (do not edit) >>> */';
-const MARK_END = '/* <<< brick opencode managed block <<< */';
+export const MANAGED_BEGIN = '// >>> brick opencode managed provider (do not edit) >>>';
+export const MANAGED_END = '// <<< brick opencode managed provider <<<';
 
-/** A model Brick advertises to OpenCode through `provider.brick.models`. */
-export interface OpencodeModel {
-  id: string;
-  label?: string;
-}
+const INDENT = '  ';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
-export interface OpencodeWireResult {
-  /** true when wiring created the config file (no file existed before). */
-  createdFile: boolean;
-  /** true when the config already had a top-level `provider` object. */
-  providerExisted: boolean;
-}
-
-export interface OpencodeUnwireState {
-  /** true if wiring created the config file (so unwiring can remove it). */
-  createdFile: boolean;
-  /** true if the config already had a top-level `provider` object. */
-  providerExisted: boolean;
-}
-
-/** Directory of the global OpenCode configuration. */
-export function opencodeConfigDir(): string {
-  const base = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), '.config');
-  return join(base, 'opencode');
-}
-
-/** Global OpenCode config path; prefers an existing `.jsonc` over `.json`. */
+/** OpenCode's global config lives at ~/.config/opencode/opencode.json. */
 export function opencodeConfigPath(): string {
-  const dir = opencodeConfigDir();
-  const json = join(dir, 'opencode.json');
-  const jsonc = join(dir, 'opencode.jsonc');
-  if (!existsSync(json) && existsSync(jsonc)) return jsonc;
-  return json;
+  return join(homedir(), '.config', 'opencode', 'opencode.json');
 }
 
-export function readOpencodeConfig(): string {
+export interface JsoncMember {
+  key: string;
+  keyStart: number;
+  valueStart: number;
+  valueEnd: number;
+  /** Offset just after the member's comma, or null for the last member. */
+  commaEnd: number | null;
+}
+
+export interface JsoncValue {
+  type: 'object' | 'array' | 'string' | 'number' | 'literal';
+  start: number;
+  end: number;
+}
+
+export interface JsoncObject extends JsoncValue {
+  type: 'object';
+  members: JsoncMember[];
+}
+
+class JsoncParser {
+  private i = 0;
+
+  constructor(private readonly src: string) {}
+
+  private skipTrivia(): void {
+    const s = this.src;
+    while (this.i < s.length) {
+      const c = s[this.i];
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
+        this.i++;
+        continue;
+      }
+      if (c === '/' && s[this.i + 1] === '/') {
+        while (this.i < s.length && s[this.i] !== '\n') this.i++;
+        continue;
+      }
+      if (c === '/' && s[this.i + 1] === '*') {
+        const close = s.indexOf('*/', this.i + 2);
+        this.i = close < 0 ? s.length : close + 2;
+        continue;
+      }
+      break;
+    }
+  }
+
+  parseDocument(): JsoncValue {
+    this.skipTrivia();
+    const value = this.parseValue();
+    this.skipTrivia();
+    if (this.i !== this.src.length) {
+      throw new Error(`unexpected trailing content at offset ${this.i}`);
+    }
+    return value;
+  }
+
+  /** Parse a single value starting at `offset`, keeping offsets absolute. */
+  parseValueAt(offset: number): JsoncValue {
+    this.i = offset;
+    return this.parseValue();
+  }
+
+  private parseValue(): JsoncValue {
+    this.skipTrivia();
+    const c = this.src[this.i];
+    if (c === '{') return this.parseObject();
+    if (c === '[') return this.parseArray();
+    if (c === '"') {
+      const start = this.i;
+      this.parseString();
+      return { type: 'string', start, end: this.i };
+    }
+    const start = this.i;
+    while (this.i < this.src.length && !/[\s,\]}/]/.test(this.src[this.i])) this.i++;
+    if (this.i === start) throw new Error(`unexpected token at offset ${this.i}`);
+    return { type: 'literal', start, end: this.i };
+  }
+
+  private parseString(): string {
+    const start = this.i;
+    let j = start + 1;
+    while (j < this.src.length) {
+      if (this.src[j] === '\\') {
+        j += 2;
+        continue;
+      }
+      if (this.src[j] === '"') break;
+      j++;
+    }
+    if (j >= this.src.length) throw new Error(`unterminated string at offset ${start}`);
+    this.i = j + 1;
+    return JSON.parse(this.src.slice(start, this.i)) as string;
+  }
+
+  private parseObject(): JsoncObject {
+    const start = this.i;
+    this.i++;
+    const members: JsoncMember[] = [];
+    this.skipTrivia();
+    if (this.src[this.i] === '}') {
+      this.i++;
+      return { type: 'object', start, end: this.i, members };
+    }
+    for (;;) {
+      this.skipTrivia();
+      const keyStart = this.i;
+      if (this.src[this.i] !== '"') throw new Error(`expected object key at offset ${this.i}`);
+      const key = this.parseString();
+      this.skipTrivia();
+      if (this.src[this.i] !== ':') throw new Error(`expected ':' at offset ${this.i}`);
+      this.i++;
+      const value = this.parseValue();
+      this.skipTrivia();
+      let commaEnd: number | null = null;
+      if (this.src[this.i] === ',') {
+        this.i++;
+        commaEnd = this.i;
+      }
+      members.push({ key, keyStart, valueStart: value.start, valueEnd: value.end, commaEnd });
+      if (commaEnd === null) break;
+    }
+    this.skipTrivia();
+    if (this.src[this.i] !== '}') throw new Error(`expected '}' at offset ${this.i}`);
+    this.i++;
+    return { type: 'object', start, end: this.i, members };
+  }
+
+  private parseArray(): JsoncValue {
+    const start = this.i;
+    this.i++;
+    this.skipTrivia();
+    if (this.src[this.i] === ']') {
+      this.i++;
+      return { type: 'array', start, end: this.i };
+    }
+    for (;;) {
+      this.parseValue();
+      this.skipTrivia();
+      if (this.src[this.i] === ',') {
+        this.i++;
+        continue;
+      }
+      break;
+    }
+    this.skipTrivia();
+    if (this.src[this.i] !== ']') throw new Error(`expected ']' at offset ${this.i}`);
+    this.i++;
+    return { type: 'array', start, end: this.i };
+  }
+}
+
+export function parseJsonc(text: string): JsoncValue {
+  return new JsoncParser(text).parseDocument();
+}
+
+/**
+ * Parse the JSONC value that starts at `offset` in `text`. Returned offsets are
+ * absolute within `text`, so the result can be fed straight back to the
+ * surgical splice helpers. Never re-serializes anything.
+ */
+export function parseJsoncAt(text: string, offset: number): JsoncValue {
+  return new JsoncParser(text).parseValueAt(offset);
+}
+
+function isJsoncObject(value: JsoncValue): value is JsoncObject {
+  return value.type === 'object';
+}
+
+function asObject(value: JsoncValue, what: string): JsoncObject {
+  if (!isJsoncObject(value)) throw new Error(`${what} must be a JSON object`);
+  return value;
+}
+
+function findMember(obj: JsoncObject, key: string): JsoncMember | undefined {
+  return obj.members.find((m) => m.key === key);
+}
+
+function indentOf(text: string, offset: number): string {
+  const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+  const match = /^[ \t]*/.exec(text.slice(lineStart, offset));
+  return match ? match[0] : '';
+}
+
+function indentLines(lines: readonly string[], indent: string): string {
+  return lines.map((line) => (line === '' ? line : indent + line)).join('\n');
+}
+
+/** Remove a member, keeping the rest of the document byte-identical. */
+function removeMember(text: string, obj: JsoncObject, member: JsoncMember): string {
+  const idx = obj.members.indexOf(member);
+  if (idx < 0) return text;
+  if (idx + 1 < obj.members.length) {
+    // Not the last member: drop it together with its own trailing comma.
+    const prevEnd = idx === 0 ? obj.start + 1 : obj.members[idx - 1].commaEnd ?? obj.members[idx - 1].valueEnd;
+    return text.slice(0, prevEnd) + text.slice(member.commaEnd ?? member.valueEnd);
+  }
+  // Last member: drop it together with the comma that separated it from its predecessor.
+  const start = idx === 0 ? obj.start + 1 : (obj.members[idx - 1].commaEnd ?? obj.members[idx - 1].valueEnd) - 1;
+  return text.slice(0, start) + text.slice(member.valueEnd);
+}
+
+/** Insert an already-indented member as the last entry of `obj`. */
+function insertMember(text: string, obj: JsoncObject, member: string): string {
+  const closeIndent = indentOf(text, obj.start);
+  if (obj.members.length === 0) {
+    return `${text.slice(0, obj.start + 1)}\n${member}\n${closeIndent}${text.slice(obj.end - 1)}`;
+  }
+  const last = obj.members[obj.members.length - 1];
+  const at = last.valueEnd;
+  const multiline = text.slice(at, obj.end - 1).includes('\n');
+  const suffix = multiline ? '' : `\n${closeIndent}`;
+  return `${text.slice(0, at)},\n${member}${suffix}${text.slice(at)}`;
+}
+
+/**
+ * Remove the fenced managed region, including the comma and newline Brick
+ * inserted with it, so a re-wire reproduces the same bytes.
+ */
+export function stripManagedBlock(text: string): string {
+  const begin = text.indexOf(MANAGED_BEGIN);
+  if (begin < 0) return text;
+  const end = text.indexOf(MANAGED_END, begin);
+  if (end < 0) throw new Error('opencode.json has an unterminated brick managed block');
+  const endEnd = end + MANAGED_END.length;
+
+  let head = text.slice(0, begin);
+  let tail = text.slice(endEnd);
+  // Drop the indentation that introduced the BEGIN marker.
+  head = head.replace(/[ \t]*$/, '');
+  // Drop the comma Brick added in front of the block (the newline stays).
+  head = head.replace(/,(\r?\n[ \t]*)$/, '$1');
+  // Drop the newline Brick added after the END marker.
+  tail = tail.replace(/^[ \t]*\r?\n/, '');
+  return head + tail;
+}
+
+/** Whether the managed brick provider block is present. */
+export function isWired(text: string): boolean {
+  return text.includes(MANAGED_BEGIN);
+}
+
+/** A `brick` provider that Brick did not write: refuse to overwrite it. */
+export function hasUnmanagedBrickProvider(text: string): boolean {
+  let stripped: string;
+  try {
+    stripped = stripManagedBlock(text);
+  } catch {
+    return true;
+  }
+  if (stripped.trim() === '') return false;
+  let doc: JsoncValue;
+  try {
+    doc = parseJsonc(stripped);
+  } catch {
+    return true;
+  }
+  if (!isJsoncObject(doc)) return true;
+  const provider = findMember(doc, 'provider');
+  if (!provider) return false;
+  try {
+    const value = parseJsonc(stripped.slice(provider.valueStart, provider.valueEnd));
+    return isJsoncObject(value) && findMember(value, 'brick') !== undefined;
+  } catch {
+    return true;
+  }
+}
+
+function normalizeModels(models: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const model of models) {
+    const id = model.trim();
+    if (id !== '' && !out.includes(id)) out.push(id);
+  }
+  if (!out.includes('brick')) out.push('brick');
+  return out;
+}
+
+function loopbackBaseUrl(baseUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`invalid router URL '${baseUrl}'`);
+  }
+  if (!LOOPBACK_HOSTS.has(url.hostname) || url.username || url.password || url.search || url.hash) {
+    throw new Error('OpenCode router must use a loopback URL');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('OpenCode router must use an http(s) URL');
+  }
+  const root = `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+  return root.endsWith('/v1') ? root : `${root}/v1`;
+}
+
+function brickMemberLines(baseUrl: string, models: readonly string[]): string[] {
+  const lines = [
+    MANAGED_BEGIN,
+    '"brick": {',
+    `${INDENT}"npm": "@ai-sdk/openai",`,
+    `${INDENT}"name": "Brick (local router)",`,
+    `${INDENT}"options": {`,
+    `${INDENT}${INDENT}"baseURL": ${JSON.stringify(loopbackBaseUrl(baseUrl))}`,
+    `${INDENT}},`,
+    `${INDENT}"models": {`,
+  ];
+  models.forEach((model, i) => {
+    lines.push(`${INDENT}${INDENT}${JSON.stringify(model)}: {}${i === models.length - 1 ? '' : ','}`);
+  });
+  lines.push(`${INDENT}}`, '}', MANAGED_END);
+  return lines;
+}
+
+function providerLines(baseUrl: string, models: readonly string[]): string[] {
+  return ['"provider": {', ...brickMemberLines(baseUrl, models).map((line) => INDENT + line), '}'];
+}
+
+function readConfig(): string {
   const path = opencodeConfigPath();
   if (!existsSync(path)) return '';
   return readFileSync(path, 'utf8');
 }
 
-function writeOpencodeConfig(text: string): void {
+function writeConfig(text: string): void {
   const path = opencodeConfigPath();
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.brick.tmp`;
-  writeFileSync(tmp, text, { mode: 0o600 });
+  const out = text.endsWith('\n') ? text : `${text}\n`;
+  writeFileSync(tmp, out, { mode: 0o600 });
   chmodSync(tmp, 0o600);
   renameSync(tmp, path);
 }
 
-// --- JSONC scanning -------------------------------------------------------
-
-/** Skip whitespace and comments starting at `i`. */
-function skipTrivia(s: string, i: number): number {
-  for (;;) {
-    const c = s[i];
-    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
-    if (c === '/' && s[i + 1] === '/') { i += 2; while (i < s.length && s[i] !== '\n') i++; continue; }
-    if (c === '/' && s[i + 1] === '*') {
-      i += 2;
-      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    return i;
-  }
-}
-
-/** End (exclusive) of the string literal starting at `s[i] === '"'`. */
-function scanString(s: string, i: number): number {
-  i++;
-  while (i < s.length) {
-    const c = s[i];
-    if (c === '\\') { i += 2; continue; }
-    if (c === '"') return i + 1;
-    i++;
-  }
-  throw new Error('unterminated string in OpenCode config');
-}
-
-/** End (exclusive) of the object/array starting at `s[i]` in `{[`. */
-function scanComposite(s: string, i: number): number {
-  const open = s[i];
-  const close = open === '{' ? '}' : ']';
-  let depth = 0;
-  while (i < s.length) {
-    const c = s[i];
-    if (c === '"') { i = scanString(s, i); continue; }
-    if (c === '/' && s[i + 1] === '/') { i += 2; while (i < s.length && s[i] !== '\n') i++; continue; }
-    if (c === '/' && s[i + 1] === '*') {
-      i += 2;
-      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    if (c === open) depth++;
-    else if (c === close && --depth === 0) return i + 1;
-    i++;
-  }
-  throw new Error('unbalanced JSON in OpenCode config');
-}
-
-interface PropSpan {
-  keyStart: number;
-  valueStart: number;
-  valueEnd: number;
-}
-
-/** Direct property `key` of the object at `objStart` (`s[objStart] === '{'`). */
-function findProp(s: string, objStart: number, key: string): PropSpan | null {
-  if (s[objStart] !== '{') return null;
-  const objEnd = scanComposite(s, objStart) - 1;
-  let i = skipTrivia(s, objStart + 1);
-  while (i < objEnd) {
-    if (s[i] !== '"') break;
-    const keyEnd = scanString(s, i);
-    const name = JSON.parse(s.slice(i, keyEnd)) as unknown;
-    const colon = skipTrivia(s, keyEnd);
-    if (s[colon] !== ':') throw new Error('malformed JSON in OpenCode config');
-    const valueStart = skipTrivia(s, colon + 1);
-    let valueEnd: number;
-    const c = s[valueStart];
-    if (c === '"') valueEnd = scanString(s, valueStart);
-    else if (c === '{' || c === '[') valueEnd = scanComposite(s, valueStart);
-    else {
-      valueEnd = valueStart;
-      while (valueEnd < s.length && !',}]'.includes(s[valueEnd]) && !' \t\r\n'.includes(s[valueEnd])) valueEnd++;
-    }
-    if (name === key) return { keyStart: i, valueStart, valueEnd };
-    i = skipTrivia(s, valueEnd);
-    if (s[i] === ',') i = skipTrivia(s, i + 1);
-  }
-  return null;
-}
-
-/** Whether the object body between `start` and `end` has at least one property. */
-function bodyHasProps(s: string, start: number, end: number): boolean {
-  let i = skipTrivia(s, start);
-  while (i < end && (s[i] === ',' || s[i] === ' ' || s[i] === '\t' || s[i] === '\n' || s[i] === '\r')) {
-    i = skipTrivia(s, i + (s[i] === ',' ? 1 : 0));
-  }
-  return i < end && s[i] === '"';
-}
-
-// --- managed block --------------------------------------------------------
-
-function stripManaged(text: string): string {
-  const start = text.indexOf(MARK_START);
-  if (start === -1) return text;
-  const end = text.indexOf(MARK_END, start);
-  if (end === -1) return text;
-  return text.slice(0, start) + text.slice(end + MARK_END.length);
-}
-
-export function isWired(text: string): boolean {
-  return text.includes(MARK_START);
-}
-
-function providerHasBrick(text: string): boolean {
-  const rootStart = skipTrivia(text, 0);
-  if (text[rootStart] !== '{') return false;
-  const provider = findProp(text, rootStart, 'provider');
-  if (!provider || text[provider.valueStart] !== '{') return false;
-  return findProp(text, provider.valueStart, 'brick') !== null;
-}
-
-/** A `provider.brick` entry that Brick did not write (no managed marker). */
-export function hasUnmanagedBrickProvider(text: string): boolean {
-  return providerHasBrick(stripManaged(text));
-}
-
-function brickValue(baseUrl: string, models: OpencodeModel[]): Record<string, unknown> {
-  const url = new URL(baseUrl);
-  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash) {
-    throw new Error('OpenCode router must use a loopback URL');
-  }
-  const root = baseUrl.replace(/\/+$/, '');
-  const modelMap: Record<string, { name: string }> = {};
-  for (const m of models) modelMap[m.id] = { name: m.label ?? m.id };
-  if (!modelMap['brick']) modelMap['brick'] = { name: 'Brick (local router)' };
-  return { npm: '@ai-sdk/openai', options: { baseURL: `${root}/v1` }, models: modelMap };
-}
-
-interface InsertResult {
-  text: string;
-  providerExisted: boolean;
-}
-
-function insertManaged(base: string, brickJson: string): InsertResult {
-  let text = base;
-  let rootStart = skipTrivia(text, 0);
-  if (text[rootStart] !== '{') {
-    text = '{}';
-    rootStart = 0;
-  }
-  const provider = findProp(text, rootStart, 'provider');
-  if (provider) {
-    if (text[provider.valueStart] !== '{') throw new Error('the `provider` key in the OpenCode config is not an object');
-    const bodyStart = provider.valueStart + 1;
-    const needComma = bodyHasProps(text, bodyStart, provider.valueEnd - 1);
-    const managed = MARK_START + '"brick":' + brickJson + (needComma ? ',' : '') + MARK_END;
-    return {
-      text: text.slice(0, bodyStart) + managed + text.slice(bodyStart),
-      providerExisted: true,
-    };
-  }
-  const needComma = bodyHasProps(text, rootStart + 1, scanComposite(text, rootStart) - 1);
-  const chunk = `"provider":{${MARK_START}"brick":${brickJson}${MARK_END}}` + (needComma ? ',' : '');
-  return { text: text.slice(0, rootStart + 1) + chunk + text.slice(rootStart + 1), providerExisted: false };
-}
-
-function removeRootProp(text: string, key: string): string {
-  const rootStart = skipTrivia(text, 0);
-  if (text[rootStart] !== '{') return text;
-  const prop = findProp(text, rootStart, key);
-  if (!prop) return text;
-  let end = prop.valueEnd;
-  let i = skipTrivia(text, end);
-  if (text[i] === ',') {
-    end = i + 1;
-    return text.slice(0, prop.keyStart) + text.slice(end);
-  }
-  // Last property: drop the separator that precedes it.
-  let j = prop.keyStart - 1;
-  while (j >= 0 && ' \t\r\n'.includes(text[j])) j--;
-  if (text[j] === ',') return text.slice(0, j) + text.slice(prop.valueEnd);
-  return text.slice(0, prop.keyStart) + text.slice(end);
-}
+export interface OpencodeWireResult extends OpencodeWiringState {}
 
 /**
- * Point OpenCode at the local Brick router by writing `provider.brick`
- * (`npm`, `options.baseURL`, `models`). Idempotent: re-running replaces only the
- * managed block. Refuses an existing unmanaged `provider.brick`.
+ * Point OpenCode's global config at the local Brick router by writing a managed
+ * `provider.brick` entry. Idempotent: re-running produces the same bytes and
+ * keeps the originally captured `provider` value for `disconnect`.
  */
-export function wireOpencode(baseUrl: string, models: OpencodeModel[]): OpencodeWireResult {
-  const createdFile = !existsSync(opencodeConfigPath());
-  const original = readOpencodeConfig();
-  const base = stripManaged(original);
-  if (providerHasBrick(base)) {
+export function wireOpencode(baseUrl: string, models: readonly string[] = ['brick']): OpencodeWireResult {
+  const baseURL = loopbackBaseUrl(baseUrl);
+  const routerRoot = baseURL.slice(0, -'/v1'.length);
+  const ids = normalizeModels(models);
+  const path = opencodeConfigPath();
+  const original = readConfig();
+  const existing = readOpencodeWiring();
+
+  const stripped = stripManagedBlock(original);
+  if (hasUnmanagedBrickProvider(original)) {
     throw new Error(
-      'found an existing unmanaged provider.brick in the OpenCode config. ' +
-      'rename or remove it before running `brick connect opencode`.'
+      'found an existing unmanaged provider.brick in opencode.json. ' +
+        'rename or remove it before running `brick start opencode`.',
     );
   }
-  const brickJson = JSON.stringify(brickValue(baseUrl, models), null, 2);
-  const { text, providerExisted } = insertManaged(base, brickJson);
-  if (text !== original) writeOpencodeConfig(text);
-  return { createdFile, providerExisted };
+
+  const base = stripped.trim() === '' ? '{}' : stripped;
+  const root = asObject(parseJsonc(base), 'opencode.json');
+
+  const provider = findMember(root, 'provider');
+  const previousProviderRaw = existing
+    ? existing.previousProviderRaw
+    : provider
+      ? base.slice(provider.valueStart, provider.valueEnd)
+      : null;
+  const createdFile = existing ? existing.createdFile : !existsSync(path);
+
+  let text: string;
+  if (!provider) {
+    text = insertMember(base, root, indentLines(providerLines(baseUrl, ids), indentOf(base, root.start) + INDENT));
+  } else {
+    const providerObj = asObject(
+      parseJsoncAt(base, provider.valueStart),
+      'provider',
+    );
+    text = insertMember(
+      base,
+      providerObj,
+      indentLines(brickMemberLines(baseUrl, ids), indentOf(base, providerObj.start) + INDENT),
+    );
+  }
+
+  writeConfig(text);
+
+  const state: OpencodeWiringState = {
+    wired: true,
+    baseUrl: routerRoot,
+    configPath: path,
+    previousProviderRaw,
+    createdFile,
+    models: ids,
+  };
+  writeOpencodeWiring(state);
+  return state;
 }
 
 /**
- * Remove the managed `provider.brick` block, dropping the whole `provider`
- * object when wiring created it, so the config returns to its previous state.
+ * Remove the managed provider and restore the previous `provider` value.
+ * When Brick created opencode.json and nothing else is left, the file is removed.
  */
-export function unwireOpencode(state: OpencodeUnwireState): void {
+export function unwireOpencode(state: OpencodeWiringState | null = readOpencodeWiring()): void {
   const path = opencodeConfigPath();
-  if (!existsSync(path)) return;
-  let text = stripManaged(readOpencodeConfig());
-  if (!state.providerExisted) text = removeRootProp(text, 'provider');
-  const compact = text.replace(/\s+/g, '');
-  if (state.createdFile && (compact === '' || compact === '{}')) {
-    rmSync(path, { force: true });
+  const current = readConfig();
+  if (current.trim() === '') {
+    clearOpencodeWiring();
     return;
   }
-  writeOpencodeConfig(text);
+
+  let text = stripManagedBlock(current);
+  const root = asObject(parseJsonc(text), 'opencode.json');
+  const provider = findMember(root, 'provider');
+  const previous = state?.previousProviderRaw ?? null;
+
+  if (previous === null) {
+    if (provider) {
+      const value = parseJsonc(text.slice(provider.valueStart, provider.valueEnd));
+      if (isJsoncObject(value) && value.members.length === 0) {
+        text = removeMember(text, root, provider);
+      }
+    }
+  } else if (provider) {
+    text = text.slice(0, provider.valueStart) + previous + text.slice(provider.valueEnd);
+  } else {
+    text = insertMember(
+      text,
+      root,
+      indentLines([`"provider": ${previous}`], indentOf(text, root.start) + INDENT),
+    );
+  }
+
+  const after = asObject(parseJsonc(text), 'opencode.json');
+  if (state?.createdFile && after.members.length === 0) {
+    if (existsSync(path)) rmSync(path);
+  } else {
+    writeConfig(text);
+  }
+  // Keep a `wired: false` tombstone instead of deleting the state file, so the
+  // runtime directory survives a disconnect and `readOpencodeWiring` still
+  // reports null (a tombstone is not a live wiring).
+  if (state) writeOpencodeWiring({ ...state, wired: false });
+  else clearOpencodeWiring();
 }

@@ -42,7 +42,12 @@ export const catalog: Record<string, CatalogProvider> = {
   'claude-api': claudeApiCatalog,
   'claude-code': claudeCodeCatalog,
   openrouter: openrouterCatalog,
-  opencode: opencodeCatalog,
+  // `./opencode.js` imports this module to read the catalog, so the barrel must
+  // not read its export eagerly: resolve `opencode` lazily so the cycle settles
+  // no matter which of the two modules is evaluated first.
+  get opencode(): CatalogProvider {
+    return opencodeCatalog;
+  },
 };
 
 export const reasoningFamiliesDefault = {

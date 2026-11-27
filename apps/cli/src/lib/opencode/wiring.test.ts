@@ -1,239 +1,282 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  MANAGED_BEGIN,
+  MANAGED_END,
+  hasUnmanagedBrickProvider,
+  isWired,
+  opencodeConfigPath,
+  stripManagedBlock,
+  unwireOpencode,
+  wireOpencode,
+} from './wiring.js';
+import {
+  clearOpencodeWiring,
+  opencodeWiringPath,
+  readOpencodeWiring,
+  writeOpencodeWiring,
+} from './wiring-state.js';
+import { RESERVED_PROFILES, validateProfileName } from '../config/paths.js';
 
-// All modules are imported after HOME/XDG_CONFIG_HOME/BRICK_HOME point at a
-// throwaway directory, so the real ~/.config/opencode and ~/.brick are never
-// read or written.
-type WiringModule = typeof import('./wiring.js');
-type WiringStateModule = typeof import('./wiring-state.js');
-type PathsModule = typeof import('../config/paths.js');
-
-let suite: string;
 let home: string;
-let brickHome: string;
-let wiring: WiringModule;
-let state: WiringStateModule;
-let pathsMod: PathsModule;
-
-function configPath(): string {
-  return wiring.opencodeConfigPath();
-}
-
-function statePath(): string {
-  return join(brickHome, 'profiles', 'opencode', 'runtime', 'harness.json');
-}
-
-function parseJsonc(text: string): any {
-  const withoutComments = text
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-  return JSON.parse(withoutComments);
-}
-
-function walkFiles(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) walkFiles(full, out);
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
-beforeAll(async () => {
-  suite = mkdtempSync(join(tmpdir(), 'brick-opencode-'));
-  home = join(suite, 'home');
-  brickHome = join(suite, 'brickhome');
-  mkdirSync(join(home, '.config', 'opencode'), { recursive: true });
-  process.env.HOME = home;
-  delete process.env.XDG_CONFIG_HOME;
-  process.env.BRICK_HOME = brickHome;
-  delete process.env.OPENCODE_CONFIG_HOME;
-  wiring = await import('./wiring.js');
-  state = await import('./wiring-state.js');
-  pathsMod = await import('../config/paths.js');
-});
-
-afterAll(() => {
-  delete process.env.BRICK_HOME;
-  rmSync(suite, { recursive: true, force: true });
-});
+const saved = { HOME: process.env.HOME, BRICK_HOME: process.env.BRICK_HOME };
 
 beforeEach(() => {
-  rmSync(wiring.opencodeConfigPath(), { force: true });
-  rmSync(statePath(), { force: true });
+  home = mkdtempSync(join(tmpdir(), 'brick-opencode-'));
+  process.env.HOME = home;
+  process.env.BRICK_HOME = join(home, '.brick');
 });
 
-const CATALOG = [
-  { id: 'brick' },
-  { id: 'qwen3-coder', label: 'Qwen 3 Coder' },
-];
+afterEach(() => {
+  if (saved.HOME === undefined) delete process.env.HOME;
+  else process.env.HOME = saved.HOME;
+  if (saved.BRICK_HOME === undefined) delete process.env.BRICK_HOME;
+  else process.env.BRICK_HOME = saved.BRICK_HOME;
+  rmSync(home, { recursive: true, force: true });
+});
+
+function readConfig(): string {
+  return readFileSync(opencodeConfigPath(), 'utf8');
+}
+
+function writeConfig(text: string): void {
+  mkdirSync(join(home, '.config', 'opencode'), { recursive: true });
+  writeFileSync(opencodeConfigPath(), text);
+}
+
+/** Parse JSONC by dropping line/block comments outside of strings. */
+function parseJsoncLoose(text: string): any {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      out += c;
+      if (c === '\\') {
+        out += text[i + 1] ?? '';
+        i++;
+      } else if (c === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      out += c;
+      continue;
+    }
+    if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      out += '\n';
+      continue;
+    }
+    if (c === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++;
+      i++;
+      continue;
+    }
+    out += c;
+  }
+  return JSON.parse(out);
+}
+
+function listFiles(dir: string, base = dir): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...listFiles(full, base));
+    else out.push(full.slice(base.length + 1).split('\\').join('/'));
+  }
+  return out.sort();
+}
+
+const SAMPLE = `{
+  // user settings, do not lose these
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "dark",
+  "provider": {
+    /* the upstream provider */
+    "regolo": {
+      "npm": "@ai-sdk/openai",
+      "options": { "baseURL": "https://api.regolo.ai/v1" }
+    }
+  }
+}
+`;
 
 describe('opencode wiring', () => {
-  it('writes provider.brick with npm, a loopback baseURL and the model catalog', () => {
-    const result = wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
+  it('creates opencode.json from scratch with a managed brick provider', () => {
+    expect(existsSync(opencodeConfigPath())).toBe(false);
+
+    const result = wireOpencode('http://127.0.0.1:8000', ['brick', 'deepseek-v4.1-flash']);
+
     expect(result.createdFile).toBe(true);
-    expect(result.providerExisted).toBe(false);
-    expect(existsSync(configPath())).toBe(true);
+    expect(result.previousProviderRaw).toBeNull();
+    expect(existsSync(opencodeConfigPath())).toBe(true);
+    expect(isWired(readConfig())).toBe(true);
+    expect(result.models).toEqual(['brick', 'deepseek-v4.1-flash']);
 
-    const text = wiring.readOpencodeConfig();
-    expect(wiring.isWired(text)).toBe(true);
-    const parsed = parseJsonc(text);
+    const parsed = parseJsoncLoose(readConfig());
     expect(parsed.provider.brick.npm).toBe('@ai-sdk/openai');
-    expect(parsed.provider.brick.options.baseURL).toBe('http://127.0.0.1:8123/v1');
-    expect(parsed.provider.brick.models.brick).toBeTruthy();
-    expect(parsed.provider.brick.models['qwen3-coder'].name).toBe('Qwen 3 Coder');
+    expect(parsed.provider.brick.options.baseURL).toBe('http://127.0.0.1:8000/v1');
+    expect(Object.keys(parsed.provider.brick.models)).toEqual(['brick', 'deepseek-v4.1-flash']);
+
+    const state = readOpencodeWiring();
+    expect(state).not.toBeNull();
+    expect(state!.wired).toBe(true);
+    expect(state!.baseUrl).toBe('http://127.0.0.1:8000');
+    expect(state!.createdFile).toBe(true);
+    expect(state!.previousProviderRaw).toBeNull();
   });
 
-  it('preserves JSONC comments and unrelated keys byte-for-byte outside the managed block', () => {
-    const original = `{
-  "$schema": "https://opencode.ai/config.json",
-  // keep this comment
-  "mcp": { "flywheel": { "type": "remote", "url": "https://example.test" } },
-  "providers": {
-    "regolo-ai": { "name": "Regolo.ai" }
-  }
+  it('is idempotent: a second run leaves the file byte-identical', () => {
+    writeConfig(SAMPLE);
+    wireOpencode('http://127.0.0.1:8000', ['brick', 'm1']);
+    const first = readConfig();
+    const stateAfterFirst = readFileSync(opencodeWiringPath(), 'utf8');
+
+    wireOpencode('http://127.0.0.1:8000', ['brick', 'm1']);
+
+    expect(readConfig()).toBe(first);
+    expect(readFileSync(opencodeWiringPath(), 'utf8')).toBe(stateAfterFirst);
+  });
+
+  it('preserves comments and third-party keys', () => {
+    writeConfig(SAMPLE);
+    wireOpencode('http://127.0.0.1:8000');
+
+    const text = readConfig();
+    expect(text).toContain('// user settings, do not lose these');
+    expect(text).toContain('/* the upstream provider */');
+    expect(text).toContain('"theme": "dark"');
+    expect(text).toContain('"$schema": "https://opencode.ai/config.json"');
+    expect(text).toContain('https://api.regolo.ai/v1');
+
+    const parsed = parseJsoncLoose(text);
+    expect(parsed.theme).toBe('dark');
+    expect(parsed.provider.regolo.npm).toBe('@ai-sdk/openai');
+    expect(parsed.provider.brick.models.brick).toEqual({});
+    expect(text.indexOf(MANAGED_BEGIN)).toBeLessThan(text.indexOf(MANAGED_END));
+  });
+
+  it('adds the managed provider to an existing empty provider object', () => {
+    writeConfig('{\n  "provider": {}\n}\n');
+    wireOpencode('http://localhost:8000');
+    const parsed = parseJsoncLoose(readConfig());
+    expect(parsed.provider.brick.options.baseURL).toBe('http://localhost:8000/v1');
+  });
+
+  it('refuses an unmanaged brick provider and leaves the file untouched', () => {
+    const original = '{\n  "provider": {\n    "brick": { "npm": "someone-else" }\n  }\n}\n';
+    writeConfig(original);
+    expect(hasUnmanagedBrickProvider(original)).toBe(true);
+
+    expect(() => wireOpencode('http://127.0.0.1:8000')).toThrow(/unmanaged provider\.brick/);
+    expect(readConfig()).toBe(original);
+    expect(readOpencodeWiring()).toBeNull();
+  });
+
+  it('restores the exact previous values on disconnect', () => {
+    writeConfig(SAMPLE);
+    wireOpencode('http://127.0.0.1:8000', ['brick', 'm1']);
+    expect(readConfig()).not.toBe(SAMPLE);
+
+    unwireOpencode();
+
+    expect(readConfig()).toBe(SAMPLE);
+    expect(isWired(readConfig())).toBe(false);
+    expect(readOpencodeWiring()).toBeNull();
+  });
+
+  it('removes opencode.json again when disconnect unwires a file brick created', () => {
+    wireOpencode('http://127.0.0.1:8000');
+    expect(existsSync(opencodeConfigPath())).toBe(true);
+
+    unwireOpencode();
+
+    expect(existsSync(opencodeConfigPath())).toBe(false);
+    expect(readOpencodeWiring()).toBeNull();
+  });
+
+  it('keeps unrelated keys added while wired when disconnecting', () => {
+    wireOpencode('http://127.0.0.1:8000');
+    const wired = readConfig();
+    writeConfig(wired.replace('{\n', '{\n  "theme": "light",\n'));
+
+    unwireOpencode();
+
+    const parsed = parseJsoncLoose(readConfig());
+    expect(parsed.theme).toBe('light');
+    expect(parsed.provider).toBeUndefined();
+  });
+
+  it('refuses a non-loopback router URL and writes nothing', () => {
+    expect(() => wireOpencode('http://10.0.0.5:8000')).toThrow(/loopback/);
+    expect(() => wireOpencode('https://api.regolo.ai')).toThrow(/loopback/);
+    expect(() => wireOpencode('not a url')).toThrow(/invalid router URL/);
+
+    expect(existsSync(opencodeConfigPath())).toBe(false);
+    expect(readOpencodeWiring()).toBeNull();
+    expect(listFiles(home)).toEqual([]);
+  });
+
+  it('writes only opencode.json and the wiring state file', () => {
+    writeConfig(SAMPLE);
+    wireOpencode('http://127.0.0.1:8000');
+
+    expect(listFiles(home)).toEqual([
+      '.brick/profiles/opencode/runtime/harness.json',
+      '.config/opencode/opencode.json',
+    ]);
+
+    unwireOpencode();
+    expect(listFiles(home)).toEqual([
+      '.brick/profiles/opencode/runtime/harness.json',
+      '.config/opencode/opencode.json',
+    ]);
+  });
+
+  it('does not write outside the config when the URL is refused after an existing file', () => {
+    writeConfig(SAMPLE);
+    expect(() => wireOpencode('http://192.168.1.10:8000')).toThrow(/loopback/);
+    expect(readConfig()).toBe(SAMPLE);
+    expect(listFiles(home)).toEqual(['.config/opencode/opencode.json']);
+  });
+
+  it('strips a managed block without touching neighbouring text', () => {
+    const wired = `{
+  "a": 1,
+  // >>> brick opencode managed provider (do not edit) >>>
+  "brick": { "x": 1 }
+  // <<< brick opencode managed provider <<<
 }
 `;
-    writeFileSync(configPath(), original);
-    wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-
-    const text = wiring.readOpencodeConfig();
-    for (const line of original.split('\n')) {
-      if (line.trim() !== '') expect(text).toContain(line);
-    }
-    expect(text).toContain('// keep this comment');
-    const parsed = parseJsonc(text);
-    expect(parsed.providers['regolo-ai'].name).toBe('Regolo.ai');
-    expect(parsed.mcp.flywheel.url).toBe('https://example.test');
-    expect(parsed.provider.brick.options.baseURL).toBe('http://127.0.0.1:8123/v1');
+    expect(stripManagedBlock(wired)).toBe('{\n  "a": 1\n}\n');
+    expect(stripManagedBlock('{\n  "a": 1\n}\n')).toBe('{\n  "a": 1\n}\n');
   });
 
-  it('adds provider.brick inside an existing provider object without disturbing its keys', () => {
-    const original = `{
-  "provider": {
-    "existing": { "npm": "@acme/provider" }
-  }
-}
-`;
-    writeFileSync(configPath(), original);
-    const result = wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    expect(result.providerExisted).toBe(true);
-
-    const text = wiring.readOpencodeConfig();
-    const parsed = parseJsonc(text);
-    expect(parsed.provider.existing.npm).toBe('@acme/provider');
-    expect(parsed.provider.brick.npm).toBe('@ai-sdk/openai');
-    expect(text).toContain('"existing"');
-  });
-
-  it('re-running the wiring is idempotent (byte-identical)', () => {
-    wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    const first = wiring.readOpencodeConfig();
-    wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    const second = wiring.readOpencodeConfig();
-    expect(second).toBe(first);
-    expect(second.split('brick opencode managed block (do not edit)').length - 1).toBe(1);
-  });
-
-  it('refuses a pre-existing unmanaged provider.brick', () => {
-    const unmanaged = `{
-  "provider": {
-    "brick": { "npm": "@ai-sdk/openai", "options": { "baseURL": "http://127.0.0.1:1/v1" } }
-  }
-}
-`;
-    writeFileSync(configPath(), unmanaged);
-    expect(wiring.hasUnmanagedBrickProvider(unmanaged)).toBe(true);
-    expect(() => wiring.wireOpencode('http://127.0.0.1:8123', CATALOG)).toThrow(/unmanaged/);
-    expect(readFileSync(configPath(), 'utf8')).toBe(unmanaged);
-  });
-
-  it('disconnect restores exactly the previous values', () => {
-    const original = `{
-  "$schema": "https://opencode.ai/config.json",
-  // unrelated
-  "provider": {
-    "existing": { "npm": "@acme/provider" }
-  },
-  "providers": {
-    "regolo-ai": { "name": "Regolo.ai" }
-  }
-}
-`;
-    writeFileSync(configPath(), original);
-    const result = wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    expect(wiring.readOpencodeConfig()).not.toBe(original);
-    wiring.unwireOpencode({ createdFile: result.createdFile, providerExisted: result.providerExisted });
-    expect(wiring.readOpencodeConfig()).toBe(original);
-  });
-
-  it('disconnect removes a config it created', () => {
-    expect(existsSync(configPath())).toBe(false);
-    const result = wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    wiring.unwireOpencode({ createdFile: result.createdFile, providerExisted: result.providerExisted });
-    expect(existsSync(configPath())).toBe(false);
-  });
-
-  it('rejects non-loopback base URLs', () => {
-    expect(() => wiring.wireOpencode('http://0.0.0.0:8123', CATALOG)).toThrow(/loopback/);
-    expect(() => wiring.wireOpencode('https://example.com/v1', CATALOG)).toThrow(/loopback/);
-    expect(existsSync(configPath())).toBe(false);
-  });
-});
-
-describe('opencode reserved profile', () => {
-  it("treats 'opencode' as reserved", () => {
-    expect(pathsMod.RESERVED_PROFILES.has('opencode')).toBe(true);
-    expect(() => pathsMod.validateProfileName('opencode')).toThrow(/reserved/);
-    expect(pathsMod.validateProfileName('opencode', { allowReserved: true })).toBe('opencode');
-  });
-});
-
-describe('opencode wiring state', () => {
-  it('round-trips and clears the wiring state', () => {
-    expect(state.readOpencodeWiring()).toBeNull();
-    state.writeOpencodeWiring({
-      wired: true,
-      baseUrl: 'http://127.0.0.1:8123',
-      models: CATALOG,
+  it('round-trips the wiring state file', () => {
+    const state = {
+      wired: true as const,
+      baseUrl: 'http://127.0.0.1:8000',
+      configPath: opencodeConfigPath(),
+      previousProviderRaw: null,
       createdFile: true,
-      providerExisted: false,
-    });
-    expect(existsSync(statePath())).toBe(true);
-    const read = state.readOpencodeWiring();
-    expect(read).toEqual({
-      wired: true,
-      baseUrl: 'http://127.0.0.1:8123',
-      models: CATALOG,
-      createdFile: true,
-      providerExisted: false,
-    });
-    state.clearOpencodeWiring();
-    expect(state.readOpencodeWiring()).toBeNull();
+      models: ['brick'],
+    };
+    writeOpencodeWiring(state);
+    expect(readOpencodeWiring()).toEqual(state);
+    clearOpencodeWiring();
+    expect(readOpencodeWiring()).toBeNull();
   });
-});
 
-describe('opencode wiring writes only allowed files', () => {
-  it('touches only the opencode config and the wiring state file', () => {
-    writeFileSync(configPath(), '{\n  "model": "x"\n}\n');
-    const before = new Set(walkFiles(suite));
-    const beforeContents = new Map([...before].map((p) => [p, readFileSync(p, 'utf8')]));
-
-    const result = wiring.wireOpencode('http://127.0.0.1:8123', CATALOG);
-    state.writeOpencodeWiring({
-      wired: true,
-      baseUrl: 'http://127.0.0.1:8123',
-      models: CATALOG,
-      createdFile: result.createdFile,
-      providerExisted: result.providerExisted,
-    });
-
-    const after = walkFiles(suite);
-    const changed = after.filter((p) => !before.has(p) || readFileSync(p, 'utf8') !== beforeContents.get(p));
-    expect(changed.sort()).toEqual([configPath(), statePath()].sort());
-    for (const p of after) expect(statSync(p).isFile()).toBe(true);
+  it('reserves the opencode profile name', () => {
+    expect(RESERVED_PROFILES.has('opencode')).toBe(true);
+    expect(() => validateProfileName('opencode')).toThrow(/reserved/);
+    expect(validateProfileName('opencode', { allowReserved: true })).toBe('opencode');
   });
 });

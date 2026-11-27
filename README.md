@@ -21,7 +21,7 @@
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Models on HF](https://img.shields.io/badge/🤗%20models-HuggingFace-yellow?style=flat-square)](https://huggingface.co/regolo/brick-sysone-V1)
 
-**[Routing](#routing) · [Install](#install-and-run-locally) · [Codex](#codex-in-one-command) · [OpenCode](#opencode-in-one-command) · [Configuration](#configuration-and-migration) · [Development](#development-and-historical-research)**
+**[Routing](#routing) · [Install](#install-and-run-locally) · [Codex](#codex-in-one-command) · [Configuration](#configuration-and-migration) · [Development](#development-and-historical-research)**
 <!-- markdownlint-enable MD013 -->
 
 </div>
@@ -159,7 +159,7 @@ providers or credentials.
 
 ### OpenCode in one command
 
-Install OpenCode, then start the managed profile:
+Install the published Brick package and start the managed profile:
 
 ```bash
 npm install -g @regoloai/brick
@@ -167,18 +167,18 @@ brick start opencode
 ```
 
 `brick start opencode` creates the `opencode` profile when missing, starts the
-local router, wires the official OpenCode client to it, and installs the Brick
-OpenCode V2 plugin. The CLI writes the managed `provider.brick` block into
-`~/.config/opencode/opencode.json` (pointing at `http://127.0.0.1:<port>/v1`,
-with the whole Brick catalog plus the `brick` router model) and the plugin under
-`~/.config/opencode/plugins/brick/`. Open OpenCode, select `brick`, and every
-turn is routed by Brick. A second start changes nothing; `brick stop opencode`
-restores the original file exactly and removes the plugin. See
-[the OpenCode quickstart](docs/quickstart/opencode.md).
+local router, and wires the official OpenCode client to it. Brick writes a
+managed `provider.brick` block in `~/.config/opencode/opencode.json` pointing at
+the router port, installs its OpenCode V2 plugin, and the OpenCode picker then
+shows every Brick catalog model plus the `brick` router model. Open OpenCode,
+select `brick`, and turns are routed across the pool. `brick stop opencode`
+restores the original config and removes the plugin. See
+[OpenCode with the Brick router](docs/quickstart/opencode.md) for details.
 
 The profile editor configures providers, the model pool, capability vectors,
-provider-supported thinking modes, and the routing knob. Claude and Codex profiles
-connect their official harnesses through the existing native transports.
+provider-supported thinking modes, and the routing knob. Claude, Codex, and
+OpenCode profiles connect their official harnesses through the existing native
+transports.
 
 `brick route "Write a parser" --json` runs local routing only. It returns the
 original vector, scaled vector, knob, candidate distances, selected model, and

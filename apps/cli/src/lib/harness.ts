@@ -4,14 +4,19 @@ import { getBaseUrl, hasBrickModelOption, restoreBaseUrl, setBaseUrl } from './c
 import { clearWiring, readWiring, writeWiring } from './claude/wiring-state.js';
 import { getTopLevelModel, getTopLevelModelProvider, isWired, readCodexConfig, unwireCodex, wireCodex, codexModelCatalogPath } from './codex/config-toml.js';
 import { clearCodexWiring, readCodexWiring, writeCodexWiring } from './codex/wiring-state.js';
-import { isWired as isOpencodeWired, readOpencodeConfig, unwireOpencode, wireOpencode } from './opencode/wiring.js';
-import { clearOpencodeWiring, readOpencodeWiring, writeOpencodeWiring } from './opencode/wiring-state.js';
+import { isWired as isOpencodeWired, opencodeConfigPath, unwireOpencode, wireOpencode } from './opencode/wiring.js';
+import { readOpencodeWiring } from './opencode/wiring-state.js';
 import { installOpencodePlugin, isOpencodePluginInstalled, uninstallOpencodePlugin } from './opencode/plugin-install.js';
-import { opencodeCatalog } from './catalog/opencode.js';
+import { catalog } from './catalog/index.js';
+import { readFileSync } from 'node:fs';
 
-/** Models OpenCode should offer for the reserved `opencode` profile. */
-function opencodeModels() {
-  return opencodeCatalog.models.map((model) => ({ id: model.id, label: model.label }));
+/** Raw JSONC of `~/.config/opencode/opencode.json`, or '' when it does not exist. */
+function readOpencodeConfig(): string {
+  try {
+    return readFileSync(opencodeConfigPath(), 'utf8');
+  } catch {
+    return '';
+  }
 }
 
 export async function connectOfficialHarness(profile: string, port: number): Promise<void> {
@@ -41,25 +46,10 @@ export async function connectOfficialHarness(profile: string, port: number): Pro
       createdFile: old?.wired ? old.createdFile : result.createdFile,
     });
   } else if (profile === 'opencode') {
-    const models = opencodeModels();
     const old = readOpencodeWiring();
-    const config = readOpencodeConfig();
-    if (old?.baseUrl === baseUrl && isOpencodeWired(config) && isOpencodePluginInstalled()) return;
-    const result = wireOpencode(baseUrl, models);
-    try {
-      installOpencodePlugin();
-    } catch (error) {
-      // Never leave a wired config behind if the plugin cannot be installed.
-      unwireOpencode(result);
-      throw error;
-    }
-    writeOpencodeWiring({
-      wired: true,
-      baseUrl,
-      models,
-      createdFile: old?.wired ? old.createdFile : result.createdFile,
-      providerExisted: old?.wired ? old.providerExisted : result.providerExisted,
-    });
+    if (old?.baseUrl === baseUrl && isOpencodeWired(readOpencodeConfig()) && isOpencodePluginInstalled()) return;
+    wireOpencode(baseUrl, catalog.opencode?.models.map((model) => model.id) ?? []);
+    installOpencodePlugin();
   }
 }
 
@@ -71,10 +61,8 @@ export async function disconnectOfficialHarness(profile: string): Promise<void> 
     const state = readCodexWiring(); if (!state) return;
     unwireCodex(state); clearCodexWiring();
   } else if (profile === 'opencode') {
-    const state = readOpencodeWiring(); if (!state) return;
-    unwireOpencode(state);
+    unwireOpencode();
     uninstallOpencodePlugin();
-    clearOpencodeWiring();
   }
 }
 
@@ -115,18 +103,6 @@ export function harnessConnection(profile: string, baseUrl: string): HarnessConn
       unattachedLabel: 'not wired to this router',
     };
   }
-  if (profile === 'opencode') {
-    const wiring = readOpencodeWiring();
-    const config = readOpencodeConfig();
-    return {
-      url: normalizedUrl(wiring?.baseUrl),
-      attached: !!wiring?.wired && normalizedUrl(wiring.baseUrl) === normalizedUrl(baseUrl) &&
-        isOpencodeWired(config) && isOpencodePluginInstalled(),
-      label: 'OpenCode config',
-      disconnectedLabel: 'not wired — run brick start opencode',
-      unattachedLabel: 'not wired to this router',
-    };
-  }
   if (profile === 'claude') {
     const wiring = readWiring();
     const settingsUrl = normalizedUrl(getBaseUrl());
@@ -135,6 +111,17 @@ export function harnessConnection(profile: string, baseUrl: string): HarnessConn
       attached: !!wiring?.wired && settingsUrl === normalizedUrl(baseUrl) && hasBrickModelOption(),
       label: 'Claude settings',
       disconnectedLabel: 'not wired — run brick start claude',
+      unattachedLabel: 'not wired to this router',
+    };
+  }
+  if (profile === 'opencode') {
+    const wiring = readOpencodeWiring();
+    return {
+      url: normalizedUrl(wiring?.baseUrl),
+      attached: !!wiring?.wired && normalizedUrl(wiring.baseUrl) === normalizedUrl(baseUrl) &&
+        isOpencodeWired(readOpencodeConfig()) && isOpencodePluginInstalled(),
+      label: 'OpenCode config',
+      disconnectedLabel: 'not wired — run brick start opencode',
       unattachedLabel: 'not wired to this router',
     };
   }

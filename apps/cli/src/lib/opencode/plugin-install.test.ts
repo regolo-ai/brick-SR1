@@ -88,6 +88,23 @@ describe('brick OpenCode plugin', () => {
     expect(recorded.set[0].models.map((model) => model.id)).toEqual(['brick', 'gpt-5.4-mini', 'gpt-5.6-luna']);
   });
 
+  it('does the same work from setup', async () => {
+    const { ctx, recorded } = fakeContext();
+    const fetchImpl = vi.fn(async () => okResponse({ models: [{ id: 'brick' }, { id: 'gpt-5.6-luna' }] }));
+    vi.stubGlobal('fetch', fetchImpl);
+
+    await expect(plugin.default.setup(ctx)).resolves.toBeUndefined();
+
+    expect(ctx.provider.get).toHaveBeenCalledWith({ providerID: 'brick' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(recorded.add).toBe(0);
+    expect(recorded.update).toBe(0);
+    expect(recorded.set).toHaveLength(1);
+    expect(recorded.set[0].providerID).toBe('brick');
+    expect(recorded.set[0].models.map((model) => model.id)).toEqual(['brick', 'gpt-5.6-luna']);
+    vi.unstubAllGlobals();
+  });
+
   it('does nothing when the brick provider is not configured', async () => {
     const { ctx, recorded } = fakeContext(null);
     const fetchImpl = vi.fn();
@@ -156,7 +173,7 @@ describe('opencode plugin installer', () => {
     const written = await readFile(expected, 'utf8');
     expect(written).toBe(readPluginSource());
     expect(isManagedPlugin(written)).toBe(true);
-    expect(written).toContain("Plugin.define({");
+    expect(written).toContain('Plugin.define({');
     expect(written).toContain("id: 'brick'");
     expect(isOpencodePluginInstalled()).toBe(true);
   });
@@ -199,5 +216,12 @@ describe('opencode plugin installer', () => {
 
     expect(uninstallOpencodePlugin()).toEqual({ removed: false });
     expect(await readFile(join(dir, 'index.js'), 'utf8')).toBe('// somebody else wrote this\n');
+  });
+
+  it('writes only inside the temporary HOME', async () => {
+    const result = installOpencodePlugin();
+
+    expect(result.path.startsWith(home)).toBe(true);
+    expect(existsSync(join(home, '.config', 'opencode', 'plugins', 'brick', 'index.js'))).toBe(true);
   });
 });

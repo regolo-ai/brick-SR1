@@ -1,39 +1,92 @@
 # SystemOne routing: local sigmoid vectors, a linear knob, and Euclidean distance.
 # The CLI supplies the verified checkpoint directory via --model-dir.
-# This is the starter profile for the reserved `opencode` harness: OpenCode picks
-# the `brick` router model and Brick decides the upstream model from this pool.
+# OpenCode talks to this router through the managed `provider.brick` block in
+# ~/.config/opencode/opencode.json; Brick picks the upstream model.
 config_version: 2
 server_port: 8000
 auto_model_name: brick
+include_config_models_in_list: true
 brick:
   enabled: true
   use_model_routing: true
 providers:
   regolo:
     base_url: https://api.regolo.ai/v1
+  openai:
+    base_url: https://api.openai.com/v1
+  openai-codex:
+    base_url: https://chatgpt.com/backend-api/codex
+  claude-api:
+    base_url: https://api.anthropic.com
+  claude-code:
+    base_url: https://api.anthropic.com
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
 provider_profiles:
   regolo:
     type: openai_compatible
     base_url: https://api.regolo.ai/v1
+  openai:
+    type: openai_compatible
+    base_url: https://api.openai.com/v1
+  openai-codex:
+    type: openai_compatible
+    base_url: https://chatgpt.com/backend-api/codex
+  claude-api:
+    type: openai_compatible
+    base_url: https://api.anthropic.com
+  claude-code:
+    type: openai_compatible
+    base_url: https://api.anthropic.com
+  openrouter:
+    type: openai_compatible
+    base_url: https://openrouter.ai/api/v1
 provider_endpoints:
 - name: regolo
   provider_profile: regolo
   weight: 1
-default_model: qwen3.5-122b
+- name: openai
+  provider_profile: openai
+  weight: 1
+- name: openai-codex
+  provider_profile: openai-codex
+  weight: 1
+- name: claude-api
+  provider_profile: claude-api
+  weight: 1
+- name: claude-code
+  provider_profile: claude-code
+  weight: 1
+- name: openrouter
+  provider_profile: openrouter
+  weight: 1
+default_model: gpt-6.1-terra
 model_config:
-  qwen3.5-9b:
+  gpt-6-luna:
     preferred_endpoints:
-    - regolo
-  qwen3.5-122b:
+    - openai
+    reasoning_family: openai_reasoning
+    context_window_size: 258400
+    allowed_thinking_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+  gpt-6.1-terra:
     preferred_endpoints:
-    - regolo
-    reasoning_family: qwen3
-  glm5.2:
-    preferred_endpoints:
-    - regolo
+    - openai
+    reasoning_family: openai_reasoning
+    context_window_size: 475000
+    allowed_thinking_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
 reasoning_families:
-  qwen3:
-    parameter: enable_thinking
+  openai_reasoning:
+    parameter: reasoning_effort
 skill_router:
   enabled: true
   capabilities:
@@ -44,37 +97,27 @@ skill_router:
   - planning_agentic
   - creative_synthesis
   models:
-  - model: qwen3.5-9b
+  - model: gpt-6-luna
     skill_vector:
-    - 0.810109
-    - 0.714788
-    - 0.912146
-    - 0.179876
-    - 0.577072
-    - 0.511538
-    use_reasoning: false
-  - model: qwen3.5-122b
-    skill_vector:
-    - 0.7
-    - 0.62
-    - 0.58
-    - 0.78
-    - 0.66
-    - 0.48
+    - 0.5
+    - 0.51
+    - 0.84
+    - 0.63
+    - 0.54
+    - 0.59
     use_reasoning: true
-  - model: glm5.2
+  - model: gpt-6.1-terra
     skill_vector:
-    - 0.68
-    - 0.78
-    - 0.89
-    - 0.83
-    - 0.73
-    - 0.72
+    - 0.5
+    - 0.5
+    - 0.49
+    - 0.39
+    - 0.38
+    - 0.41
     use_reasoning: true
   active_models:
-  - qwen3.5-9b
-  - qwen3.5-122b
-  - glm5.2
+  - gpt-6-luna
+  - gpt-6.1-terra
   systemone:
     local_path: models/systemone
   knob: 0

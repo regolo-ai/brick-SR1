@@ -29,7 +29,7 @@
     "/dist",
     "/templates/*.config.yaml",
     "/assets/systemone.json",
-    "/assets/opencode-plugin/",
+    "/assets/opencode-plugin",
     "/oclif.manifest.json",
     "/scripts/runtime-install.cjs",
     "/scripts/python-env.cjs",
