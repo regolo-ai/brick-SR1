@@ -65,7 +65,7 @@ export function profileExists(name: string): boolean {
   }
 }
 
-export const RESERVED_PROFILES = new Set(['claude', 'codex']);
+export const RESERVED_PROFILES = new Set(['claude', 'codex', 'opencode']);
 export const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 export function validateProfileName(name: string, options: { allowReserved?: boolean } = {}): string {
