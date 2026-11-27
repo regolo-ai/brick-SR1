@@ -1,10 +1,11 @@
 # `packages/evals/`: Dataset A evaluation pipeline
 
-End-to-end pipeline to grade an LLM (or the Brick router) on the 5,504-query Dataset A and produce the per-dimension accuracy + cost numbers from the paper.
+End-to-end pipeline to grade an LLM (or the Brick router) on the 5,504-query
+Dataset A and produce the per-dimension accuracy + cost numbers from the paper.
 
 ## What's in here
 
-```
+```text
 packages/evals/
 ├── scripts/                    # Numbered pipeline (run in order)
 │   ├── 00_setup_check.py            # validate env (HF token, API keys, tooling)
@@ -40,9 +41,9 @@ packages/evals/
 │   ├── 131_panel_report.py
 │   └── 140_extract_model_skill_profiles.py
 ├── src/brick_evals/            # Python package (importable: `from brick_evals import ...`)
-│   ├── clients/                # regolo_client.py, openrouter_client.py
+│   ├── regolo_client.py, openrouter_client.py
 │   ├── judge.py + openrouter_judge_client.py
-│   ├── graders/                # bfcl_grader, ifeval_grader, lcb_grader, math_equiv_grader, rubric_judge_grader, simpleqa_grader
+│   ├── graders/                # bfcl_grader, ifeval_grader, lcb_grader, rubric_judge_grader, simpleqa_grader
 │   ├── normalize/              # NORMALIZERS registry per benchmark source
 │   ├── tokenizers.py, schema.py, dedup.py, contamination.py, fewshot.py, io_utils.py
 │   └── __init__.py
@@ -57,33 +58,24 @@ packages/evals/
 └── pyproject.toml              # name = brick-evals
 ```
 
-## Most common entry points
+## Running the pipeline
 
-After `uv sync` from repo root, the typical evaluation flow is just 3 scripts:
+Install the locked workspace with `uv sync --frozen --all-packages` and fetch
+pinned BFCL source with `python3 scripts/bootstrap_eval_sources.py`.
+The [evaluation quickstart](../../docs/quickstart/eval.md) gives executable
+inference, grading and panel-aggregation examples using the actual script flags.
 
-```bash
-# 1. Inference (Brick router or any single backend)
-uv run python packages/evals/scripts/100_run_inference.py \
-  --dataset ./data/dataset_a \
-  --endpoint http://localhost:18000/v1/chat/completions \
-  --out ./runs/brick_run.jsonl
-
-# 2. Grade (3-judge panel)
-uv run python packages/evals/scripts/110_grade_inference.py \
-  --inputs ./runs/brick_run.jsonl \
-  --judges packages/evals/configs/judges.yaml \
-  --out ./runs/brick_graded.jsonl
-
-# 3. Aggregate (final table)
-uv run python packages/evals/scripts/130_aggregate_results.py \
-  --in ./runs/brick_graded.jsonl | tee results.txt
-```
-
-Full quickstart with expected output: [`docs/quickstart/eval.md`](../../docs/quickstart/eval.md).
+Stages 00–99 build and validate the evaluation inputs; 100–120 execute and grade
+model requests. `130_aggregate_results.py` and `131_panel_report.py` read their
+configured historical run layout. They do not accept arbitrary `--in` files.
+Use `115_aggregate_panel.py --inputs ... --output ...` for explicit graded inputs.
+Review the input layout before regenerating a historical report. Hub publication
+stages are explicit remote writes and are never run by installation or CI.
 
 ## The 3-judge panel
 
-Used for `rubric_judge` (planning + creative_synthesis) and `llm_judge_factual` (world_knowledge subset). Configured in `configs/judges.yaml`:
+Used for `rubric_judge` (planning + creative_synthesis) and `llm_judge_factual`
+(world_knowledge subset). Configured in `configs/judges.yaml`:
 
 | Judge | Model | Role |
 |---|---|---|
@@ -91,37 +83,38 @@ Used for `rubric_judge` (planning + creative_synthesis) and `llm_judge_factual` 
 | Judge 2 | `mistralai/mistral-small-2603` | semantic precision |
 | Judge 3 | `zai/glm-5-turbo` | factual recall |
 
-Aggregation: 2-of-3 majority vote on a 4-point rubric (`fail`/`partial`/`pass`/`exceptional`), with structured output parser per judge to handle variant phrasings. See `src/brick_evals/judge.py` and `src/brick_evals/graders/rubric_judge_grader.py`.
+Aggregation: 2-of-3 majority vote on a 4-point rubric
+(`fail`/`partial`/`pass`/`exceptional`), with structured output parser per judge
+to handle variant phrasings. See `src/brick_evals/judge.py` and
+`src/brick_evals/graders/rubric_judge_grader.py`.
 
-Inter-rater κ on 5,504 graded queries: **0.761**. Cost: ~$30–50 for the full panel run via OpenRouter.
+Historical paper measurements are reported in `docs/paper/paper.tex`; new
+runs depend on the configured dataset revisions, model endpoints and prices.
 
 ## Per-dimension graders
 
 | Dimension | Grader | Method |
 |---|---|---|
 | `coding` | `lcb_grader` | Unit-test execution (LiveCodeBench harness) |
-| `math_reasoning` | `math_equiv_grader` | Symbolic equivalence (sympy + final-answer extractor) |
+| `math_reasoning` | `110_grade_inference.grade_math_equiv` | Symbolic equivalence (sympy + final-answer extractor) |
 | `instruction_following` | `ifeval_grader` | Constraint-satisfaction checks (IFEval) |
 | `planning_agentic` | `rubric_judge_grader` | 3-judge panel on rubric (planning quality) |
 | `creative_synthesis` | `rubric_judge_grader` | 3-judge panel on rubric (creative quality) |
 | `world_knowledge` | `simpleqa_grader` | LLM-judge factuality check |
-| `world_knowledge` (sub) | `bfcl_grader` | Function-calling correctness (BFCL) |
+| `planning_agentic` (function calls) | `bfcl_grader` | Function-calling correctness (BFCL) |
 
 ## Running tests
 
 ```bash
-uv run pytest packages/evals/tests -q
+uv run --frozen pytest packages/evals/tests -q
 # or just the smoke suite:
-uv run pytest packages/evals/tests/test_smoke_load.py -q
+uv run --frozen pytest packages/evals/tests/test_smoke_load.py -q
 ```
 
-## Skip-the-pipeline shortcut
+## Test scope
 
-If you just want the final accuracy table from the **published** graded run (no inference + grading needed):
-
-```bash
-python packages/datasets/scripts/download_dataset_a.py --out ./data/dataset_a
-# The HF snapshot includes the `results` config with already-graded verdicts:
-uv run python packages/evals/scripts/130_aggregate_results.py \
-  --in ./data/dataset_a/results/train.jsonl.gz
-```
+`make test-python` runs required offline tests. Missing BFCL source or grader
+dependencies fail collection. The `generated_data` tests require output from
+the evaluation and quality pipelines, including external datasets and Hub
+access. Run `make test-python-data` after producing those artifacts; missing
+reports fail that check. Ordinary CI does not claim this dataset verification.

@@ -1,18 +1,4 @@
-"""SimpleQA-style factual grader (LLM-as-judge).
-
-Prompt: canonical OpenAI `simple-evals/simpleqa_eval.py` GRADER_TEMPLATE.
-Classifica predicted_answer come CORRECT (A) / INCORRECT (B) / NOT_ATTEMPTED (C).
-
-Mapping:
-- A → correct=True
-- B → correct=False
-- C → correct=None (NOT_ATTEMPTED ≠ wrong)
-
-Robustezza parser: prende ULTIMO match A/B/C nell'ULTIMA riga non-vuota,
-non il primo match nel testo (evita hijack da risposte che contengono "A.").
-La response del modello viene wrappata in `<predicted_answer>...</predicted_answer>`
-con istruzione esplicita al judge di non seguire instructions dal contenuto interno.
-"""
+"""Grade factual responses using the canonical SimpleQA rubric. Map A to correct, B to incorrect and C to abstention (None). Prefer the last label on the last nonempty judge line to resist labels embedded in the candidate response. Delimit candidate text and instruct the judge not to follow it."""
 
 from __future__ import annotations
 
@@ -101,24 +87,19 @@ C: NOT_ATTEMPTED
 Just return the letters "A", "B", or "C", with no text around it.""".strip()
 
 
-# Truncate molto-lunghe response a 4000 char per safety (loop detection già fatto upstream)
+# Limit candidate responses to 4000 characters; upstream processing detects generation loops.
 _MAX_PREDICTED_CHARS = 4000
 
 
 def _parse_letter(raw: str) -> str | None:
-    """Estrae A/B/C dall'ultima riga non-vuota della response judge.
-
-    Robust: usa last-line + last-match per evitare hijack da Predicted answer
-    che contiene "A. " come testo. Cerca prima nell'ultima riga, fallback
-    al testo intero se non trovato.
-    """
+    """Extract the last A/B/C label on the last nonempty judge line, falling back to the full text."""
     if not raw or not raw.strip():
         return None
     lines = [ln.strip() for ln in raw.strip().split("\n") if ln.strip()]
     if not lines:
         return None
     last_line = lines[-1]
-    # Cerca pattern delimitato (word boundary) per evitare match dentro parole
+    # Match word boundaries to avoid finding labels inside words.
     matches = re.findall(r"\b([ABC])\b", last_line)
     if matches:
         return matches[-1]
@@ -147,18 +128,7 @@ async def grade_simpleqa(
     judge_model: str = "openai/gpt-5.4-mini",
     judge_temperature: float = 0.0,
 ) -> tuple[bool | None, dict]:
-    """Grade `response` contro `payload["answer"]` (SimpleQA gold).
-
-    Args:
-        response: predicted answer dal modello target
-        payload: dict con `answer` (gold string)
-        query: full original question (con preamble SimpleQA)
-        judge_client: istanza OpenRouterJudgeClient already-entered (async ctx)
-
-    Returns:
-        (correct: bool|None, meta: dict)
-        - A → True, B → False, C → None
-    """
+    """Compare response to the reference answer with an external judge. Return True for correct, False for incorrect, and None for abstention/unavailable grading."""
     gold = _normalize_gold(str(payload.get("answer", "")))
     if not gold:
         return None, {"reason": "no gold answer in payload"}
@@ -167,14 +137,13 @@ async def grade_simpleqa(
     if len(pred) > _MAX_PREDICTED_CHARS:
         pred = pred[:_MAX_PREDICTED_CHARS] + "\n[...truncated for grading]"
 
-    # Strip SimpleQA preamble dal query: il dataset prepende istruzioni che
-    # confondono il judge. Cerca la sezione "Question:" se presente.
+    # Strip the dataset's SimpleQA preamble, preferring the Question section when present.
     q = query
     if "Question:" in q:
         # take only the question line (last "Question:" block, no Answer: suffix)
         idx = q.rfind("Question:")
         q = q[idx:].replace("\nAnswer:", "").strip()
-        # rimuovi trailing "Answer:" se presente
+        # Remove a trailing Answer marker when present.
         if q.endswith("Answer:"):
             q = q[: -len("Answer:")].strip()
 

@@ -14,10 +14,7 @@ def _load_models_config() -> dict:
 
 @lru_cache(maxsize=8)
 def get_tokenizer(alias: str) -> Any:
-    """Carica tokenizer HF via AutoTokenizer (use_fast=True). Cached.
-
-    alias ∈ {qwen3.5-9b, deepseek-v4-flash, kimi2.6} → mappa a hf_tokenizer in models.yaml.
-    """
+    """Load and cache a fast Hugging Face AutoTokenizer."""
     from transformers import AutoTokenizer
 
     cfg = _load_models_config()

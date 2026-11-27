@@ -19,11 +19,11 @@ _normalize_math = g110._normalize_math
 
 
 def _grade(response: str, expected: str):
-    """Helper: invoke grader come fa il dispatcher."""
+    """Invoke the grader through the same interface as the dispatcher."""
     return grade_math_equiv(response, {"final_answer": expected})
 
 
-# --- Regression: casi che già passano ---
+# Previously passing grading regressions.
 def test_simple_number():
     ok, _ = _grade("\\boxed{117}", "117")
     assert ok is True
@@ -50,12 +50,12 @@ def test_text_word_ellipse():
 
 
 def test_numeric_with_unit_suffix():
-    """5.4 vs 5.4 \\text{ cents} → unit deve essere strippato"""
+    """Strip the unit suffix when comparing numeric answers."""
     ok, _ = _grade("\\boxed{5.4}", "5.4 \\text{ cents}")
     assert ok is True
 
 
-# --- Fix targets: 8 row che attualmente falliscono ---
+# Regression cases for formerly failing rows.
 def test_case_insensitive_word():
     """q_03134: East ≡ \\text{east}"""
     ok, _ = _grade("\\boxed{East}", "\\text{east}")
@@ -158,13 +158,13 @@ def test_truncation_empty():
 
 # --- Edge cases ---
 def test_no_boxed_explicit_final_answer():
-    """fallback: pattern 'final answer: X' senza boxed (current grader supporta : delim)"""
+    """Recognize an explicit final-answer marker without a boxed expression."""
     ok, _ = _grade("The final answer: 42.", "42")
     assert ok is True
 
 
 def test_nested_boxed_qwen_pattern():
-    """Qwen3.5 emette \\boxed{\\boxed{X}}: già fixed"""
+    """Accept nested boxed expressions emitted by Qwen."""
     ok, _ = _grade("\\boxed{\\boxed{117}}", "117")
     assert ok is True
 

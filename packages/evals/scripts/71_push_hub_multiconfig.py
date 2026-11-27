@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""71 - Push HF Hub multi-config (1 per dimension + 'all').
-
-Configs:
-- all (5339 rows)
-- coding (1000), math_reasoning (1000), planning_agentic (1000)
-- instruction_following (841), world_knowledge (802), creative_synthesis (696)
-
-Usage:
-    python3 scripts/71_push_hub_multiconfig.py
-"""
+"""Explicitly publish the dataset to Hugging Face with one configuration per dimension and an all configuration."""
 
 from __future__ import annotations
 

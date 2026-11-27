@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""Estrae i profili skill 6D dei modelli dal subset HF `results`.
-
-Input primario:
-  massaindustries/dataset-A-routing, config `results`, split `train`
-
-Output:
-  data/reports/model_skill_profiles.json
-  data/reports/model_skill_profiles.md
-
-La stima skill e una accuracy bayesiana smoothed:
-  a_m,c = (K_m,c + k * mu_c) / (N_m,c + k)
-
-dove K_m,c sono le risposte corrette del modello m nella capability c,
-N_m,c e il supporto totale, mu_c e la prior globale della capability,
-e k e la forza della prior.
-"""
+"""Extract six-dimensional model skills from the Hub results subset. Bayesian smoothing uses (K + k * mu) / (N + k), with per-capability global prior mu and prior strength k. Write JSON and Markdown profiles under data/reports."""
 
 from __future__ import annotations
 
@@ -117,7 +102,7 @@ def read_arrow_table(path: Path) -> pa.Table:
 def iter_cached_arrow_rows(cache_root: Path) -> Iterable[dict]:
     arrow_path = latest_cached_arrow(cache_root)
     if arrow_path is None:
-        raise FileNotFoundError("cached Arrow file not found for " f"{DATASET_ID}/{DATASET_CONFIG}/{DATASET_SPLIT}")
+        raise FileNotFoundError(f"cached Arrow file not found for {DATASET_ID}/{DATASET_CONFIG}/{DATASET_SPLIT}")
 
     table = read_arrow_table(arrow_path)
     for batch in table.to_batches(max_chunksize=8192):
@@ -295,8 +280,7 @@ def write_markdown(path: Path, payload: dict) -> None:
             raw = profile["raw_accuracy"][cap]
             raw_txt = "n/a" if raw is None else fmt_float(raw)
             lines.append(
-                f"| {idx} | {model} | {fmt_float(profile['ability'][cap])} | "
-                f"{raw_txt} | {profile['support'][cap]} |"
+                f"| {idx} | {model} | {fmt_float(profile['ability'][cap])} | {raw_txt} | {profile['support'][cap]} |"
             )
         lines.append("")
 

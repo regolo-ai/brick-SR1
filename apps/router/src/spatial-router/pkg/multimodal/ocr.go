@@ -76,6 +76,13 @@ func isPrivateOrReserved(ip net.IP) bool {
 // OCRImage sends an image URL to the OCR model (deepseek-ocr style) and returns extracted text.
 // Uses the chat completions format: sends the image as an image_url content part with an OCR prompt.
 func OCRImage(ctx context.Context, imageURL string, cfg *config.BrickConfig, apiKey string) (string, error) {
+	if config.IsRegoloEndpoint(cfg.OCREndpoint) {
+		key, err := config.ValidateCredential(apiKey)
+		if err != nil {
+			return "", fmt.Errorf("Regolo credential: %w", err)
+		}
+		apiKey = key
+	}
 	// Validate image URL to prevent SSRF
 	if err := validateImageURL(imageURL); err != nil {
 		return "", fmt.Errorf("SSRF protection: %w", err)

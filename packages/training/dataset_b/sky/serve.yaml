@@ -1,39 +1,15 @@
-# Generic SkyPilot task: launch SGLang on cluster qwen-bench (4xL40S).
-# Use envs MODEL_REPO and SGLANG_ARGS to switch between generator and judges.
-# Run with: sky exec qwen-bench dataset_b/sky/serve.yaml --env MODEL_REPO=... --env SGLANG_ARGS=...
-
+# External-capacity provisioning only. The operator supplies an image containing
+# SGLang and its locked GPU dependencies; Brick does not install or upgrade them.
 name: dataset-b-serve
-
 resources:
-  infra: seeweb
+  cloud: seeweb
   accelerators: L40S:4
-
 workdir: .
-
 envs:
   MODEL_REPO: Qwen/Qwen3.6-35B-A3B
-  SGLANG_ARGS: "--tp 4 --enable-prefix-caching --mem-fraction-static 0.85"
-  HF_HUB_ENABLE_HF_TRANSFER: "1"
-
 setup: |
-  set -e
-  sudo apt-get update -qq && sudo apt-get install -y -qq python3-pip python3-venv tmux
-  if [ ! -d "$HOME/sgl_env" ]; then
-    python3 -m venv $HOME/sgl_env
-    source $HOME/sgl_env/bin/activate
-    pip install --upgrade pip
-    pip install "sglang[all]==0.4.6.post1" hf_transfer pyyaml requests
-  fi
-
+  set -eu
+  python -c 'import sglang; print(sglang.__version__)'
 run: |
-  set -e
-  source $HOME/sgl_env/bin/activate
-  # ensure no stale server bound to port
-  pkill -f "sglang.launch_server" 2>/dev/null || true
-  sleep 5
-  echo "[run] launching SGLang for $MODEL_REPO with args: $SGLANG_ARGS"
-  exec python -m sglang.launch_server \
-    --model-path "$MODEL_REPO" \
-    --port 30000 \
-    --host 0.0.0.0 \
-    $SGLANG_ARGS
+  set -eu
+  exec python -m sglang.launch_server --model-path "$MODEL_REPO" --tp 4 --port 30000 --host 127.0.0.1

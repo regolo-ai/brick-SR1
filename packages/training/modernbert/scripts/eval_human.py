@@ -30,6 +30,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--output", default="eval_human.json")
+    ap.add_argument(
+        "--human-eval-csv", type=Path, help="Annotated six-label CSV (default: Dataset B human_eval output)"
+    )
     ap.add_argument("--batch-size", type=int, default=32)
     args = ap.parse_args()
 
@@ -37,7 +40,7 @@ def main() -> int:
     model = AutoModelForSequenceClassification.from_pretrained(
         args.ckpt, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
     )
-    ds = build_human_eval(tokenizer)
+    ds = build_human_eval(tokenizer, csv_path=args.human_eval_csv)
 
     targs = TrainingArguments(
         output_dir="/tmp/eval_out",

@@ -3,8 +3,7 @@
 Panel A: heatmap 4x6 (query p(x) + 3 model skill rows).
 Panel B: 3D vector view on (crea, cod, wld) with model logos and winning arc.
 
-Style matches the original `mom_capability_3d.png` from `generate_figures.py`:
-quivers from origin, logo at each vector tip, white-bordered labels. All
+The vector view uses quivers from origin, logo at each vector tip, white-bordered labels. All
 numerical values come from the worked example (sec:brick-example) so the
 figure stays in sync with Steps 1-6.
 """
@@ -20,7 +19,7 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.patches import Rectangle
 from mpl_toolkits.mplot3d.proj3d import proj_transform  # noqa: F401
 
-FIG = Path("/root/forkGO/scientificv1/docs/figures")
+FIG = Path(__file__).resolve().parent
 LOGO_DIR = FIG / "logos"
 
 LOGO_PATH = {

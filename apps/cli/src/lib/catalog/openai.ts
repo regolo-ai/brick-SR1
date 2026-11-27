@@ -8,6 +8,11 @@ export const openaiCatalog: CatalogProvider = {
   env_key: 'OPENAI_API_KEY',
   models: [
     // Brick / Codex routable pool (reasoning models use top-level reasoning_effort).
+    { id: 'gpt-6.2-sol', label: 'GPT-6.2 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6.2-astra', label: 'GPT-6.2 Astra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
+    { id: 'gpt-6-luna', label: 'GPT-6 Luna', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.5', label: 'GPT-5.5', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.4', label: 'GPT-5.4', param_size: 'unknown', reasoning_family: 'openai_reasoning' },
     { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', param_size: 'unknown', reasoning_family: 'openai_reasoning' },

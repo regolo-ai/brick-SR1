@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""72 - Push HF Hub massaindustries/dataset-A-routing (evals/results/verbose).
-
-3 config su dataset_A completo (5339 query, 3 modelli: qwen3.5-9b, deepseek-v4-flash, kimi2.6):
-- evals   : prompt + ground_truth (no risposte modelli)
-- results : query_id + qwen_correct/ds4_correct/kimi_correct (nullable bool)
-- verbose : results + raw responses + costs/latency + 3x3 judge per planning + grader_meta
-
-Usage:
-    python3 scripts/72_push_dataset_a_routing.py --dry-run   # build + parquet locali, no push
-    python3 scripts/72_push_dataset_a_routing.py             # build + push HF
-"""
+"""Explicitly publish Dataset A routing configurations: evals (prompts/reference answers), results (nullable correctness by model), and verbose (responses, usage and judge metadata)."""
 
 from __future__ import annotations
 
@@ -103,7 +93,7 @@ def serialize_evals(rows: list[dict]) -> list[dict]:
 
 
 def load_model_index(model: str) -> dict[str, dict]:
-    """Carica record graded per `model`, indicizzati per query_id. Verifica no duplicati."""
+    """Load graded records indexed by query ID and reject duplicates."""
     index: dict[str, dict] = {}
     for path in GRADED_FILES[model]:
         if not path.exists():
@@ -120,7 +110,7 @@ def load_model_index(model: str) -> dict[str, dict]:
 
 
 def load_individual_judges(model: str) -> dict[str, dict[str, bool]]:
-    """Carica i 3 judge singoli per planning_agentic single-turn. Restituisce {qid: {judge: correct}}."""
+    """Load individual planning judge decisions as query-ID to judge-result mappings."""
     out: dict[str, dict[str, bool]] = {}
     for judge_name, path in INDIVIDUAL_JUDGES[model].items():
         if not path.exists():
@@ -135,8 +125,7 @@ def load_individual_judges(model: str) -> dict[str, dict[str, bool]]:
 
 
 def collect_multiturn_rows(model_idx: dict[str, dict[str, dict]]) -> list[dict]:
-    """Estrae le righe multi_turn (query_id che iniziano con `multi_turn_`) presenti in tutti i 3 modelli.
-    Non sono nel base dataset_A; dimension reassigned a `planning_agentic_multiturn`."""
+    """Collect multi_turn query IDs present for all three models and assign planning_agentic_multiturn. These rows are outside the base Dataset A."""
     mt_qids = set()
     for m in MODELS:
         for qid, _rec in model_idx[m].items():
@@ -224,8 +213,7 @@ def build_verbose_df(
 ):
     import pandas as pd
 
-    # Ordina con planning_agentic (single-turn, judge individuali popolati) per primo
-    # così datasets.load_dataset inferisce correttamente il tipo bool delle colonne *_judge_*.
+    # Place single-turn planning rows with populated individual judgments first so Arrow infers boolean judge columns correctly.
     DIM_ORDER = {
         "planning_agentic": 0,
         "planning_agentic_multiturn": 1,
@@ -292,8 +280,7 @@ def _write_parquet(df, path: Path, row_group_size: int = 500) -> None:
 
 
 def _write_jsonl_from_df(df, path: Path) -> None:
-    """Salva DataFrame come JSONL.gz (1 riga = 1 obj). Usato per evals con expected_answer
-    enormi (LiveCodeBench private_tests fino a ~90MB) che non entrano in Parquet."""
+    """Write gzipped JSON Lines, supporting large private-test payloads that exceed Parquet limits."""
     import gzip
 
     import pandas as pd
@@ -301,7 +288,7 @@ def _write_jsonl_from_df(df, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     def _clean(v):
-        # Normalizza pandas NA / numpy nan / Boolean NA → None per JSON
+        # Normalize missing pandas/numpy/boolean values to None for JSON
         if v is pd.NA:
             return None
         if isinstance(v, float) and v != v:
@@ -320,7 +307,7 @@ def _write_jsonl_from_df(df, path: Path) -> None:
 
 
 def _coerce_nullable_bools(df, cols: list[str]):
-    """Cast colonne con bool/None mix a pandas BooleanDtype (pyarrow lo mappa a nullable bool)."""
+    """Convert mixed bool/None columns to pandas nullable booleans for Arrow."""
     for c in cols:
         if c not in df.columns:
             continue
@@ -329,8 +316,7 @@ def _coerce_nullable_bools(df, cols: list[str]):
 
 
 def _prepend_schema_anchor(df):
-    """Inserisce riga 0 con tutti i campi popolati (no null). Forza schema-inference di
-    datasets a tipi concreti invece di null type. Utenti devono filtrare query_id != '_schema_anchor'."""
+    """Insert a populated schema anchor for concrete type inference. Consumers must remove query_id == _schema_anchor."""
     import pandas as pd
 
     anchor = {}
@@ -350,7 +336,7 @@ def _prepend_schema_anchor(df):
             anchor[col] = "_anchor_"
     anchor["query_id"] = "_schema_anchor"
     anchor_df = pd.DataFrame([anchor])
-    # Allinea dtype delle colonne bool nullable
+    # Align nullable boolean column types.
     for col in df.columns:
         if str(df[col].dtype) == "boolean":
             anchor_df[col] = anchor_df[col].astype("boolean")
@@ -394,12 +380,12 @@ def make_readme(stats: dict) -> str:
     lines.append("        path: data/evals/train.jsonl.gz")
     lines.append("---")
     lines.append("")
-    lines.append("# Dataset A - Routing (3 modelli, verdict-level)")
+    lines.append("# Dataset A - Routing (three models, verdict-level)")
     lines.append("")
-    lines.append(f"**Totale query:** {n} | **Gated (masked) query:** {n_gated}")
+    lines.append(f"**Total queries:** {n} | **Gated (masked) query:** {n_gated}")
     lines.append("")
     lines.append(
-        "Dataset di valutazione per LLM routing systems su 6 capability. Ogni query è stata eseguita su 3 modelli (qwen3.5-9b, deepseek-v4-flash, kimi2.6) e giudicata con grader deterministici (math/coding/ifeval) o LLM judge panel 2-of-3 (planning_agentic) / single judge (creative_synthesis, world_knowledge)."
+        "Evaluation dataset for routing across six capabilities. Queries include results from qwen3.5-9b, deepseek-v4-flash and kimi2.6, graded deterministically for math/coding/instruction following or with external judges for planning, creativity and factual knowledge."
     )
     lines.append("")
     lines.append("## Configs")
@@ -407,59 +393,59 @@ def make_readme(stats: dict) -> str:
     lines.append("```python")
     lines.append("from datasets import load_dataset")
     lines.append("")
-    lines.append("# Pivot verdict per query (default config, 3 colonne bool)")
+    lines.append("# Pivot verdicts per query (default configuration, three boolean columns)")
     lines.append(f'ds_results = load_dataset("{REPO_ID}", split="train")')
     lines.append("")
-    lines.append("# Full: raw responses, costs, latency, 3x3 judge per planning, grader_meta")
+    lines.append("# Full: raw responses, costs, latency, 3x3 planning judges, grader_meta")
     lines.append(f'ds_verbose = load_dataset("{REPO_ID}", name="verbose", split="train")')
     lines.append("")
-    lines.append("# Prompts + ground truth (no model outputs): per replicare i test")
+    lines.append("# Prompts + ground truth (no model outputs): for reproducing the tests")
     lines.append(f'ds_evals = load_dataset("{REPO_ID}", name="evals", split="train")')
     lines.append("")
-    lines.append("# Tutti i config hanno una riga `_schema_anchor` (query_id == '_schema_anchor') con valori")
-    lines.append("# dummy per fissare lo schema di datasets/PyArrow. Filtrala via:")
+    lines.append("# All configurations contain a `_schema_anchor` row with dummy values")
+    lines.append("# to fix schema inference. Filter it out:")
     lines.append('#   ds = ds.filter(lambda r: r["query_id"] != "_schema_anchor")')
     lines.append("```")
     lines.append("")
     lines.append("## Schema `results`")
     lines.append("")
-    lines.append("| campo | tipo | note |")
+    lines.append("| field | type | notes |")
     lines.append("|---|---|---|")
     lines.append("| `query_id` | string | `q_NNNNN` |")
-    lines.append("| `query` | string | `<masked>` se gated |")
-    lines.append("| `dimension` | string | 1 di 6 capability |")
-    lines.append("| `evaluation_protocol_id` | string | protocollo grader |")
-    lines.append("| `source` | string | dataset originale |")
-    lines.append("| `gated` | bool | dataset proprietary (query mascherata) |")
-    lines.append("| `qwen_correct` | bool/null | verdict primario qwen3.5-9b |")
-    lines.append("| `ds4_correct` | bool/null | verdict primario deepseek-v4-flash |")
-    lines.append("| `kimi_correct` | bool/null | verdict primario kimi2.6 |")
+    lines.append("| `query` | string | `<masked>` when gated |")
+    lines.append("| `dimension` | string | one of six capabilities |")
+    lines.append("| `evaluation_protocol_id` | string | grader protocol |")
+    lines.append("| `source` | string | original dataset |")
+    lines.append("| `gated` | bool | restricted dataset (masked query) |")
+    lines.append("| `qwen_correct` | bool/null | primary verdict qwen3.5-9b |")
+    lines.append("| `ds4_correct` | bool/null | primary verdict deepseek-v4-flash |")
+    lines.append("| `kimi_correct` | bool/null | primary verdict kimi2.6 |")
     lines.append("")
-    lines.append("`*_correct` è `null` quando il judge ha astensione (~1.4% del totale).")
+    lines.append("`*_correct` is null when the judge abstains or grading is unavailable.")
     lines.append("")
     lines.append("## Schema `verbose`")
     lines.append("")
-    lines.append("Tutti i campi di `results` + per ogni modello m in {qwen, ds4, kimi}:")
+    lines.append("All results fields plus these fields for each model m in {qwen, ds4, kimi}:")
     lines.append("- `{m}_response` (string, raw output)")
     lines.append("- `{m}_thinking` (string, raw thinking chain)")
-    lines.append("- `{m}_cost_usd` (float, null per qwen)")
+    lines.append("- `{m}_cost_usd` (float, null for qwen)")
     lines.append("- `{m}_latency_ms` (int)")
     lines.append("- `{m}_completion_tokens` (int)")
     lines.append("- `{m}_reasoning_tokens` (int)")
     lines.append("- `{m}_input_tokens` (int)")
     lines.append("- `{m}_finish_reason` (string)")
-    lines.append("- `{m}_grader_meta` (string, JSON serializzato)")
+    lines.append("- `{m}_grader_meta` (string, serialized JSON)")
     lines.append("- `{m}_model_id_real` (string)")
-    lines.append("- `{m}_judge_gpt54mini` (bool/null, solo planning ST)")
-    lines.append("- `{m}_judge_mistral` (bool/null, solo planning ST)")
-    lines.append("- `{m}_judge_glm` (bool/null, solo planning ST)")
+    lines.append("- `{m}_judge_gpt54mini` (bool/null, single-turn planning only)")
+    lines.append("- `{m}_judge_mistral` (bool/null, single-turn planning only)")
+    lines.append("- `{m}_judge_glm` (bool/null, single-turn planning only)")
     lines.append("")
     lines.append("## Verdict source per dimension")
     lines.append("")
     lines.append("| dimension | rows | verdict source |")
     lines.append("|---|---|---|")
     lines.append(
-        f"| planning_agentic | {by_dim.get('planning_agentic', 0)} | panel 2-of-3 (gpt-5.4-mini + mistral-small-2603 + glm-5-turbo) per ST; single judge per MT |"
+        f"| planning_agentic | {by_dim.get('planning_agentic', 0)} | panel 2-of-3 (gpt-5.4-mini + mistral-small-2603 + glm-5-turbo) for single-turn; single judge for multi-turn |"
     )
     lines.append(
         f"| math_reasoning | {by_dim.get('math_reasoning', 0)} | deterministic (math_equiv, gsm8k_final_answer) |"
@@ -469,15 +455,15 @@ def make_readme(stats: dict) -> str:
         f"| instruction_following | {by_dim.get('instruction_following', 0)} | deterministic (ifeval_constraint_check) |"
     )
     lines.append(
-        f"| world_knowledge | {by_dim.get('world_knowledge', 0)} | mix (deterministic mcq_letter per 102; LLM judge `llm_judge_factual` per 700) |"
+        f"| world_knowledge | {by_dim.get('world_knowledge', 0)} | mix (deterministic mcq_letter for 102; LLM judge `llm_judge_factual` for 700) |"
     )
     lines.append(
         f"| creative_synthesis | {by_dim.get('creative_synthesis', 0)} | LLM judge `rubric_judge` (gpt-5.4-mini) |"
     )
     lines.append("")
-    lines.append("## Win-rate per modello")
+    lines.append("## Win rate by model")
     lines.append("")
-    lines.append("| modello | correct | incorrect | abstention | accuracy |")
+    lines.append("| model | correct | incorrect | abstention | accuracy |")
     lines.append("|---|---|---|---|---|")
     for m in MODELS:
         wr = win_rate[m]
@@ -490,7 +476,7 @@ def make_readme(stats: dict) -> str:
     lines.append("")
     lines.append("Ogni modello ha verdict per tutte le 5339 query:")
     lines.append("")
-    lines.append("| modello | query con verdict | coverage |")
+    lines.append("| model | query con verdict | coverage |")
     lines.append("|---|---|---|")
     for m in MODELS:
         c = coverage[m]
@@ -600,10 +586,7 @@ def main():
         (out_dir / cfg).mkdir(parents=True, exist_ok=True)
 
     print(f"\nwriting data files to {out_dir}...")
-    # Uniform JSONL.gz per i 3 config:
-    # - evals: LiveCodeBench private_tests fino a ~90MB single row, sfora Parquet int32 → JSONL obbligatorio
-    # - results+verbose: stesso formato per evitare bug datasets 4.7 mixed-config (jsonl+parquet)
-    # - schema-inference verbose ok perché build_verbose_df ordina planning_agentic per primo
+    # Use JSONL.gz for all three configurations. Large LiveCodeBench private-test rows exceed Parquet limits; a uniform format also avoids mixed JSONL/Parquet configuration issues. Planning rows appear first for concrete schema inference.
     _write_jsonl_from_df(evals_df, out_dir / "evals" / "train.jsonl.gz")
     print(f"  evals.jsonl.gz: {(out_dir / 'evals' / 'train.jsonl.gz').stat().st_size / 1e6:.2f} MB")
     _write_jsonl_from_df(results_df, out_dir / "results" / "train.jsonl.gz")

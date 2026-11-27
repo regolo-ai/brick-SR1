@@ -1,20 +1,6 @@
 #!/usr/bin/env python3
-"""Compare router baseline predictions vs ground truth (corrected methodology).
+"""Compare first model selections to the cheapest correct reference model, falling back to Kimi for unsolved queries. FrugalGPT’s first selection is always Qwen because its cascade order is fixed. Report selection accuracy over the full dataset; this differs from final response accuracy."""
 
-Ground truth (1 etichetta per query, denominator = 5504):
-  qwen if qwen_correct
-  ds4  if not qwen_correct and ds4_correct
-  kimi if not qwen_correct and not ds4_correct and kimi_correct
-  kimi fallback (query irrisolta, kimi = most capable)
-
-Router prediction = primo modello che il router prova a chiamare:
-  RouteLLM binary:     routellm_binary_selected
-  RouteLLM tournament: routellm_tournament_selected
-  FrugalGPT cascade:   "qwen" constant (cascade order fissato qwen->ds4->kimi)
-  Cascade Routing:     cascade_selected
-
-Metric unica: accuracy = mean(pred == ground_truth) sul denominator pieno (5504).
-"""
 from __future__ import annotations
 
 import os
@@ -23,8 +9,8 @@ from pathlib import Path
 import pandas as pd
 from datasets import load_dataset
 
-if Path("/root/.hf_token_regolo").exists():
-    os.environ["HF_TOKEN"] = Path("/root/.hf_token_regolo").read_text().strip()
+if (Path.home() / ".hf_token_regolo").exists():
+    os.environ["HF_TOKEN"] = (Path.home() / ".hf_token_regolo").read_text().strip()
 
 REPO = "massaindustries/dataset-A-routing"
 COST_PER_QUERY_USD = {"qwen": 0.07, "ds4": 0.50, "kimi": 1.00}
@@ -45,14 +31,12 @@ def load_results() -> pd.DataFrame:
     df = ds.to_pandas()
     df = df[df["query_id"] != "_schema_anchor"].copy()
     df["ground_truth"] = df.apply(lambda r: derive_ground_truth(r), axis=1)
-    df["unsolvable"] = ~(
-        (df["qwen_correct"] == True) | (df["ds4_correct"] == True) | (df["kimi_correct"] == True)
-    )
+    df["unsolvable"] = ~((df["qwen_correct"].eq(True)) | (df["ds4_correct"].eq(True)) | (df["kimi_correct"].eq(True)))
     return df
 
 
 def load_predictions() -> pd.DataFrame:
-    return pd.read_parquet("/root/forkGO/external_comparison/predictions/merged.parquet")
+    return pd.read_parquet(Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "merged.parquet")
 
 
 def main():
@@ -72,16 +56,16 @@ def main():
     print()
 
     routers = [
-        ("RouteLLM binary",     "routellm_binary_selected"),
+        ("RouteLLM binary", "routellm_binary_selected"),
         ("RouteLLM tournament", "routellm_tournament_selected"),
-        ("FrugalGPT cascade",   "frugal_first_tried"),
-        ("Cascade Routing",     "cascade_selected"),
+        ("FrugalGPT cascade", "frugal_first_tried"),
+        ("Cascade Routing", "cascade_selected"),
     ]
     baselines = [
         ("always_qwen", lambda d: pd.Series(["qwen"] * len(d), index=d.index)),
-        ("always_ds4",  lambda d: pd.Series(["ds4"]  * len(d), index=d.index)),
+        ("always_ds4", lambda d: pd.Series(["ds4"] * len(d), index=d.index)),
         ("always_kimi", lambda d: pd.Series(["kimi"] * len(d), index=d.index)),
-        ("oracle",      lambda d: d["ground_truth"]),
+        ("oracle", lambda d: d["ground_truth"]),
     ]
 
     print("=" * 70)
@@ -108,7 +92,9 @@ def main():
         n_hit = int((pred == df["ground_truth"]).sum())
         acc = n_hit / len(df)
         cost = pred.map(COST_PER_QUERY_USD).fillna(0).mean()
-        summary.append({"router": name, "accuracy": acc, "avg_cost_per_query": float(cost), "dist": pred.value_counts().to_dict()})
+        summary.append(
+            {"router": name, "accuracy": acc, "avg_cost_per_query": float(cost), "dist": pred.value_counts().to_dict()}
+        )
         print(f"  [{name}]: accuracy={acc:.4f}  avg_cost=${cost:.4f}")
 
     # Per-dimension
@@ -118,7 +104,7 @@ def main():
     per_dim = pd.DataFrame()
     for name, col in routers:
         per_dim[name] = df.groupby("dimension").apply(
-            lambda g: (g[col] == g["ground_truth"]).mean(), include_groups=False
+            lambda g, col=col: (g[col] == g["ground_truth"]).mean(), include_groups=False
         )
     per_dim["always_qwen"] = df.groupby("dimension").apply(
         lambda g: ("qwen" == g["ground_truth"]).mean(), include_groups=False
@@ -136,7 +122,7 @@ def main():
     print(f"  Oracle acc == 1.0?                 {oracle_acc:.6f}")
     print(f"  Total rows == 5504?                 {len(df)}")
 
-    out_csv = Path("/root/forkGO/external_comparison/predictions/comparison_report.csv")
+    out_csv = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "comparison_report.csv"
     pd.DataFrame(summary).to_csv(out_csv, index=False)
     print(f"\nSaved {out_csv}")
 

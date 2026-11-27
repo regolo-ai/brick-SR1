@@ -1,18 +1,4 @@
-"""LCB grader wrapper sopra LiveCodeBench official testing_util.
-
-Implementa il grader per `evaluation_protocol_id == "lcb_unit_test"` (Dim 4 coding).
-
-Comportamento:
-- Estrae codice Python dall'output del modello (cerca ultimo blocco ```python ... ```,
-  fallback all'intero response).
-- Decompressa private_tests (base64 -> zlib -> pickle -> json -> list[Test]).
-- Costruisce sample dict nel formato richiesto da
-  `lcb_runner.evaluation.testing_util.run_test`.
-- Determina `fn_name` dal payload o, se assente ma il problema e' functional, lo
-  ricava da `starter_code`.
-- Restituisce (passed: bool|None, meta: dict). passed=True iff TUTTI i test
-  (public+private) ritornano True secondo la convenzione LCB.
-"""
+"""Grade Python code with the official LiveCodeBench runner in an isolated process. Extract the last code fence, decode private tests and derive functional entrypoints from the payload or starter code. All public and private tests must pass; unavailable grading or absent tests yields None."""
 
 from __future__ import annotations
 
@@ -33,7 +19,7 @@ if _EXT.exists() and str(_EXT) not in sys.path:
 
 try:
     # Import lazily-resolvable: solo verifica disponibilita'. La chiamata
-    # effettiva avviene nel child process per isolare `reliability_guard`.
+    # Execution occurs in the child to isolate reliability_guard.
     from lcb_runner.evaluation.testing_util import run_test as _run_test_probe  # noqa: F401
 
     AVAILABLE = True
@@ -44,21 +30,13 @@ except Exception as e:  # pragma: no cover
 
 
 _CODE_BLOCK_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
-# Fallback per blocchi non chiusi (es. output troncato): apertura ```python ma
-# nessuna fence di chiusura.
+# Handle an opening Python fence without a closing fence, as in truncated output.
 _OPEN_FENCE_RE = re.compile(r"```(?:python|py)?\s*\n(.*)", re.DOTALL | re.IGNORECASE)
 _FN_FROM_STARTER_RE = re.compile(r"def\s+(\w+)\s*\(")
 
 
 def extract_python(response: str) -> str:
-    """Estrai code block ```python ... ``` dall'output del modello.
-
-    Strategia:
-    1) Cerca fenced code block chiuso; se trova, ritorna l'ULTIMO.
-    2) Altrimenti, se c'e' una fence d'apertura ma non chiusura (output troncato),
-       prende tutto cio' che segue la fence.
-    3) Altrimenti ritorna l'intero response strippato.
-    """
+    """Extract the last closed Python code fence, then an unclosed fence, then the entire stripped response."""
     if not isinstance(response, str):
         return ""
     matches = _CODE_BLOCK_RE.findall(response)
@@ -71,25 +49,21 @@ def extract_python(response: str) -> str:
 
 
 def decompress_private_tests(blob: Any) -> list:
-    """Decomprime il blob private_tests di LCB v6.
-
-    Encoding: base64 -> zlib -> pickle -> (str JSON | list[dict]).
-    Robusto a: gia' lista, gia' stringa JSON, blob mancante.
-    """
+    """Decode LCB private tests from base64, zlib, pickle and optional JSON. Also accept already decoded lists/JSON or missing input."""
     if blob is None or blob == "":
         return []
     if isinstance(blob, list):
         return blob
     if not isinstance(blob, str):
         return []
-    # Caso 1: stringa JSON pura (gia' decompressa)
+    # Case 1: plain JSON already decompressed
     try:
         parsed = json.loads(blob)
         if isinstance(parsed, list):
             return parsed
     except Exception:
         pass
-    # Caso 2: base64 + zlib + pickle (formato LCB v6)
+    # Case 2: base64, zlib and pickle (LCB v6 format)
     try:
         decoded = base64.b64decode(blob.encode("utf-8"))
         decompressed = zlib.decompress(decoded)
@@ -104,8 +78,7 @@ def decompress_private_tests(blob: Any) -> list:
 
 
 def _derive_fn_name(payload: dict) -> str | None:
-    """Determina fn_name: dal payload se presente, sennò dallo starter_code
-    quando il problema e' di tipo functional."""
+    """Read the function name from the payload or derive it from functional starter code."""
     fn = payload.get("fn_name")
     if fn:
         return fn
@@ -114,8 +87,7 @@ def _derive_fn_name(payload: dict) -> str | None:
     if not is_functional:
         return None
     starter = payload.get("starter_code") or ""
-    # In leetcode-style starter: prima viene `def __init__` (raro) o
-    # direttamente `def <fn>(self, ...)`. Filtriamo `__init__`.
+    # Functional starter code may begin with __init__; skip it when identifying the requested method.
     for m in _FN_FROM_STARTER_RE.finditer(starter):
         name = m.group(1)
         if name != "__init__":
@@ -124,9 +96,8 @@ def _derive_fn_name(payload: dict) -> str | None:
 
 
 def _worker(sample, code, timeout, debug, result, meta_list):
-    """Esegue run_test in un processo isolato (reliability_guard sporca lo
-    stato globale)."""
-    # Re-importa nel child per sicurezza
+    """Execute run_test in an isolated process because reliability_guard changes global state."""
+    # Import inside the isolated child
     import sys as _sys
 
     if str(_EXT) not in _sys.path:
@@ -143,12 +114,7 @@ def _worker(sample, code, timeout, debug, result, meta_list):
 
 
 def _run_isolated(sample: dict, code: str, timeout: int, n_inputs: int) -> tuple[list, dict]:
-    """Lancia run_test in subprocess (fork) e ritorna (results, runtime_meta).
-
-    Replica `check_correctness` di LCB:
-    - global timeout = (timeout+1)*n_inputs + 5 secondi
-    - se p e' vivo, kill e tutti i test = -1
-    """
+    """Run LiveCodeBench in a child process. Enforce a global (timeout + 1) * input_count + 5 second deadline; kill timed-out children and mark all tests failed."""
     ctx = multiprocessing.get_context("fork")
     manager = ctx.Manager()
     result = manager.list()
@@ -182,19 +148,7 @@ def _run_isolated(sample: dict, code: str, timeout: int, n_inputs: int) -> tuple
 
 
 def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | None, dict]:
-    """Esegui grading LCB su una singola risposta.
-
-    Args:
-        response: stringa raw del modello (puo' contenere prosa + code block).
-        payload: dict `expected_answer.payload` del dataset.
-        timeout: secondi per ogni chiamata `run_test` (default 6, come LCB).
-
-    Returns:
-        (passed, meta):
-          - passed=True  iff TUTTI i test passano
-          - passed=False iff almeno un test fallisce o errore d'esecuzione
-          - passed=None  se grader non disponibile o nessun test
-    """
+    """Return correctness and metadata for all public/private tests. Any failed test or execution error is false; unavailable grading or no tests is None."""
     if not AVAILABLE:
         return None, {"reason": f"LCB runner not available: {_IMPORT_ERR}"}
 
@@ -233,9 +187,7 @@ def grade_lcb(response: str, payload: dict, timeout: int = 6) -> tuple[bool | No
     n_passed = sum(1 for r in results if r is True)
     n_failed = sum(1 for r in results if r is False)
     n_error = sum(1 for r in results if isinstance(r, int) and r < 0)
-    # LCB short-circuita: se results e' piu' corto, i test mancanti non sono
-    # stati eseguiti (cosa che capita per call_based al primo fail e per stdio
-    # in alcuni casi). Trattali come fallimenti.
+    # LCB short-circuits some failures. Missing test results were not executed and count as failures.
     n_missing = max(0, n_total - len(results))
 
     all_pass = n_passed == n_total and n_failed == 0 and n_error == 0 and n_missing == 0

@@ -20,13 +20,12 @@ from typing import Any
 
 import numpy as np
 
-
 PROJECT = "brick-risk-adjusted-routing"
 ENTITY = "massa-industries"
-DEBUG_INPUT = Path("external_comparison/predictions/brick_debug.jsonl")
-COMPARISON_INPUT = Path("external_comparison/predictions/comparison.jsonl.gz")
-OUT_JSONL = Path("external_comparison/predictions/brick_risk_sweep.jsonl")
-PARETO_JSONL = Path("external_comparison/predictions/brick_risk_pareto.jsonl")
+DEBUG_INPUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_debug.jsonl"
+COMPARISON_INPUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "comparison.jsonl.gz"
+OUT_JSONL = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_risk_sweep.jsonl"
+PARETO_JSONL = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_risk_pareto.jsonl"
 
 BASE_CAPABILITIES = (
     "coding",
@@ -54,10 +53,7 @@ SKILL_VECTORS_6 = {
     "ds4": [0.820939, 0.657845, 0.863112, 0.934963, 0.620550, 0.488518],
     "kimi": [0.904272, 0.751595, 0.870180, 0.943892, 0.641863, 0.344074],
 }
-SKILL_VECTORS_7 = {
-    model: vec[:5] + [vec[4]] + [vec[5]]
-    for model, vec in SKILL_VECTORS_6.items()
-}
+SKILL_VECTORS_7 = {model: vec[:5] + [vec[4]] + [vec[5]] for model, vec in SKILL_VECTORS_6.items()}
 
 DEFAULT_OVER_LAMBDA = 0.05
 DEFAULT_COST_BETA = 0.10
@@ -91,7 +87,7 @@ def predict(row: dict[str, Any], params: dict[str, float], skill_vectors: dict[s
     best: tuple[float, str] | None = None
     for model in MODELS:
         under_sum = over_sum = 0.0
-        for p, skill in zip(row["probabilities"], skill_vectors[model]):
+        for p, skill in zip(row["probabilities"], skill_vectors[model], strict=False):
             requirement = p * zq
             model_value = p * logit(skill)
             under = max(0.0, requirement - model_value)
@@ -109,16 +105,12 @@ def predict(row: dict[str, Any], params: dict[str, float], skill_vectors: dict[s
 
 def prepare_arrays(rows: list[dict[str, Any]], skill_vectors: dict[str, list[float]]) -> dict[str, Any]:
     probabilities = np.asarray([row["probabilities"] for row in rows], dtype=np.float64)
-    tau = np.asarray([
-        np.nan if row.get("tau_query") is None else float(row["tau_query"])
-        for row in rows
-    ], dtype=np.float64)
+    tau = np.asarray(
+        [np.nan if row.get("tau_query") is None else float(row["tau_query"]) for row in rows], dtype=np.float64
+    )
     gt = np.asarray([RANK[row["ground_truth"]] for row in rows], dtype=np.int64)
     dims = np.asarray([row["dimension"] for row in rows], dtype=object)
-    model_logits = np.asarray([
-        [logit(skill) for skill in skill_vectors[model]]
-        for model in MODELS
-    ], dtype=np.float64)
+    model_logits = np.asarray([[logit(skill) for skill in skill_vectors[model]] for model in MODELS], dtype=np.float64)
     model_values = probabilities[None, :, :] * model_logits[:, None, :]
     return {
         "probabilities": probabilities,
@@ -140,7 +132,9 @@ def load_comparison(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def rows_from_debug(path: Path, comparison_path: Path) -> tuple[list[dict[str, Any]], tuple[str, ...], dict[str, list[float]]]:
+def rows_from_debug(
+    path: Path, comparison_path: Path
+) -> tuple[list[dict[str, Any]], tuple[str, ...], dict[str, list[float]]]:
     comparison = {row["query_id"]: row for row in load_comparison(comparison_path)}
     out = []
     for row in load_jsonl(path):
@@ -156,13 +150,17 @@ def rows_from_debug(path: Path, comparison_path: Path) -> tuple[list[dict[str, A
         if total <= 0:
             continue
         probs = [max(0.0, p) / total for p in probs]
-        out.append({
-            "query_id": row["query_id"],
-            "dimension": row.get("dimension") or comp.get("dimension"),
-            "ground_truth": row.get("ground_truth") or comp.get("ground_truth"),
-            "probabilities": probs,
-            "tau_query": row.get("brick_tau_query") if row.get("brick_tau_query") is not None else debug.get("tau_query"),
-        })
+        out.append(
+            {
+                "query_id": row["query_id"],
+                "dimension": row.get("dimension") or comp.get("dimension"),
+                "ground_truth": row.get("ground_truth") or comp.get("ground_truth"),
+                "probabilities": probs,
+                "tau_query": row.get("brick_tau_query")
+                if row.get("brick_tau_query") is not None
+                else debug.get("tau_query"),
+            }
+        )
     return out, BASE_CAPABILITIES, SKILL_VECTORS_6
 
 
@@ -172,17 +170,21 @@ def rows_from_oracle_dimension(path: Path) -> tuple[list[dict[str, Any]], tuple[
     for row in load_comparison(path):
         probs = [0.0] * len(ORACLE_CAPABILITIES)
         probs[cap_index[row["dimension"]]] = 1.0
-        out.append({
-            "query_id": row["query_id"],
-            "dimension": row["dimension"],
-            "ground_truth": row["ground_truth"],
-            "probabilities": probs,
-            "tau_query": None,
-        })
+        out.append(
+            {
+                "query_id": row["query_id"],
+                "dimension": row["dimension"],
+                "ground_truth": row["ground_truth"],
+                "probabilities": probs,
+                "tau_query": None,
+            }
+        )
     return out, ORACLE_CAPABILITIES, SKILL_VECTORS_7
 
 
-def split_rows(rows: list[dict[str, Any]], dev_fraction: float, seed: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def split_rows(
+    rows: list[dict[str, Any]], dev_fraction: float, seed: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     by_dim: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         by_dim[row["dimension"]].append(row)
@@ -199,7 +201,9 @@ def split_rows(rows: list[dict[str, Any]], dev_fraction: float, seed: str) -> tu
     return dev, holdout
 
 
-def evaluate(rows: list[dict[str, Any]], params: dict[str, float], skill_vectors: dict[str, list[float]]) -> dict[str, Any]:
+def evaluate(
+    rows: list[dict[str, Any]], params: dict[str, float], skill_vectors: dict[str, list[float]]
+) -> dict[str, Any]:
     counts = Counter()
     dim_hits = Counter()
     dim_total = Counter()
@@ -266,7 +270,9 @@ def evaluate_prepared(data: dict[str, Any], params: dict[str, float]) -> dict[st
 
 def grid_values(quick: bool, has_raw_tau: bool) -> list[dict[str, float]]:
     grid = {
-        "routing_preference": [-1.0, -0.5, 0.0, 0.5, 1.0] if quick else [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0],
+        "routing_preference": [-1.0, -0.5, 0.0, 0.5, 1.0]
+        if quick
+        else [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0],
         "complexity_mu": [0.4, 0.7, 1.0, 1.4] if quick else [0.25, 0.40, 0.55, 0.70, 0.85, 1.00, 1.25, 1.60],
         "complexity_bias": [-0.6, 0.0, 0.6] if quick else [-1.00, -0.60, -0.30, 0.00, 0.30, 0.60, 1.00],
         "cost_penalty_beta": [0.0, 0.1, 0.4] if quick else [0.00, 0.02, 0.05, 0.10, 0.20, 0.40, 0.80],
@@ -277,7 +283,7 @@ def grid_values(quick: bool, has_raw_tau: bool) -> list[dict[str, float]]:
     values = [[]]
     for key in keys:
         values = [prefix + [value] for prefix in values for value in grid[key]]
-    return [dict(zip(keys, value)) for value in values]
+    return [dict(zip(keys, value, strict=False)) for value in values]
 
 
 def mark_pareto(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -299,10 +305,11 @@ def setup_wandb(args: argparse.Namespace):
         return None, None
     os.environ["WANDB_MODE"] = args.wandb_mode
     if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
-        key_path = Path("/root/.wandb_key")
+        key_path = Path.home() / ".wandb_key"
         if key_path.exists():
             os.environ["WANDB_API_KEY"] = key_path.read_text().strip()
     import wandb  # type: ignore
+
     run = wandb.init(
         entity=args.entity,
         project=args.project,
@@ -319,8 +326,12 @@ def setup_wandb(args: argparse.Namespace):
     return wandb, run
 
 
-def log_wandb_tables(wandb: Any, results: list[dict[str, Any]], pareto: list[dict[str, Any]], out: Path, pareto_out: Path) -> None:
-    scalar_keys = sorted({key for row in results for key, value in row.items() if isinstance(value, (int, float, bool, str))})
+def log_wandb_tables(
+    wandb: Any, results: list[dict[str, Any]], pareto: list[dict[str, Any]], out: Path, pareto_out: Path
+) -> None:
+    scalar_keys = sorted(
+        {key for row in results for key, value in row.items() if isinstance(value, int | float | bool | str)}
+    )
     table = wandb.Table(columns=scalar_keys)
     for row in results:
         table.add_data(*(row.get(key) for key in scalar_keys))

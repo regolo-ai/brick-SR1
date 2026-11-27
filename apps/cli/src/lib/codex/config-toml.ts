@@ -1,6 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, chmodSync } from 'node:fs';
+import { paths } from '../config/paths.js';
 
 // Minimal, dependency-free editor for ~/.codex/config.toml.
 //
@@ -21,6 +23,10 @@ export function codexConfigPath(): string {
   return join(codexHome(), 'config.toml');
 }
 
+export function codexModelCatalogPath(): string {
+  return paths('codex').codexCatalog;
+}
+
 export function readCodexConfig(): string {
   const path = codexConfigPath();
   if (!existsSync(path)) return '';
@@ -32,7 +38,8 @@ function writeCodexConfig(text: string): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.brick.tmp`;
   const out = text.endsWith('\n') ? text : text + '\n';
-  writeFileSync(tmp, out, { mode: 0o644 });
+  writeFileSync(tmp, out, { mode: 0o600 });
+  chmodSync(tmp, 0o600);
   renameSync(tmp, path);
 }
 
@@ -75,7 +82,7 @@ function setTopLevelString(text: string, key: string, value: string): string {
   const lines = text === '' ? [] : text.split('\n');
   const end = firstTableIndex(lines);
   const re = new RegExp(`^\\s*${escapeRe(key)}\\s*=`);
-  const newLine = `${key} = "${value}"`;
+  const newLine = `${key} = ${JSON.stringify(value)}`;
   for (let i = 0; i < end; i++) {
     if (re.test(lines[i])) {
       lines[i] = newLine;
@@ -109,11 +116,11 @@ function restoreTopLevelString(text: string, key: string, previous: string | nul
     if (!m) continue;
     if (m[1] !== managedValue) return text;
     if (previous === null) lines.splice(i, 1);
-    else lines[i] = `${key} = "${previous}"`;
+    else lines[i] = `${key} = ${JSON.stringify(previous)}`;
     return lines.join('\n');
   }
   if (previous !== null) {
-    lines.splice(0, 0, `${key} = "${previous}"`);
+    lines.splice(0, 0, `${key} = ${JSON.stringify(previous)}`);
   }
   return lines.join('\n');
 }
@@ -155,15 +162,23 @@ export function hasUnmanagedBrickProvider(text: string): boolean {
   return hasTable(stripManagedBlock(text), BRICK_PROVIDER_TABLE);
 }
 
-function managedBlock(baseUrl: string): string {
+function managedBlock(baseUrl: string, localKey: string): string {
+  const url = new URL(baseUrl);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash) throw new Error('Codex router must use a loopback URL');
   const root = baseUrl.replace(/\/+$/, '');
+  // A short retry budget absorbs transient local hiccups (a restart between
+  // turns, a brief port closure) instead of failing the user's turn hard.
   return [
     BEGIN,
     '[model_providers.brick]',
     'name = "Brick (local router)"',
-    `base_url = "${root}/v1"`,
+    `base_url = ${JSON.stringify(`${root}/v1`)}`,
     'wire_api = "responses"',
     'requires_openai_auth = true',
+    'supports_websockets = false',
+    'request_max_retries = 2',
+    'stream_max_retries = 2',
+    `http_headers = { "X-Brick-Key" = ${JSON.stringify(localKey)} }`,
     END,
   ].join('\n');
 }
@@ -172,6 +187,8 @@ export interface CodexWireResult {
   previousModel: string | null;
   previousModelProvider: string | null;
   previousProfile: string | null;
+  previousModelCatalog: string | null;
+  managedModelCatalog: string;
   createdFile: boolean;
 }
 
@@ -179,6 +196,8 @@ export interface CodexUnwireState {
   previousModel: string | null;
   previousModelProvider: string | null;
   previousProfile?: string | null;
+  previousModelCatalog?: string | null;
+  managedModelCatalog?: string;
 }
 
 /**
@@ -186,18 +205,19 @@ export interface CodexUnwireState {
  * `model_provider = "brick"`, then append the managed provider block.
  * Idempotent: re-running replaces the managed block in place.
  */
-export function wireCodex(baseUrl: string): CodexWireResult {
+export function wireCodex(baseUrl: string, catalogPath = codexModelCatalogPath(), localKey = randomBytes(32).toString('hex')): CodexWireResult {
   const createdFile = !existsSync(codexConfigPath());
   const original = readCodexConfig();
   const previousModel = getTopLevelModel(original);
   const previousModelProvider = getTopLevelModelProvider(original);
   const previousProfile = getTopLevelProfile(original);
+  const previousModelCatalog = getTopLevelString(original, 'model_catalog_json');
 
   let text = stripManagedBlock(original);
   if (hasUnmanagedBrickProvider(text)) {
     throw new Error(
       'found an existing unmanaged [model_providers.brick] table in Codex config. ' +
-      'rename or remove it before running `brick codex on`.'
+      'rename or remove it before running `brick start codex`.'
     );
   }
 
@@ -205,10 +225,11 @@ export function wireCodex(baseUrl: string): CodexWireResult {
   text = setTopLevelString(text, 'model_provider', 'brick');
   text = setTopLevelString(text, 'model', 'brick');
   text = text.replace(/\n+$/, '\n');
-  text = (text.endsWith('\n') ? text : text + '\n') + managedBlock(baseUrl) + '\n';
+  text = setTopLevelString(text, 'model_catalog_json', catalogPath);
+  text = (text.endsWith('\n') ? text : text + '\n') + managedBlock(baseUrl, localKey) + '\n';
   writeCodexConfig(text);
 
-  return { previousModel, previousModelProvider, previousProfile, createdFile };
+  return { previousModel, previousModelProvider, previousProfile, previousModelCatalog, managedModelCatalog: catalogPath, createdFile };
 }
 
 /** Remove the managed block and restore prior top-level model/provider values. */
@@ -219,6 +240,7 @@ export function unwireCodex(state: CodexUnwireState): void {
   text = restoreTopLevelString(text, 'model', state.previousModel, 'brick');
   text = restoreTopLevelString(text, 'model_provider', state.previousModelProvider, 'brick');
   text = restoreLegacyProfile(text, state.previousProfile);
+  text = restoreTopLevelString(text, 'model_catalog_json', state.previousModelCatalog ?? null, state.managedModelCatalog ?? codexModelCatalogPath());
   writeCodexConfig(text);
 }
 

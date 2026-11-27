@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""30 - Few-shot extract: 5 esempi/dimension dal train split (con fallback).
-
-Output: data/fewshot_pools/<source_id>.json (5 esempi pre-formattati)
-
-Strategia:
-- Per source con shots > 0, carica fewshot_pool da configs/sources.yaml
-- Disgiunzione hash dall'eval set (raw query)
-- Random sample con seed=42
-- Estrazione campi (question, reasoning, final_answer) per dimension-specific
-"""
+"""Extract five few-shot examples per dimension from disjoint training splits, using configured fallbacks when necessary."""
 
 from __future__ import annotations
 
@@ -26,7 +17,7 @@ SEED = 42
 
 
 def _eval_hashes(source_id: str, query_field: str = "query") -> set[str]:
-    """Hash delle query nell'eval set, per disgiunzione."""
+    """Hash evaluation queries to enforce disjoint few-shot examples."""
     raw_path = data_dir("raw") / f"{source_id}.jsonl"
     if not raw_path.exists():
         return set()
@@ -54,7 +45,7 @@ def _load_pool(pool_cfg: dict) -> list[dict]:
 
 
 def _extract_example(source_id: str, row: dict) -> dict:
-    """Estrai (question, reasoning, final_answer) per dimension-specific."""
+    """Extract dimension-specific question, reasoning and final_answer fields."""
     if source_id in ("math500", "aime_2025"):
         return {
             "question": row.get("problem", ""),

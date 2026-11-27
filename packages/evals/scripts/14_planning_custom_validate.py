@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""14 - Planning custom validate: LLM-judge via Regolo (rubric esplicita per planning).
-
-Rubric:
-1. Realismo (scenario plausibile, non fantasy)
-2. Multi-step (richiede 3+ passi)
-3. Vincoli misurabili (budget/deadline/risorse)
-4. Goal chiaro
-5. Sicurezza (no contenuti tossici/illegali)
-
-Voto auto: {accept, reject, ambiguous}.
-
-Input: data/planning_custom/generated.jsonl
-Output: data/planning_custom/validated.jsonl (cap CAP_INITIAL=335)
-        data/planning_custom/review.csv (per ambiguous)
-"""
+"""Validate generated planning tasks using an explicit Regolo judge rubric: realism, multiple steps, measurable constraints, clear goals and safety. Write validated JSONL and ambiguous cases for human review, capped at 335 tasks."""
 
 from __future__ import annotations
 
@@ -29,27 +15,11 @@ from brick_evals.regolo_client import RegoloClient
 
 CAP_INITIAL = 335
 
-JUDGE_SYSTEM = """Sei un valutatore di task di planning agentic per un benchmark LLM.
-
-Rubric (tutti i criteri devono essere soddisfatti):
-1. Realismo: scenario plausibile, professionale, non fantasy
-2. Multi-step: richiede chiaramente 3+ passi di pianificazione
-3. Vincoli misurabili: budget, deadline, risorse limitate, regole, dipendenze esplicite
-4. Goal chiaro: cosa va raggiunto è specifico e misurabile
-5. Sicurezza: no contenuti tossici, illegali, sessuali espliciti
-6. Lunghezza: tra 100 e 1000 caratteri
-
-Decisione finale (UNA parola):
-- "accept" se passa tutti i criteri con confidence alta
-- "reject" se viola ≥1 criterio chiaramente
-- "ambiguous" se incerto
-
-Output: SOLO una di {accept, reject, ambiguous}. Nessun commento.
-"""
+JUDGE_SYSTEM = "Evaluate agentic planning tasks for an LLM benchmark.\nEvery criterion must hold:\n1. Realistic professional scenario, not fantasy.\n2. Clearly requires at least three planning steps.\n3. Measurable constraints: budget, deadlines, limited resources, rules or explicit dependencies.\n4. Specific, measurable goal.\n5. No toxic, illegal or sexually explicit content.\n6. Length between 100 and 1000 characters.\nReturn only accept if all criteria clearly pass, reject if any clearly fails, or ambiguous if uncertain. No commentary."
 
 
 def judge_one(client: RegoloClient, prompt: str, category: str) -> str:
-    user = f"Categoria attesa: {category}\n\nTask da valutare:\n{prompt}\n\nDecisione:"
+    user = f"Expected category: {category}\n\nTask to evaluate:\n{prompt}\n\nDecision:"
     try:
         out = client.text(user, system=JUDGE_SYSTEM, temperature=0.1, max_tokens=10).strip().lower()
         for tag in ("accept", "reject", "ambiguous"):

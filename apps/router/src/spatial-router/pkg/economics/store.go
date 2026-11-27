@@ -41,13 +41,6 @@ func NewStore() *Store {
 	}
 }
 
-// RecordUsage adds one request's token usage for a model to the running
-// totals. Safe to call concurrently. For providers that report prompt-cache
-// counters (Anthropic), use RecordCachedUsage instead.
-func (s *Store) RecordUsage(model string, inputTokens, outputTokens int64) {
-	s.RecordCachedUsage(model, inputTokens, 0, 0, outputTokens)
-}
-
 // RecordCachedUsage adds one request's token usage including prompt-cache
 // counters (cache_creation_input_tokens / cache_read_input_tokens from the
 // Anthropic Messages API) to the running totals. Safe to call concurrently.
@@ -76,7 +69,7 @@ func (s *Store) Reset() {
 }
 
 // Snapshot returns a copy of all accumulated usage, one entry per model
-// that has received at least one RecordUsage call, sorted by model name
+// that has received at least one RecordCachedUsage call, sorted by model name
 // for deterministic output.
 func (s *Store) Snapshot() []ModelUsage {
 	s.mu.Lock()

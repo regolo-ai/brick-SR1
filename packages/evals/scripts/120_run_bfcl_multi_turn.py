@@ -1,30 +1,5 @@
 #!/usr/bin/env python3
-"""120 - Inference + grading multi-turn BFCL (scripted, no LLM user-sim).
-
-Flusso per ogni task:
-  1. Carica `initial_config` e istanzia le `involved_classes` (env mock).
-  2. Per ogni turn in `question`:
-     - Costruisci messages con chat history + question[turn] (lista user messages)
-     - Loop interno (max `--max-iter` step):
-       - Chiama il modello target via OpenRouterClient
-       - Se la response contiene chiamata Python parsabile (`ast_parse`):
-         * Esegui le call su env mock (`execute_multi_turn_func_call`)
-         * Aggiungi le call e i risultati a chat history
-         * Continua il loop interno
-       - Altrimenti (plain text): termina il turn (fine inner loop)
-  3. A fine task: chiama `multi_turn_checker` per validare lo state finale.
-  4. Salva una riga graded (formato compatibile `110_grade_inference` output).
-
-Output JSONL (una riga per task):
-  - query_id, dimension, evaluation_protocol_id (= "tool_call_match"),
-  - model_raw_response: ultima risposta del modello,
-  - model_result_list_decoded: trajectory completa,
-  - correct: bool|None, grader_meta: dict con state_match per turn
-
-Usage:
-  python scripts/120_run_bfcl_multi_turn.py --model qwen3.5-9b \\
-      --output data/inference/qwen9b/multi_turn.jsonl --limit 5
-"""
+"""Run and grade scripted multi-turn BFCL tasks. Instantiate mock environments from initial_config, execute parsed tool calls, append official tool feedback and continue until DONE or the iteration limit. Validate final environment state with multi_turn_checker and emit one graded JSONL row per task, including trajectory and per-turn state matches."""
 
 from __future__ import annotations
 
@@ -46,7 +21,7 @@ from brick_evals.graders.bfcl_grader import (  # noqa: E402
 from brick_evals.io_utils import configs_dir, load_jsonl, load_yaml, utc_now_iso  # noqa: E402
 from brick_evals.openrouter_client import OpenRouterClient  # noqa: E402
 
-# Stub model_config viene applicato da bfcl_grader: importing più moduli BFCL sicuro.
+# Importing bfcl_grader installs the minimal model-config stub before other BFCL modules load.
 sys.path.insert(0, str(ROOT / "external" / "bfcl" / "berkeley-function-call-leaderboard"))
 
 from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (  # noqa: E402
@@ -56,8 +31,7 @@ from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import (  # noqa: E
     execute_multi_turn_func_call,
 )
 
-# Per multi-turn il response deve contenere SOLO la chiamata Python o "DONE".
-# DONE indica al runtime che il modello ha finito il turn (non ha più tool da chiamare).
+# Multi-turn responses contain only Python calls or DONE. DONE ends the current turn.
 MULTI_TURN_SYSTEM_PROMPT = """You are a function-calling assistant operating in a multi-turn environment.
 
 For EACH user request, you must:
@@ -85,8 +59,7 @@ Tool catalog (signatures for the available functions across the involved classes
 
 
 def _build_tool_catalog(involved_classes: list[str]) -> str:
-    """Crea un breve catalogo delle funzioni esposte dalle classi env, leggendo
-    direttamente le docstring delle implementazioni."""
+    """Build a tool catalog from environment implementation docstrings."""
     import importlib
     import inspect
 
@@ -122,15 +95,7 @@ def _build_tool_catalog(involved_classes: list[str]) -> str:
 
 
 def _parse_model_response(content: str) -> tuple[list[str] | None, str]:
-    """Estrae le call_string Python dall'output del modello.
-
-    Returns:
-        (call_strings, parse_mode) dove:
-          - call_strings = lista di "fn(a=1)" Python-style (per execute_multi_turn_func_call)
-            None se il modello non ha emesso chiamate parsabili.
-          - parse_mode = "DONE" se il modello ha terminato, "calls" se ha emesso call,
-            "none" altrimenti.
-    """
+    """Return parsed Python call strings and a mode: DONE, calls or none. Return None when no parseable calls are present."""
     if content is None:
         return None, "none"
     txt = content.strip()
@@ -139,12 +104,12 @@ def _parse_model_response(content: str) -> tuple[list[str] | None, str]:
     if txt.upper() == "DONE":
         return None, "DONE"
 
-    # Prova prima a estrarre call via bfcl_grader parser (gestisce code block, tag, ecc.)
+    # Try the BFCL parser first, including its code-fence and tool-tag handling.
     decoded, _ = extract_calls(txt)
     if decoded is None:
         return None, "none"
 
-    # Riconverti la lista decoded -> lista di stringhe Python (formato per execute_multi_turn_func_call)
+    # Convert decoded calls back to Python strings for execute_multi_turn_func_call.
     call_strings: list[str] = []
     for d in decoded:
         for fn_name, args in d.items():
@@ -164,7 +129,7 @@ async def run_single_task(
     sem: asyncio.Semaphore,
     extra_body: dict | None = None,
 ) -> dict:
-    """Esegue inference multi-turn su un singolo task, poi grada."""
+    """Run and grade one scripted multi-turn task."""
     test_entry_id = task["id"]
     category = task["_category"]  # es. "multi_turn_base"
     involved_classes = task["involved_classes"]
@@ -220,7 +185,7 @@ async def run_single_task(
                         decoded=model_result_list_decoded,
                     )
                 last_response_content = result.content or ""
-                # Append assistant content to chat history (anche se vuoto)
+                # Append assistant content even when empty.
                 chat_history.append({"role": "assistant", "content": last_response_content})
 
                 calls, mode = _parse_model_response(last_response_content)
@@ -244,7 +209,7 @@ async def run_single_task(
                     exec_results = [f"Error during execution: {type(e).__name__}: {e}"]
 
                 steps_this_turn.append(calls)
-                # Append tool execution feedback come messaggio user (formato BFCL ufficiale)
+                # Append tool feedback as user content, matching the official BFCL format.
                 feedback = "\n".join(f"Result of `{c}`: {r}" for c, r in zip(calls, exec_results, strict=False))
                 chat_history.append({"role": "user", "content": feedback})
 
@@ -377,7 +342,7 @@ async def main_async(args: argparse.Namespace) -> int:
         print(f"[run_multi_turn] endpoint={args.endpoint_url} key={'EMPTY' if args.endpoint_key == 'EMPTY' else 'SET'}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    # Resume: skip già processati
+    # Resume by skipping completed query IDs.
     done_ids: set[str] = set()
     if args.output.exists():
         for r in load_jsonl(args.output):
@@ -385,7 +350,7 @@ async def main_async(args: argparse.Namespace) -> int:
     todo = [t for t in tasks if t["id"] not in done_ids]
     print(f"[run_multi_turn] todo={len(todo)} (already done={len(done_ids)})")
 
-    # Baseline cost: somma cost dei record già presenti (resume) per budget cap accurato
+    # Include previous records' costs in the resumed run's budget baseline.
     baseline_cost = 0.0
     if args.output.exists():
         for r in load_jsonl(args.output):
@@ -437,7 +402,7 @@ async def main_async(args: argparse.Namespace) -> int:
                         if not t.done():
                             t.cancel()
                     break
-        # Drain delle eccezioni dei task cancellati per evitare warning
+        # Drain cancelled task exceptions to avoid unhandled-task warnings.
         if aborted:
             for t in tasks_async:
                 if t.cancelled():
@@ -459,7 +424,7 @@ async def main_async(args: argparse.Namespace) -> int:
         graded = [v for v in vals if v is not None]
         if graded:
             print(
-                f"  {cat:30s} {sum(graded)}/{len(graded)} ({sum(graded)/len(graded)*100:.1f}%) [skipped={len(vals)-len(graded)}]"
+                f"  {cat:30s} {sum(graded)}/{len(graded)} ({sum(graded) / len(graded) * 100:.1f}%) [skipped={len(vals) - len(graded)}]"
             )
         else:
             print(f"  {cat:30s} N/A (n_graded=0/{len(vals)})")
@@ -471,7 +436,7 @@ async def main_async(args: argparse.Namespace) -> int:
     total_latency = sum(r.get("latency_ms") or 0 for r in results)
     print(
         f"  cost_total=${total_cost:.4f}  api_calls={total_api}  "
-        f"tokens in={total_in} out={total_out}  cumulative_latency={total_latency/1000:.1f}s"
+        f"tokens in={total_in} out={total_out}  cumulative_latency={total_latency / 1000:.1f}s"
     )
     return 0
 

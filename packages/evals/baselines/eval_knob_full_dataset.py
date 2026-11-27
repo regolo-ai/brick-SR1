@@ -41,7 +41,6 @@ from sweep_knob_aggressive import (  # type: ignore
     prepare_knob_arrays,
 )
 
-
 DEFAULT_PARAMS: dict[str, float] = {
     "complexity_mu": 1.07,
     "complexity_bias": 0.15,
@@ -59,7 +58,7 @@ DEFAULT_PARAMS: dict[str, float] = {
     "min_over_boost": 11.9,
 }
 
-DEFAULT_OUT = Path("external_comparison/predictions/brick_knob_full_dataset.json")
+DEFAULT_OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick_knob_full_dataset.json"
 
 
 def stratified_folds(rows: list[dict[str, Any]], k: int, seed: str) -> list[list[dict[str, Any]]]:
@@ -82,9 +81,7 @@ def predict_knob(data: dict[str, Any], params: dict[str, float], preference: flo
     raw_tau = data["tau"]
     tau_q = np.where(np.isnan(raw_tau), params["tau_base"], raw_tau)
     log_tau = np.log(np.clip(tau_q, 1e-6, 1 - 1e-6) / np.clip(1 - tau_q, 1e-6, 1))
-    requirement = data["probabilities"] * (
-        eff["complexity_bias"] + eff["complexity_mu"] * log_tau
-    )[:, None]
+    requirement = data["probabilities"] * (eff["complexity_bias"] + eff["complexity_mu"] * log_tau)[:, None]
 
     under = np.maximum(0.0, requirement[None, :, :] - data["model_values"])
     over = np.maximum(0.0, data["model_values"] - requirement[None, :, :])
@@ -158,10 +155,7 @@ def concat_predictions(parts: list[dict[str, Any]]) -> dict[str, Any]:
 def evaluate_post_fit(rows: list[dict[str, Any]], params: dict[str, float]) -> dict[str, Any]:
     skills = calibrate_skills(rows)
     data = prepare_knob_arrays(rows, skills)
-    return {
-        str(knob): summarize_prediction(predict_knob(data, params, knob))
-        for knob in KNOBS
-    }
+    return {str(knob): summarize_prediction(predict_knob(data, params, knob)) for knob in KNOBS}
 
 
 def evaluate_out_of_fold(rows: list[dict[str, Any]], params: dict[str, float], folds: int, seed: str) -> dict[str, Any]:
@@ -186,10 +180,7 @@ def evaluate_out_of_fold(rows: list[dict[str, Any]], params: dict[str, float], f
         print(f"[fold {fold_idx + 1}/{folds}] train={len(train_rows)} test={len(test_rows)}")
 
     return {
-        "metrics": {
-            str(knob): summarize_prediction(concat_predictions(parts))
-            for knob, parts in by_knob.items()
-        },
+        "metrics": {str(knob): summarize_prediction(concat_predictions(parts)) for knob, parts in by_knob.items()},
         "folds": fold_metrics,
     }
 
@@ -202,18 +193,19 @@ def evaluate_baselines(rows: list[dict[str, Any]]) -> dict[str, Any]:
         pred = np.full(len(rows), model_idx, dtype=np.int64)
         selected_correct = np.asarray([bool(row[f"gt_{model}_correct"]) for row in rows], dtype=bool)
         route_exact = pred == gt
-        out[f"always_{model}"] = summarize_prediction({
-            "pred": pred,
-            "selected_correct": selected_correct,
-            "route_exact": route_exact,
-            "cost": np.full(len(rows), COST[model], dtype=np.float64),
-            "dims": dims,
-            "gt": gt,
-        })
-    any_correct = np.asarray([
-        bool(row["gt_qwen_correct"] or row["gt_ds4_correct"] or row["gt_kimi_correct"])
-        for row in rows
-    ], dtype=bool)
+        out[f"always_{model}"] = summarize_prediction(
+            {
+                "pred": pred,
+                "selected_correct": selected_correct,
+                "route_exact": route_exact,
+                "cost": np.full(len(rows), COST[model], dtype=np.float64),
+                "dims": dims,
+                "gt": gt,
+            }
+        )
+    any_correct = np.asarray(
+        [bool(row["gt_qwen_correct"] or row["gt_ds4_correct"] or row["gt_kimi_correct"]) for row in rows], dtype=bool
+    )
     out["oracle_any_correct"] = {
         "n": len(rows),
         "selected_answer_accuracy": float(np.mean(any_correct)),
@@ -227,7 +219,7 @@ def setup_wandb(args: argparse.Namespace):
         return None, None
     os.environ["WANDB_MODE"] = args.wandb_mode
     if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
-        key_path = Path("/root/.wandb_key")
+        key_path = Path.home() / ".wandb_key"
         if key_path.exists():
             os.environ["WANDB_API_KEY"] = key_path.read_text().strip()
     import wandb
@@ -325,12 +317,12 @@ def main() -> int:
         for evaluation, curve in (("post_fit_full", post_fit), ("out_of_fold", out_of_fold["metrics"])):
             for knob, metrics in curve.items():
                 for key, value in metrics.items():
-                    if isinstance(value, (int, float)):
+                    if isinstance(value, int | float):
                         table.add_data(evaluation, float(knob), key, value)
                         run.summary[f"{evaluation}_{knob}_{key}"] = value
         for name, metrics in baselines.items():
             for key, value in metrics.items():
-                if isinstance(value, (int, float)):
+                if isinstance(value, int | float):
                     run.summary[f"baseline_{name}_{key}"] = value
         wandb_mod.log({"full_dataset_curve": table})
         artifact = wandb_mod.Artifact(f"brick_knob_full_dataset_{args.seed}", type="dataset")

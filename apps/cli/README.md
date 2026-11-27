@@ -1,154 +1,54 @@
-# `apps/cli/`: `brick` CLI (`@regolo-ai/brick`)
+# `@regoloai/brick`
 
-TypeScript / oclif / ink companion CLI that self-hosts the Brick router and wires it into
-**Claude Code** and **OpenAI Codex** with one command each.
-
-## Install
-
-The npm package is not yet published (see the root [Distribution channels](../../README.md#distribution-channels-work-in-progress)). Install from source:
+The Brick 4.0 command-line client manages explicit router profiles.
 
 ```bash
-git clone https://github.com/regolo-ai/brick-SR1.git
-cd brick-SR1/apps/cli
-npm install
-npm run build
-npm link        # makes `brick` available on $PATH
+npm install --global @regoloai/brick
+
+brick profile create work
+brick profile edit work
+brick start work
+brick stop work
 ```
 
-Requires Node >= 18 and Docker.
+The installer selects the verified bundled runtime for the current platform.
+For native Codex subscription routing: `codex login` then `brick start codex`
+(default pool `gpt-6.1-terra`/`gpt-6-luna`); use `--reset-pool` to migrate an
+existing Codex profile to that pool without touching providers or credentials.
 
 ## Commands
 
-### Claude Code
-
 | Command | Purpose |
-|---------|---------|
-| `brick claude on` | Wires `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`, auto-starts the router |
-| `brick claude off` | Reverts `ANTHROPIC_BASE_URL`, optionally stops the router |
-| `brick claude mode` | Interactive picker for the routing mode |
-| `brick claude eco\|lite\|mid\|pro\|max` | Set the routing mode directly (see the [5 modes](../../README.md#the-5-modes)) |
-| `brick claude status [--once]` | Live dashboard (or one-shot) of routing stats, effort mix, and estimated savings |
-| `brick claude settings show` | Print current context-awareness + classifier compute settings |
-| `brick claude settings context` | Configure how many recent turns feed the complexity classifier |
-| `brick claude settings compute` | Switch the classifier between hosted (Regolo) and local (Docker sidecar) |
-| `brick claude settings subagents` | Configure per-subagent routing behavior |
+|---|---|
+| `brick profile create <name>` | Create a custom profile after validating the remote skill table |
+| `brick profile edit <name>` | Edit providers, model selection, routing, and reasoning settings |
+| `brick profile show <name>` | Show a profile; supports `--raw`, `--json`, and `--path` |
+| `brick profile list` | List custom and official profiles |
+| `brick profile pricing [name]` | Show the model prices a profile uses; `--sync` refreshes them from public sources, `--json`/`--all` for scripts |
+| `brick profile rename <old> <new>` | Rename a stopped custom profile |
+| `brick profile delete <name> -y` | Delete a stopped custom profile |
+| `brick start <profile>` | Synchronize skill vectors, start the router, and connect an official harness |
+| `brick restart <profile>` | Synchronize and restart a profile while preserving harness wiring |
+| `brick stop <profile>` | Stop a router; for Codex, detach future launches while keeping the current bridge alive |
+| `brick clear <profile>` | Remove runtime state while preserving configuration, credentials and history |
+| `brick migrate <profile>` | Rewrite a legacy profile to the current format; `--dry-run` previews it |
+| `brick update` | Update CLI and native runtime together, retaining a rollback bundle |
 
-Full walkthrough: [Brick + Claude Code](../../README.md#-brick--claude-code) in the root README.
+The authoritative table is the public Hugging Face `skill_vectors.csv`. Brick
+keeps one private (`0600`) cached copy for network fallback; it does not bundle
+per-model JSON cards or provide local measurement or publishing commands.
 
-### OpenAI Codex
+Model prices are refreshed on demand: `brick start` launches a detached watcher
+that rewrites the profile's `pricing.yaml` immediately and then hourly, reading
+Regolo's public price list (EUR, converted with the ECB reference rate) and the
+public OpenRouter catalogue (USD). No API key is required, and prices you edit
+by hand are never overwritten.
 
-| Command | Purpose |
-|---------|---------|
-| `brick codex on` / `brick codex off` | Same wiring pattern as `claude on/off`, for Codex |
-| `brick codex mode` / `brick codex eco\|lite\|mid\|pro\|max` | Routing mode picker / direct set |
-| `brick codex status [--once]` | Live dashboard for Codex routing |
-| `brick codex settings show\|context\|compute\|model-routing\|models\|thinking` | Codex-specific context-awareness, classifier compute, model pool, and thinking-budget routing |
+Requires Node.js 20 or 22+ and Python 3 with `venv`. The npm installer downloads
+and verifies the pinned SystemOne checkpoint and the platform runtime, then
+creates a managed Python environment with the pinned torch and transformers
+build that matches the detected GPU driver. No compiler or Docker is required on
+the user machine. Linux x64, Linux arm64, macOS x64, and macOS arm64 artifacts
+are execution-tested before publication.
 
-### Router / general
-
-| Command | Purpose |
-|---------|---------|
-| `brick init [profile]` | Guided wizard → creates `~/.brick/profiles/<name>/{config.yaml, docker-compose.yml, .env}` |
-| `brick serve [profile]` | `docker compose up -d` for the active profile |
-| `brick chat` | TUI chat (ink: bottom input + scrolling history, Claude Code-style). Includes an optional **BABL** multi-model debate mode (`/BABL` in-chat) that runs several models as agents plus a moderator and synthesizes an answer |
-| `brick generate "<prompt>"` | One-shot completion (stdout) |
-| `brick route "<prompt>"` | Show routing decision (selected backend + latency); `--no-generate` skips generation |
-| `brick status` | Active profile + container state |
-| `brick logs` | Tail container logs |
-| `brick stop` / `brick down` | Stop / down docker compose |
-| `brick config new\|use\|edit\|list\|remove\|rename [profile]` | Manage YAML profiles |
-| `brick add\|remove provider\|model\|decision\|plugin` | Edit current profile interactively |
-| `brick skills extract` | Extract a skill-vector table from benchmark results for the router's model catalog |
-
-Common flags: `--profile <name>`, `--thinking off\|low\|med\|high\|auto`, `--json`.
-
-## Configuration
-
-```
-~/.brick/
-├── state.json                  # {activeProfile, runningProfile}
-└── profiles/
-    └── <name>/
-        ├── config.yaml         # router config (schema mirrors apps/router/config/config.yaml)
-        ├── docker-compose.yml  # rendered from templates/*.hbs
-        ├── .env                # API keys (REGOLO_API_KEY, OPENROUTER_API_KEY, …) chmod 600
-        └── models/             # optional Docker volume mount for cached HF models
-```
-
-Environment overrides:
-- `BRICK_HOME`: alternate root (default `~/.brick`).
-- `BRICK_PROFILE`: alternate active profile (default = `state.json`'s `activeProfile`).
-- `BRICK_IMAGE`: alternate Docker image for `brick serve` (default `docker.io/regolo/brick:latest`).
-- `BRICK_CC_TAG`: alternate image tag for the Claude/Codex router + classifier sidecar containers.
-- `REGOLO_API_KEY`: provider key (read by the router via `Authorization: Bearer ...`).
-- `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`: used by Claude Code passthrough.
-- `HF_TOKEN`: optional, for gated/private Hugging Face model downloads.
-
-## Build & test
-
-```bash
-cd apps/cli
-npm install
-npm run build         # tsc -b → dist/
-npm run lint          # tsc --noEmit
-npm test              # vitest
-npm run test:random   # custom random-session harness (test/random.ts)
-```
-
-After build, the CLI is invocable as `./bin/run.js`.
-
-## Publishing
-
-The package is scoped (`@regolo-ai/brick`) and published with `--access public`. CI handles publishing on tag `v*` (see `.github/workflows/npm-publish.yml`), installing from the repo-root `package-lock.json` (npm workspaces) rather than a per-package lockfile.
-
-Local dry-run:
-
-```bash
-npm pack
-# inspect the tarball before npm publish
-```
-
-## Source layout
-
-```
-apps/cli/
-├── bin/
-│   ├── run.js                  # oclif entry (production)
-│   └── dev.js                  # oclif entry (ts-node loader)
-├── src/
-│   ├── commands/               # oclif commands (chat, serve, route, init, …)
-│   │   ├── add/, remove/       # topic groups
-│   │   ├── config/             # profile management
-│   │   ├── claude/             # Claude Code wiring: on/off/mode/status/settings
-│   │   ├── codex/              # OpenAI Codex wiring: on/off/mode/status/settings
-│   │   └── skills/             # skill-vector table extraction
-│   ├── lib/
-│   │   ├── client/             # OpenAI-compatible HTTP client (SSE streaming)
-│   │   ├── chat-tui/           # ink components (App, Welcome, BABL pane, SlashPopup, …)
-│   │   ├── claude-tui/         # ink dashboard for `brick claude status`
-│   │   ├── claude/, codex/     # bootstrap, settings, mode, and metrics logic
-│   │   ├── config/             # paths, load, validate (zod schema), migrate
-│   │   ├── config-ai/          # interactive `config ai` agent (React/ink)
-│   │   ├── docker/             # image / compose / run helpers
-│   │   ├── ui/                 # banners, colors
-│   │   └── wizard/             # guided init prompts
-│   └── hooks/
-│       └── init.ts             # oclif lifecycle hook (legacy migration, banner)
-├── templates/
-│   ├── docker-compose.yaml.hbs         # Handlebars template for `brick init`
-│   ├── claude-default.docker-compose.yaml.hbs  # compose for `brick claude on` (reused by `brick codex on`)
-│   ├── claude-default.config.yaml, codex-default.config.yaml  # default router configs
-│   └── skill-tables/                   # per-model capability vectors
-├── test/
-│   ├── random.ts               # random-session test harness
-│   └── fixtures/prompts.json
-├── package.json
-└── tsconfig.json
-```
-
-## Related
-
-- Router architecture and config knobs: [apps/router/README.md](../router/README.md).
-- One-line Docker quickstart (no CLI): [docs/quickstart/quick.md](../../docs/quickstart/quick.md).
-- Full CLI walkthrough: [docs/quickstart/serve.md](../../docs/quickstart/serve.md).
-- Claude Code integration (setup, modes, effort picker, dashboard): [root README](../../README.md#-brick--claude-code).
+See [installation and recovery](../../docs/quickstart/serve.md).

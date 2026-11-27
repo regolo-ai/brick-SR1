@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""10 - Download HF datasets (parametrizzato).
-
-Usage:
-    python 10_download.py <source_id>
-    python 10_download.py --all          # download tutti i source HF
-    python 10_download.py --list
-
-Salva data/raw/<source_id>.jsonl con campi nativi + commit hash in data/reports/lockfile.yaml.
-"""
+"""Download configured Hugging Face sources to data/raw/<source_id>.jsonl and record revisions in data/reports/lockfile.yaml. Accepts a source ID, --all or --list."""
 
 from __future__ import annotations
 
@@ -61,7 +53,7 @@ def _stratify_mmlu_pro_humanities(rows: list[dict], target_n: int, seed: int = 4
         n_for_cat = round(target_n * totals[c] / grand)
         n_for_cat = min(n_for_cat, len(by_cat[c]))
         out.extend(rng.sample(by_cat[c], n_for_cat) if n_for_cat else [])
-    # adjust se off di poco
+    # Adjust small differences from the requested count.
     while len(out) < target_n and grand > len(out):
         for c in cats:
             if len(out) >= target_n:

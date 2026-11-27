@@ -184,7 +184,7 @@ def main() -> int:
                 eta = (total - written) / max(rate, 0.001)
                 print(
                     f"[progress] {args.name} {written}/{total} parse_fail={parse_fails} "
-                    f"({rate:.1f}/s, ETA {eta/60:.1f}m)",
+                    f"({rate:.1f}/s, ETA {eta / 60:.1f}m)",
                     file=sys.stderr,
                 )
             for ms_count, frac in milestones.items():
@@ -194,13 +194,12 @@ def main() -> int:
                     seen_ms.add(frac)
                     if args.milestone_cb:
                         os.system(
-                            f"{args.milestone_cb} 'judge_{args.name}_{int(frac*100)}' "
-                            f"'Judge {args.name} {int(frac*100)}%: {written}/{total} parse_fail={parse_fails}'"
+                            f"{args.milestone_cb} 'judge_{args.name}_{int(frac * 100)}' "
+                            f"'Judge {args.name} {int(frac * 100)}%: {written}/{total} parse_fail={parse_fails}'"
                         )
 
     print(
-        f"[done] judge={args.name} written={written} parse_fail={parse_fails} "
-        f"rate={parse_fails/max(written,1):.3%}",
+        f"[done] judge={args.name} written={written} parse_fail={parse_fails} rate={parse_fails / max(written, 1):.3%}",
         file=sys.stderr,
     )
     return 0

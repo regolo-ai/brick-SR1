@@ -14,7 +14,7 @@
 //
 // Neither type talks to the HTTP proxy layer directly; callers (in
 // pkg/proxy and elsewhere) are responsible for parsing upstream usage data
-// and invoking Store.RecordUsage, and for wiring PricingTable into routing
+// and invoking Store.RecordCachedUsage, and for wiring PricingTable into routing
 // decisions.
 package economics
 
@@ -29,14 +29,13 @@ import (
 
 // PriceEntry is one row loaded from pricing.yaml.
 type PriceEntry struct {
-	Provider    string  `yaml:"provider"`
-	Model       string  `yaml:"model"`
-	InputPrice  float64 `yaml:"input_price"`
-	OutputPrice float64 `yaml:"output_price"`
-	Currency    string  `yaml:"currency"`
-	SourceURL   string  `yaml:"source_url"`
-	Source      string  `yaml:"source"`
-	FetchedAt   string  `yaml:"fetched_at"`
+	Model      string  `yaml:"model"`
+	InputPrice float64 `yaml:"input_price"`
+	// CachedInputPrice is the provider's cache-read price per 1M tokens. A
+	// zero value means the legacy provider multiplier (0.1x InputPrice) is used.
+	CachedInputPrice float64 `yaml:"cached_input_price"`
+	OutputPrice      float64 `yaml:"output_price"`
+	Currency         string  `yaml:"currency"`
 }
 
 // PricingTable holds all loaded price entries, indexed by model name.
@@ -70,6 +69,29 @@ func LoadPricingTable(path string) (*PricingTable, error) {
 	logging.Infof("economics: loaded pricing table from %q with %d models", path, len(entries))
 
 	return &PricingTable{entries: entries}, nil
+}
+
+// NewPricingTable builds a PricingTable in-memory from a slice of entries.
+// Used by the native Go pricing refresher (no YAML file involved).
+func NewPricingTable(entries []PriceEntry) *PricingTable {
+	table := &PricingTable{entries: make(map[string]PriceEntry, len(entries))}
+	for _, e := range entries {
+		table.entries[e.Model] = e
+	}
+	return table
+}
+
+// Entries returns a snapshot copy of all price entries in the table.
+// Nil-receiver safe: a nil table yields no entries.
+func (t *PricingTable) Entries() []PriceEntry {
+	if t == nil {
+		return nil
+	}
+	out := make([]PriceEntry, 0, len(t.entries))
+	for _, e := range t.entries {
+		out = append(out, e)
+	}
+	return out
 }
 
 // Price returns the PriceEntry for a model, and whether it was found.

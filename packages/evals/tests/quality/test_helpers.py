@@ -1,4 +1,4 @@
-"""Unit tests per helper modules: judge, dedup, contamination."""
+"""Test judge, deduplication and contamination helpers."""
 
 import sys
 from pathlib import Path

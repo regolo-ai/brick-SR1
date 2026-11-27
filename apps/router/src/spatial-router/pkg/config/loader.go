@@ -5,119 +5,60 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	config     *RouterConfig
-	configOnce sync.Once
-	configErr  error
-	configMu   sync.RWMutex
-
-	// Config change notification channel
-	configUpdateCh chan *RouterConfig
-	configUpdateMu sync.Mutex
-)
-
-// Load loads the configuration from the specified YAML file once and caches it globally.
-func Load(configPath string) (*RouterConfig, error) {
-	configOnce.Do(func() {
-		cfg, err := Parse(configPath)
-		if err != nil {
-			configErr = err
-			return
-		}
-		configMu.Lock()
-		config = cfg
-		configMu.Unlock()
-	})
-	if configErr != nil {
-		return nil, configErr
-	}
-	configMu.RLock()
-	defer configMu.RUnlock()
-	return config, nil
+// Parse parses the YAML config file for one runtime instance, migrating known
+// 3.x fields and ignoring the resulting deprecation warnings.
+func Parse(configPath string) (*RouterConfig, error) {
+	cfg, _, err := ParseWithOptions(configPath, ParseOptions{})
+	return cfg, err
 }
 
-// Parse parses the YAML config file without touching the global cache.
-func Parse(configPath string) (*RouterConfig, error) {
-	// Resolve symlinks to handle Kubernetes ConfigMap mounts
+// ParseWithOptions parses the YAML config, applies the 3.x migration and
+// returns every deprecation warning. With Strict, any warning fails the parse.
+func ParseWithOptions(configPath string, options ParseOptions) (*RouterConfig, []string, error) {
+	// Resolve profile configuration symlinks before reading.
 	resolved, _ := filepath.EvalSymlinks(configPath)
 	if resolved == "" {
 		resolved = configPath
 	}
 	data, err := os.ReadFile(resolved)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	cfg := &RouterConfig{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	// Override the complexity classifier endpoint from BRICK_CLASSIFIER_URL when
-	// set. In production every component runs inside the compose network and the
-	// "http://classifier:8094" DNS name resolves fine; for local dev (router run
-	// on the host, classifier in docker) this env var points at an exposed port
-	// or SSH tunnel without editing the prod config YAML.
-	if envURL := strings.TrimSpace(os.Getenv("BRICK_CLASSIFIER_URL")); envURL != "" {
-		if cfg.ComplexityService == nil {
-			cfg.ComplexityService = &ComplexityServiceConfig{Enabled: true}
+	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
+		// Type errors can quote scalar values, including pasted credentials.
+		// Preserve precise unknown-field diagnostics but never echo YAML values.
+		if typed, ok := err.(*yaml.TypeError); ok {
+			for _, detail := range typed.Errors {
+				if strings.Contains(detail, "field ") && strings.Contains(detail, " not found in type ") {
+					return nil, nil, fmt.Errorf("failed to parse config file: %s", detail)
+				}
+			}
 		}
-		cfg.ComplexityService.BaseURL = envURL
+		return nil, nil, fmt.Errorf("failed to parse config file: invalid YAML or field type")
 	}
 
-	// Apply default model registry if not specified in config
-	// If user specifies mom_registry in config.yaml, it completely replaces the defaults
-	if len(cfg.MoMRegistry) == 0 {
-		cfg.MoMRegistry = ToLegacyRegistry()
+	warnings, err := migrateDeprecated(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	if options.Strict && len(warnings) > 0 {
+		return nil, warnings, &DeprecationError{Warnings: warnings}
 	}
 
 	// Validation after parsing
 	if err := validateConfigStructure(cfg); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return cfg, nil
-}
-
-// Replace replaces the globally cached config. It is safe for concurrent readers.
-func Replace(newCfg *RouterConfig) {
-	configMu.Lock()
-	config = newCfg
-	configErr = nil
-	configMu.Unlock()
-
-	// Notify listeners of config change
-	configUpdateMu.Lock()
-	if configUpdateCh != nil {
-		select {
-		case configUpdateCh <- newCfg:
-		default:
-			// Channel full or no listener, skip
-		}
+	if err := validateCredentials(cfg); err != nil {
+		return nil, nil, err
 	}
-	configUpdateMu.Unlock()
-}
 
-// Get returns the current configuration
-func Get() *RouterConfig {
-	configMu.RLock()
-	defer configMu.RUnlock()
-	return config
-}
-
-// WatchConfigUpdates returns a channel that receives config updates
-// Only one watcher is supported at a time
-func WatchConfigUpdates() <-chan *RouterConfig {
-	configUpdateMu.Lock()
-	defer configUpdateMu.Unlock()
-
-	if configUpdateCh == nil {
-		configUpdateCh = make(chan *RouterConfig, 1)
-	}
-	return configUpdateCh
+	return cfg, warnings, nil
 }

@@ -26,12 +26,12 @@ def main():
 
     print("tokenizing with qwen3.5-9b...")
     qwen = count_tokens_batch(queries, "qwen3.5-9b", batch_size=BATCH)
-    print(f"  done. min={min(qwen)} max={max(qwen)} mean={sum(qwen)//len(qwen)}")
+    print(f"  done. min={min(qwen)} max={max(qwen)} mean={sum(qwen) // len(qwen)}")
 
     print("tokenizing with deepseek-v4-flash (proxy V3)...")
     try:
         ds = count_tokens_batch(queries, "deepseek-v4-flash", batch_size=BATCH)
-        print(f"  done. min={min(ds)} max={max(ds)} mean={sum(ds)//len(ds)}")
+        print(f"  done. min={min(ds)} max={max(ds)} mean={sum(ds) // len(ds)}")
     except Exception as e:
         print(f"  [warn] deepseek tokenizer failed: {e}; using qwen as fallback")
         ds = qwen[:]
@@ -39,7 +39,7 @@ def main():
     print("tokenizing with kimi2.6 (proxy K2.5)...")
     try:
         ki = count_tokens_batch(queries, "kimi2.6", batch_size=BATCH)
-        print(f"  done. min={min(ki)} max={max(ki)} mean={sum(ki)//len(ki)}")
+        print(f"  done. min={min(ki)} max={max(ki)} mean={sum(ki) // len(ki)}")
     except Exception as e:
         print(f"  [warn] kimi tokenizer failed: {e}; using qwen as fallback")
         ki = qwen[:]

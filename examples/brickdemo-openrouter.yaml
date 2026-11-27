@@ -1,0 +1,62 @@
+# SystemOne routing: local sigmoid vectors, a linear knob, and Euclidean distance.
+# The CLI supplies the verified checkpoint directory via --model-dir.
+default_model: openai/gpt-4o-mini
+auto_model_name: brick
+server_port: 8000
+brick:
+  enabled: true
+skill_router:
+  enabled: true
+  capabilities:
+  - instruction_following
+  - coding
+  - math_reasoning
+  - world_knowledge
+  - planning_agentic
+  - creative_synthesis
+  models:
+  - model: anthropic/claude-3.5-sonnet
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.9
+    - 0.92
+    - 0.88
+    - 0.91
+    - 0.83
+    - 0.85
+    custom_params:
+      max_tokens: 4096
+  - model: deepseek/deepseek-chat
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.81
+    - 0.86
+    - 0.84
+    - 0.8
+    - 0.79
+    - 0.72
+  - model: openai/gpt-4o-mini
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    skill_vector:
+    - 0.82
+    - 0.8
+    - 0.65
+    - 0.85
+    - 0.74
+    - 0.95
+    custom_params:
+      max_tokens: 2048
+  systemone:
+    local_path: models/systemone
+  knob: 0
+config_version: 2
+model_config:
+  anthropic/claude-3.5-sonnet:
+    access_key_env: OPENROUTER_API_KEY
+  deepseek/deepseek-chat:
+    access_key_env: OPENROUTER_API_KEY
+  openai/gpt-4o-mini:
+    access_key_env: OPENROUTER_API_KEY

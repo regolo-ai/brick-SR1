@@ -1,0 +1,77 @@
+# SystemOne routing: local sigmoid vectors, a linear knob, and Euclidean distance.
+# The CLI supplies the verified checkpoint directory via --model-dir.
+server_port: 8000
+auto_model_name: brick-v1-beta
+trusted_proxy_header: X-Regolo-User-Key
+brick:
+  enabled: true
+providers:
+  regolo:
+    base_url: https://api.regolo.ai/v1
+provider_profiles:
+  regolo:
+    type: openai_compatible
+    base_url: https://api.regolo.ai/v1
+provider_endpoints:
+- name: regolo
+  provider_profile: regolo
+  weight: 1
+default_model: qwen3.5-122b
+model_config:
+  qwen3.5-9b:
+    preferred_endpoints:
+    - regolo
+    use_client_key: true
+  qwen3.5-122b:
+    preferred_endpoints:
+    - regolo
+    reasoning_family: qwen3
+    use_client_key: true
+  glm5.2:
+    preferred_endpoints:
+    - regolo
+    use_client_key: true
+reasoning_families:
+  qwen3:
+    parameter: enable_thinking
+skill_router:
+  enabled: true
+  capabilities:
+  - instruction_following
+  - coding
+  - math_reasoning
+  - world_knowledge
+  - planning_agentic
+  - creative_synthesis
+  models:
+  - model: qwen3.5-9b
+    skill_vector:
+    - 0.810109
+    - 0.714788
+    - 0.912146
+    - 0.179876
+    - 0.577072
+    - 0.511538
+    use_reasoning: false
+  - model: qwen3.5-122b
+    skill_vector:
+    - 0.7
+    - 0.62
+    - 0.58
+    - 0.78
+    - 0.66
+    - 0.48
+    use_reasoning: true
+  - model: glm5.2
+    skill_vector:
+    - 0.68
+    - 0.78
+    - 0.89
+    - 0.83
+    - 0.73
+    - 0.72
+    use_reasoning: true
+  systemone:
+    local_path: models/systemone
+  knob: 0
+config_version: 2

@@ -7,23 +7,27 @@ Usage: `wandb agent <sweep_id>` calls this with params from sweep YAML.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sweep_brick_v2_wandb import (  # type: ignore
-    DEBUG_INPUT, COMPARISON_INPUT, rows_from_debug, prepare_arrays,
-    calibrate_skills, evaluate_prepared, split_rows, SKILL_VECTORS_6,
+    COMPARISON_INPUT,
+    DEBUG_INPUT,
+    SKILL_VECTORS_6,
+    calibrate_skills,
+    evaluate_prepared,
+    prepare_arrays,
+    rows_from_debug,
+    split_rows,
 )
 
 
 def main():
     import wandb
-    key_path = Path("/root/.wandb_key")
+
+    key_path = Path.home() / ".wandb_key"
     if key_path.exists() and not os.environ.get("WANDB_API_KEY"):
         os.environ["WANDB_API_KEY"] = key_path.read_text().strip()
 
@@ -60,7 +64,7 @@ def main():
     log.update({f"holdout_{k}": v for k, v in hold_m.items()})
     wandb.log(log)
     for k, v in log.items():
-        if isinstance(v, (int, float, bool)):
+        if isinstance(v, int | float | bool):
             run.summary[k] = v
     print(f"holdout_accuracy={hold_m['accuracy']:.4f} avg_cost={hold_m['avg_cost']:.4f}")
     wandb.finish()

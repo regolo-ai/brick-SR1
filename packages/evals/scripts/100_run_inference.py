@@ -1,17 +1,4 @@
-"""Run inference Dataset A su un modello OpenRouter (deepseek-v4-flash | kimi2.6).
-
-Pipeline:
-  1. Carica `data/final/evaluation_parameters_full.jsonl`
-  2. Filtra dimension (default: tutte tranne planning_agentic)
-  3. Resume: skip query_id già presenti in --output
-  4. Async pool 8 worker → OpenRouterClient.chat()
-  5. Append JSONL atomico (una riga per call)
-  6. Report finale: count, errors, cost, latency p50/p95, thinking-capture-rate
-
-Usage:
-  python scripts/100_run_inference.py --model deepseek-v4-flash --limit-per-dim 20 \\
-      --output data/inference/deepseek-v4-flash/dataset_a_smoke.jsonl
-"""
+"""Run resumable Dataset A inference through OpenRouter. Filter dimensions, skip existing query IDs, execute concurrent calls and append JSONL results with cost, latency and reasoning statistics. See --help for model, budget and output options."""
 
 from __future__ import annotations
 
@@ -25,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-# Permette esecuzione diretta senza pip install -e .
+# Allow direct execution without an editable package installation.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -49,28 +36,22 @@ DEFAULT_DIMENSIONS = [
 EXCLUDED_DIMENSIONS: set[str] = set()
 DEFAULT_CONCURRENCY = 8
 
-# max_tokens per (dimension, evaluation_protocol_id). `max_tokens` include reasoning.
-# Tarati per modelli con thinking ON (DeepSeek V4, Kimi K2.5) seguendo SOTA 2025:
-# 32K math/code (DeepSeek-R1, Kimi K2.5 standard), 8K IF/MCQ, 2K SimpleQA.
-# Note: max_tokens è CAP, non target; il costo cresce solo quando il modello satura.
+# Token caps by dimension and protocol, including reasoning. Defaults allow 32K for math/code, 8K for instruction following/MCQ and 2K for SimpleQA. Caps are limits, not generation targets.
 MAX_TOKENS_RULES: dict[tuple[str, str | None], int] = {
-    # Cap tarati per Qwen3.5-9B (vLLM reasoning-parser conta il thinking nel cap):
-    # re-run 2026-05-14 sui 4 protocolli troncati. coding 65536→49152 per stare
-    # sotto max-model-len 65536 con l'input; creative 24576→40960 (16K thinking +
-    # ~24K storia, 24576 dava solo ~8K → 20% finish=length).
-    # NB: TEMP BUMP precedente (Kimi skip-retry): da rivedere quando si riprende Kimi.
-    ("coding", None): 49152,  # 16K thinking + ~32K code, sotto max-model-len
+    # Qwen3.5-9B caps include reasoning. Coding allows 49152 output tokens within the 65536 total context; creative output allows 40960 tokens for reasoning and the story. Review these limits when changing target models.
+    ("coding", None): 49152,  # 16K reasoning plus roughly 32K code, within the context limit.
     ("math_reasoning", None): 49152,  # bump 32K→48K (math hard ~26K reasoning)
     ("creative_synthesis", None): 40960,  # 16K thinking + ~24K storia (era 24576 → 20% trunc)
     ("instruction_following", None): 32768,  # confermato pilota: 4/4 stop
     ("world_knowledge", "mcq_letter"): 24576,  # confermato pilota: 2/2 stop
     ("world_knowledge", "llm_judge_factual"): 24576,
     ("world_knowledge", None): 8192,
-    # planning_agentic: BFCL response = tool_call breve; rubric_judge = piano multi-step
-    # 2026-05-15 Kimi K2.6 retry-18: cap precedenti (4096 ST + 20480 PC) saturati nel
-    # thinking → response vuote. K2.6 conta il thinking nel cap (al contrario di K2.5).
+    # BFCL emits short tool calls, while planning rubrics require multi-step plans. Kimi K2.6 includes reasoning in the output cap; previous smaller caps produced empty final responses.
     ("planning_agentic", "tool_call_match"): 8192,  # was 4096; Kimi K2.6 thinking-heavy anche su BFCL
-    ("planning_agentic", "rubric_judge"): 40960,  # was 20480; bump Kimi K2.6 (q_04213 saturava 28672 nel thinking)
+    (
+        "planning_agentic",
+        "rubric_judge",
+    ): 40960,  # was 20480; bump Kimi K2.6 (q_04213 exhausted 28672 tokens in reasoning)
     ("planning_agentic", None): 8192,
 }
 
@@ -81,8 +62,7 @@ def resolve_max_tokens(dimension: str, protocol: str | None) -> int:
     return MAX_TOKENS_RULES.get((dimension, None), 2048)
 
 
-# System prompt usato per le query BFCL (tool_call_match): presenta le funzioni
-# disponibili e impone il formato di output Python-style atteso dall'AST checker.
+# BFCL prompts list available functions and require the Python call format consumed by the AST checker.
 _BFCL_SYSTEM_TEMPLATE = """You are a function-calling assistant. You have access to the following functions:
 
 ```json
@@ -100,13 +80,7 @@ Do not invent functions that aren't listed."""
 
 
 def build_messages_for_row(row: dict) -> list[dict]:
-    """Costruisce `messages` per `OpenRouterClient.chat`.
-
-    Default: messaggio utente unico = `row["query"]`.
-    Caso speciale `evaluation_protocol_id == "tool_call_match"` (BFCL single-turn):
-    aggiunge un system prompt che presenta le `function_specs` dal payload e
-    impone il formato Python-style atteso da `bfcl_grader.extract_calls`.
-    """
+    """Build OpenRouter chat messages, including the BFCL function catalog and response format when applicable."""
     query = row.get("query") or ""
     proto = row.get("evaluation_protocol_id")
     if proto == "tool_call_match":
@@ -258,10 +232,9 @@ async def process_row(
             flush=True,
         )
 
-    # Circuit breaker: il watchdog (task asincrono) setta pbar["aborted"]=True
-    # quando OpenRouter total_usage - baseline supera il cap. Qui propaghiamo cancel.
+    # The asynchronous budget watchdog sets aborted when usage minus baseline exceeds the cap. Propagate cancellation here.
     if pbar.get("aborted"):
-        raise asyncio.CancelledError(f"budget cap exceeded (API usage delta ${pbar.get('api_usage_delta',0):.4f})")
+        raise asyncio.CancelledError(f"budget cap exceeded (API usage delta ${pbar.get('api_usage_delta', 0):.4f})")
 
     return record
 
@@ -345,7 +318,7 @@ async def run(
     output.parent.mkdir(parents=True, exist_ok=True)
     done_ids = load_done_ids(output)
     if done_ids:
-        print(f"[runner] resume: {len(done_ids)} query_id già processati, skip")
+        print(f"[runner] resume: {len(done_ids)} query IDs already processed; skipping")
 
     rows_all = list(load_jsonl(dataset_path))
     rows = filter_rows(
@@ -389,11 +362,11 @@ async def run(
     if endpoint_key:
         client_kwargs["api_key"] = endpoint_key
 
-    # Setup watchdog se max_budget specificato: usa OpenRouter /credits API come ground truth
+    # Use the OpenRouter credits API as the budget watchdog's accounting source.
     watchdog_task: asyncio.Task | None = None
     baseline_usage: float | None = None
     if max_budget and endpoint_url is None:
-        # Solo per OpenRouter (no custom endpoint). Carica chiave + baseline.
+        # For OpenRouter only, load the key and usage baseline.
         from brick_evals.io_utils import openrouter_key
 
         api_key = endpoint_key or openrouter_key()
@@ -449,9 +422,11 @@ async def run(
     p95 = percentile(pbar["latencies"], 95)
     print()
     print(f"[runner] DONE in {elapsed:.1f}s")
-    print(f"  total_calls={pbar['done']}  errors={pbar['errors']} ({pbar['errors']/max(pbar['done'],1)*100:.1f}%)")
-    print(f"  thinking_captured={pbar['thinking']}/{pbar['done']} ({pbar['thinking']/max(pbar['done'],1)*100:.1f}%)")
-    print(f"  cost_total=${pbar['cost_total']:.4f}  avg=${pbar['cost_total']/max(pbar['done'],1):.5f}")
+    print(f"  total_calls={pbar['done']}  errors={pbar['errors']} ({pbar['errors'] / max(pbar['done'], 1) * 100:.1f}%)")
+    print(
+        f"  thinking_captured={pbar['thinking']}/{pbar['done']} ({pbar['thinking'] / max(pbar['done'], 1) * 100:.1f}%)"
+    )
+    print(f"  cost_total=${pbar['cost_total']:.4f}  avg=${pbar['cost_total'] / max(pbar['done'], 1):.5f}")
     print(f"  latency_ms p50={p50}  p95={p95}")
     print(f"  by_dim={dict(pbar['per_dim'])}")
 

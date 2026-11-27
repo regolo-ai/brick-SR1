@@ -15,9 +15,9 @@ import gzip
 import itertools
 import json
 import math
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
-
 
 MODELS = ("qwen", "ds4", "kimi")
 CAPABILITIES = (
@@ -71,10 +71,7 @@ def load_rows(path: Path) -> list[dict]:
 
 def accuracy(rows: list[dict], params: tuple[float, float, float, float, float]) -> tuple[float, dict[str, str]]:
     tau, mu, bias, beta, lam = params
-    pred_by_dim = {
-        dim: predict(dim, tau=tau, mu=mu, bias=bias, beta=beta, lam=lam)
-        for dim in CAPABILITIES
-    }
+    pred_by_dim = {dim: predict(dim, tau=tau, mu=mu, bias=bias, beta=beta, lam=lam) for dim in CAPABILITIES}
     hits = 0
     for row in rows:
         hits += pred_by_dim[row["dimension"]] == row["ground_truth"]
@@ -99,7 +96,7 @@ def main() -> None:
     parser.add_argument(
         "--comparison",
         type=Path,
-        default=Path("external_comparison/predictions/comparison.jsonl.gz"),
+        default=(Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "comparison.jsonl.gz"),
     )
     parser.add_argument("--top-k", type=int, default=12)
     args = parser.parse_args()
@@ -117,7 +114,7 @@ def main() -> None:
     keys = ("tau", "mu", "bias", "beta", "lambda")
     for values in itertools.product(*(grid[key] for key in keys)):
         acc, pred_by_dim = accuracy(rows, values)
-        results.append((acc, dict(zip(keys, values)), pred_by_dim))
+        results.append((acc, dict(zip(keys, values, strict=False)), pred_by_dim))
     results.sort(key=lambda item: item[0], reverse=True)
 
     print(f"rows: {len(rows)}")

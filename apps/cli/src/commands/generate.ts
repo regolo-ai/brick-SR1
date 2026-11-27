@@ -2,6 +2,7 @@ import { Args, Command, Flags } from '@oclif/core';
 import { chatCompletion } from '../lib/client/openai.js';
 import { loadConfig } from '../lib/config/load.js';
 import { localBaseUrl } from '../lib/net/local.js';
+import { requireExactlyOneRunning } from '../lib/profiles.js';
 
 export default class Generate extends Command {
   static description = 'One-shot completion against the router (prints assistant content to stdout)';
@@ -11,11 +12,12 @@ export default class Generate extends Command {
     model: Flags.string({ default: 'brick' }),
     system: Flags.string(),
     'max-tokens': Flags.integer({ default: 512 }),
-    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'auto'], description: 'force brick-thinking mode (off|low|medium|high|auto)' }),
+    thinking: Flags.string({ options: ['off', 'low', 'medium', 'high', 'xhigh', 'max'], description: 'request effort (off|low|medium|high|xhigh|max)' }),
   };
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Generate);
-    const cfg = await loadConfig(flags.profile);
+    const running = await requireExactlyOneRunning();
+    const cfg = await loadConfig(running);
     const baseUrl = localBaseUrl(cfg.server_port);
     const messages = [];
     if (flags.system) messages.push({ role: 'system' as const, content: flags.system });

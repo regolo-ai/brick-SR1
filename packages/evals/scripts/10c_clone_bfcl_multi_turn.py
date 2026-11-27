@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""10c - Materializza i 165 task BFCL multi-turn (scripted, no LLM user-sim).
-
-Sorgente: file JSON Lines già presenti nel clone `external/bfcl/.../bfcl_eval/data/`
-(scaricati con `git sparse-checkout` da gorilla). Per ogni task unisce il file
-`BFCL_v4_multi_turn_<cat>.json` (question + env config) con il rispettivo
-`possible_answer/BFCL_v4_multi_turn_<cat>.json` (ground_truth) sul campo `id`.
-
-Strato di stratificazione: 50 base + 40 miss_func + 40 miss_param + 35 long_context = 165.
-Composite (in `unused_datasets/`) escluso perché deprecato in BFCL v4.
-
-Output: `data/raw/bfcl_v4_multi_turn.jsonl` (165 righe) + entry in lockfile.
-"""
+"""Materialize 165 scripted BFCL multi-turn tasks from the pinned source checkout. Join question/config files with possible_answer by id: 50 base, 40 miss_func, 40 miss_param and 35 long_context. Exclude deprecated composite tasks; write JSONL and revision metadata."""
 
 from __future__ import annotations
 

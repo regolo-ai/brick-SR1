@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""10b - Download BFCL via list_repo_files (load_dataset non funziona).
-
-Stratifica 500 task tra categorie {simple, multiple, parallel, parallel_multiple, irrelevance}.
-Output: data/raw/bfcl_v4.jsonl
-"""
+"""Download BFCL repository files directly and stratify 500 tasks across simple, multiple, parallel, parallel_multiple and irrelevance categories. Write data/raw/bfcl_v4.jsonl."""
 
 from __future__ import annotations
 
@@ -20,8 +16,7 @@ REPO = "gorilla-llm/Berkeley-Function-Calling-Leaderboard"
 TARGET_N = 500
 SEED = 42
 
-# Categorie BFCL: questions file + (optional) possible_answer file with ground_truth
-# irrelevance: by design senza possible_answer (categoria "non chiamare nessun tool", gt=[] è corretto)
+# BFCL question files have optional ground-truth files. Irrelevance deliberately has no possible_answer: an empty call list is correct.
 CATEGORIES = {
     "simple": {"questions": "BFCL_v3_simple.json", "answers": "possible_answer/BFCL_v3_simple.json"},
     "multiple": {"questions": "BFCL_v3_multiple.json", "answers": "possible_answer/BFCL_v3_multiple.json"},

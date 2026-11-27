@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
-"""Aggrega predizioni 3 router (RouteLLM, FrugalGPT, Cascade Routing) e pusha
-come subset `predictions` su HF massaindustries/dataset-A-routing.
+"""Aggregate RouteLLM, FrugalGPT and Cascade predictions into the Hub predictions subset. Each query includes selected models, call counts and cascade costs/probabilities."""
 
-Output schema (1 riga per query_id):
-- query_id, dimension
-- routellm_binary_selected, routellm_binary_calls
-- routellm_tournament_selected, routellm_tournament_calls
-- frugal_selected, frugal_calls, frugal_cumulative_cost_usd
-- cascade_selected, cascade_calls, cascade_p_correct_*
-"""
 from __future__ import annotations
 
 import json
@@ -18,11 +10,11 @@ from pathlib import Path
 
 import pandas as pd
 
-if Path("/root/.hf_token_regolo").exists():
-    os.environ["HF_TOKEN"] = Path("/root/.hf_token_regolo").read_text().strip()
+if (Path.home() / ".hf_token_regolo").exists():
+    os.environ["HF_TOKEN"] = (Path.home() / ".hf_token_regolo").read_text().strip()
 
 REPO = "massaindustries/dataset-A-routing"
-PREDICTIONS_DIR = Path("/root/forkGO/external_comparison/predictions")
+PREDICTIONS_DIR = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output"))
 OUT_PARQUET = PREDICTIONS_DIR / "merged.parquet"
 OUT_JSONL = PREDICTIONS_DIR / "merged.jsonl.gz"
 
@@ -60,12 +52,12 @@ def main():
     if "frugal_scores" in frugal.columns:
         for m in ("qwen", "ds4", "kimi"):
             frugal_cols[f"frugal_score_{m}"] = frugal["frugal_scores"].apply(
-                lambda d: d.get(m) if isinstance(d, dict) else None
+                lambda d, m=m: d.get(m) if isinstance(d, dict) else None
             )
     if "cascade_p_correct" in cascade.columns:
         for m in ("qwen", "ds4", "kimi"):
             cascade_cols[f"cascade_p_correct_{m}"] = cascade["cascade_p_correct"].apply(
-                lambda d: d.get(m) if isinstance(d, dict) else None
+                lambda d, m=m: d.get(m) if isinstance(d, dict) else None
             )
         cascade_cols = cascade_cols.drop(columns=["cascade_p_correct", "cascade_utility"], errors="ignore")
 
@@ -83,6 +75,7 @@ def main():
 
     if "--push" in sys.argv:
         from huggingface_hub import HfApi
+
         api = HfApi()
         api.upload_file(
             path_or_fileobj=str(OUT_JSONL),

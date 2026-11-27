@@ -1,7 +1,4 @@
-"""Regolo OpenAI-compatible client per generazione synthetic + LLM-as-judge.
-
-Modello: qwen3.5-122b (fuori-pool rispetto a {qwen3.5-9b, deepseek-v4-flash, kimi2.6}).
-"""
+"""OpenAI-compatible Regolo client for synthetic generation and external judging."""
 
 from __future__ import annotations
 
@@ -95,7 +92,7 @@ class RegoloClient:
         msgs.append({"role": "user", "content": prompt})
         resp = self.chat(msgs, temperature=temperature, max_tokens=max_tokens, thinking_disabled=thinking_disabled)
         msg = resp["choices"][0]["message"]
-        # Fallback: se content e' null/empty, usa reasoning_content (thinking-mode response)
+        # Fall back to reasoning_content when content is empty in a thinking-mode response.
         return (msg.get("content") or msg.get("reasoning_content") or "").strip()
 
     def list_models(self) -> list[dict]:

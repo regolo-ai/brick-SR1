@@ -1,14 +1,4 @@
-"""IFEval grader wrapper sopra Google instruction_following_eval + IFBench (Allen AI).
-
-Il dataset finale mescola due famiglie di constraint check:
-- IFEval classico (google-research/instruction_following_eval): es. "change_case:english_capital",
-  "length_constraints:number_words".
-- IFBench (allenai/IFBench): es. "count:keywords_multiple", "count:conjunctions",
-  "words:keywords_specific_position".
-
-Il grader carica entrambi i registry e li unisce (IFBench ha precedenza in caso di
-conflitto, perchA il set A8 piA9 recente).
-"""
+"""Grade instruction constraints using Google IFEval and Allen AI IFBench registries. Merge both registries, giving IFBench precedence on duplicate identifiers. Return correctness and per-instruction metadata."""
 
 from __future__ import annotations
 
@@ -16,8 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Path al clone se non installato via pip
-_EXT = Path(__file__).resolve().parents[3] / "external"
+import nltk
+
+nltk.data.path.insert(0, str(Path(__file__).resolve().parents[3] / "external" / "nltk_data"))
+
+# Load the vendored registries directly.
+_EXT = Path(__file__).resolve().parents[3] / "vendor"
 if _EXT.exists():
     _ext_str = str(_EXT)
     if _ext_str not in sys.path:
@@ -49,12 +43,7 @@ def grade_ifeval(
     instruction_id_list: list[str],
     kwargs_list: list[dict[str, Any]] | None,
 ) -> tuple[bool | None, dict[str, Any]]:
-    """Restituisce (correct, meta).
-
-    correct = True iff TUTTI gli instruction check passano.
-    Errori per singolo check -> ok=False con error field. Se nessun check valido
-    o lib mancante -> None.
-    """
+    """Return correctness and metadata. All constraints must pass; failed checks include error metadata. Missing graders or valid checks yield None."""
     if not AVAILABLE:
         return None, {"reason": "no instruction registry available (ifeval+ifbench missing)"}
     if not instruction_id_list:
@@ -66,8 +55,7 @@ def grade_ifeval(
     for idx, inst_id in enumerate(instruction_id_list):
         kwargs = kwargs_list[idx] if idx < len(kwargs_list) else {}
         kwargs = kwargs or {}
-        # IFBench mette tutti i kwargs in un unico dict con i non usati a None.
-        # Le classi non li accettano tutti -> filtra i None.
+        # IFBench supplies all keyword arguments with unused values set to None. Remove those values before calling constraint classes.
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         try:
             cls = _REGISTRY.get(inst_id)

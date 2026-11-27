@@ -1,7 +1,6 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import { Box,Text } from 'ink';
 import Spinner from 'ink-spinner';
-import type { Message, AssistantMessage } from './types.js';
+import type { AssistantMessage,Message } from './types.js';
 
 const accent = '#00d4aa';
 

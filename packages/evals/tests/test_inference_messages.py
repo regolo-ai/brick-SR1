@@ -10,7 +10,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def runner():
-    """Carica 100_run_inference.py come modulo (nome inizia con cifra → no import)."""
+    """Load the numerically named inference script as a module."""
     spec = importlib.util.spec_from_file_location(
         "run100", Path(__file__).resolve().parents[1] / "scripts" / "100_run_inference.py"
     )
@@ -42,13 +42,13 @@ def test_build_messages_bfcl_includes_system_with_functions(runner):
     assert len(msgs) == 2
     assert msgs[0]["role"] == "system"
     assert "get_weather" in msgs[0]["content"]
-    # Anche il formato di output deve essere documentato nel system prompt
+    # The system prompt must also document the required output format.
     assert "function_name(arg1=value1" in msgs[0]["content"]
     assert msgs[1] == {"role": "user", "content": "Get the weather in Paris."}
 
 
 def test_build_messages_bfcl_irrelevance_format_documented(runner):
-    """L'output `[]` per irrelevance deve essere esplicitamente menzionato."""
+    """The irrelevance response format must explicitly mention an empty list."""
     row = {
         "query": "Tell me a joke.",
         "evaluation_protocol_id": "tool_call_match",
@@ -64,7 +64,7 @@ def test_build_messages_bfcl_irrelevance_format_documented(runner):
 
 
 def test_build_messages_bfcl_missing_payload_fallback(runner):
-    """Se manca function_specs, il system viene comunque costruito (lista vuota)."""
+    """Missing function specifications still produce a system prompt with an empty catalog."""
     row = {
         "query": "Anything",
         "evaluation_protocol_id": "tool_call_match",
@@ -72,7 +72,7 @@ def test_build_messages_bfcl_missing_payload_fallback(runner):
     }
     msgs = runner.build_messages_for_row(row)
     assert msgs[0]["role"] == "system"
-    # JSON [] presente nel system
+    # The system prompt includes JSON []
     assert "[]" in msgs[0]["content"]
 
 

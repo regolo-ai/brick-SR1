@@ -20,7 +20,7 @@ SEED = 42
 
 
 def clone_repo(target: Path) -> str | None:
-    """Clone (o pull) repo. Ritorna git commit hash."""
+    """Clone or update the source repository and return its commit hash."""
     if target.exists() and (target / ".git").exists():
         subprocess.run(["git", "-C", str(target), "fetch", "--tags"], check=False, capture_output=True)
     else:
@@ -38,7 +38,7 @@ def clone_repo(target: Path) -> str | None:
 
 
 def extract_tasks(repo_root: Path, domain: str) -> list[dict]:
-    """Importa tau_bench.envs.<domain>.tasks come Python module e materializza tasks."""
+    """Import domain-specific tau_bench task modules and materialize their tasks."""
     sys.path.insert(0, str(repo_root))
     try:
         try:
@@ -66,7 +66,7 @@ def extract_tasks(repo_root: Path, domain: str) -> list[dict]:
                 d = {"raw": str(t)}
             d["_domain"] = domain
             d["_index"] = i
-            # Estrai 'instruction' se presente
+            # Extract instruction when present.
             if "user_id" in d and "instruction" in d:
                 pass
             elif "instruction" not in d and "instruction_text" in d:

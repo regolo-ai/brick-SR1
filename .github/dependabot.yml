@@ -46,46 +46,11 @@ updates:
       gomod-router:
         patterns: ["*"]
 
-  # Rust crates: candle / ml / nlp bindings
-  - package-ecosystem: cargo
-    directory: "/apps/router/candle-binding"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-candle:
-        patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: "/apps/router/ml-binding"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-ml:
-        patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: "/apps/router/nlp-binding"
-    target-branch: "dev"
-    open-pull-requests-limit: 1
-    schedule:
-      interval: weekly
-    labels: ["dependencies", "rust"]
-    groups:
-      cargo-nlp:
-        patterns: ["*"]
-
-  # Python: complexity classifier server
+  # Local SystemOne inference requirements
   - package-ecosystem: pip
-    directory: "/deploy/addons/brick-complexity-server"
+    directory: "/apps/router/systemone"
     target-branch: "dev"
     open-pull-requests-limit: 1
     schedule:
       interval: weekly
     labels: ["dependencies", "python"]
-    groups:
-      pip-complexity-server:
-        patterns: ["*"]

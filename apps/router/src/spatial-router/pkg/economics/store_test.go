@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-func TestStore_RecordUsage_Accumulates(t *testing.T) {
+func TestStore_RecordCachedUsage_Accumulates(t *testing.T) {
 	s := NewStore()
 
-	s.RecordUsage("claude-haiku", 100, 50)
-	s.RecordUsage("claude-haiku", 200, 75)
-	s.RecordUsage("claude-haiku", 10, 5)
+	s.RecordCachedUsage("claude-haiku", 100, 0, 0, 50)
+	s.RecordCachedUsage("claude-haiku", 200, 0, 0, 75)
+	s.RecordCachedUsage("claude-haiku", 10, 0, 0, 5)
 
 	snap := s.Snapshot()
 	if len(snap) != 1 {
@@ -31,12 +31,12 @@ func TestStore_RecordUsage_Accumulates(t *testing.T) {
 	}
 }
 
-func TestStore_RecordUsage_MultipleModelsSorted(t *testing.T) {
+func TestStore_RecordCachedUsage_MultipleModelsSorted(t *testing.T) {
 	s := NewStore()
 
-	s.RecordUsage("claude-sonnet", 100, 50)
-	s.RecordUsage("claude-haiku", 20, 10)
-	s.RecordUsage("claude-opus", 300, 150)
+	s.RecordCachedUsage("claude-sonnet", 100, 0, 0, 50)
+	s.RecordCachedUsage("claude-haiku", 20, 0, 0, 10)
+	s.RecordCachedUsage("claude-opus", 300, 0, 0, 150)
 
 	snap := s.Snapshot()
 	if len(snap) != 3 {
@@ -53,9 +53,9 @@ func TestStore_RecordUsage_MultipleModelsSorted(t *testing.T) {
 
 func TestStore_SaveAndLoadSnapshot_RoundTrip(t *testing.T) {
 	s := NewStore()
-	s.RecordUsage("claude-haiku", 100, 50)
-	s.RecordUsage("claude-sonnet", 300, 150)
-	s.RecordUsage("claude-haiku", 25, 10)
+	s.RecordCachedUsage("claude-haiku", 100, 0, 0, 50)
+	s.RecordCachedUsage("claude-sonnet", 300, 0, 0, 150)
+	s.RecordCachedUsage("claude-haiku", 25, 0, 0, 10)
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "usage-snapshot.json")
@@ -107,7 +107,7 @@ func TestStore_LoadSnapshot_MalformedFileIsError(t *testing.T) {
 	}
 }
 
-func TestStore_RecordUsage_ConcurrentSameModel(t *testing.T) {
+func TestStore_RecordCachedUsage_ConcurrentSameModel(t *testing.T) {
 	s := NewStore()
 
 	const goroutines = 50
@@ -119,7 +119,7 @@ func TestStore_RecordUsage_ConcurrentSameModel(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			s.RecordUsage("claude-haiku", perGoroutineInput, perGoroutineOutput)
+			s.RecordCachedUsage("claude-haiku", perGoroutineInput, 0, 0, perGoroutineOutput)
 		}()
 	}
 	wg.Wait()

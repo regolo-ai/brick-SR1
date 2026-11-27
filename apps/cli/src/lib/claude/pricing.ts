@@ -1,15 +1,7 @@
-// Anthropic API list prices for the Brick Claude pool, used only to weight the
-// relative-savings estimate shown in `brick claude status`. NOT a billing source.
-//
-// USD per 1M tokens (input, output), verified June 2026.
-// Source: https://platform.claude.com/docs/en/about-claude/pricing
-//
-// IMPORTANT: the Prometheus metric brick_cc_requests_total only exposes request
-// COUNTS per model, not real token usage (the proxy streams responses through
-// without parsing `usage`). So the savings figure is a RELATIVE estimate: it
-// assumes a comparable average token volume per request across models and weighs
-// each request by a blended per-request price. It is deliberately labelled as an
-// estimate in the UI and must not be presented as an exact dollar amount.
+// Relative request-mix estimate for the dashboard when token-based economics
+// are unavailable. These historical price weights preserve the existing
+// estimate; profile pricing and measured token usage drive actual economics.
+// Comparable token volume per request is assumed, so this is not a bill.
 
 export type Price = { in: number; out: number };
 

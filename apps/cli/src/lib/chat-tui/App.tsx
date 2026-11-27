@@ -1,17 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Static, Text, useApp, useInput, useStdout } from 'ink';
-import { MessageView } from './MessageView.js';
-import { InputBox } from './InputBox.js';
-import { ThinkingMenu } from './ThinkingMenu.js';
-import { SlashPopup, SLASH_COMMANDS, filterCommands } from './SlashPopup.js';
-import { Welcome } from './Welcome.js';
-import { useChat } from './useChat.js';
-import { useBabl } from './useBabl.js';
+import { Box,Static,Text,useApp,useInput,useStdout } from 'ink';
+import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
+import { readApiKey,type ThinkingMode } from '../client/openai.js';
 import { BablView } from './BablView.js';
-import { readApiKey, type ThinkingMode } from '../client/openai.js';
+import { InputBox } from './InputBox.js';
+import { MessageView } from './MessageView.js';
+import { SLASH_COMMANDS,SlashPopup,filterCommands } from './SlashPopup.js';
+import { ThinkingMenu } from './ThinkingMenu.js';
+import { Welcome } from './Welcome.js';
 import type { Message } from './types.js';
-
-const accent = '#00d4aa';
+import { useBabl } from './useBabl.js';
+import { useChat } from './useChat.js';
 const MODERATOR_MODEL = 'qwen3.5-122b';
 const REGOLO_BASE_URL = 'https://api.regolo.ai';
 const BABL_DEFAULT_TURNS = 3;

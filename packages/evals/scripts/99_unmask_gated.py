@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""99 - Unmask gated (GAIA + GPQA): per chi ha access, ri-popola query mascherate.
-
-Prerequisiti:
-- Account HF con access accepted a `gaia-benchmark/GAIA` e `Idavidrein/gpqa`
-- HF token configurato
-
-Input: data/final/evaluation_parameters_full.jsonl (locale, contiene gia' query non-masked).
-Se manca, ricostruisce dal masked variant + ri-download.
-"""
+"""Restore gated GAIA and GPQA queries for authorized users. Requires accepted dataset access and a configured Hub token; reconstruct missing local data from the masked variant and authorized downloads."""
 
 from __future__ import annotations
 
@@ -29,7 +21,7 @@ def main():
         gated = [r for r in rows if r["gated"]]
         masked = [r for r in gated if r["query"] == "<masked>"]
         if not masked:
-            print(f"[OK] tutte le {len(gated)} righe gated sono già unmasked.")
+            print(f"[OK] all {len(gated)} gated rows are already unmasked.")
             return 0
 
     print("[INFO] full variant non disponibile o ha mascheramento residuo.")

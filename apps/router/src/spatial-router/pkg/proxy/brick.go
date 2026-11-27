@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
@@ -20,6 +21,7 @@ import (
 // It detects modality, preprocesses content, and either forwards directly
 // to a specific model or routes through the semantic pipeline.
 func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
+	acceptedAt := time.Now().UTC()
 	// Read body with size limit to prevent OOM from oversized payloads
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodySize))
 	if err != nil {
@@ -53,7 +55,14 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "router config not loaded")
 		return
 	}
+	responseModel := "brick"
+	if req.Model != "" && req.Model == cfg.AutoModelName {
+		responseModel = req.Model
+	}
 
+	if !cfg.Brick.ModelRoutingEnabled() && r.Header.Get("x-selected-model") == "" {
+		r.Header.Set("x-selected-model", cfg.Brick.EffectiveFixedModel(cfg.DefaultModel))
+	}
 	// Check for x-selected-model header → bypass routing, forward directly
 	if selectedModel := r.Header.Get("x-selected-model"); selectedModel != "" {
 		// Validate that the model exists in the backend configuration
@@ -68,31 +77,51 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		logging.Infof("Brick: x-selected-model=%s, bypassing routing", selectedModel)
 		rewrittenBody := rewriteModelInBody(body, selectedModel)
-		clientKey := extractClientAPIKey(r)
+		clientKey, authErr := s.resolveClientAPIKey(r)
+		if authErr != nil {
+			writeError(w, http.StatusUnauthorized, authErr.Error())
+			return
+		}
 		if clientKey == "" {
-			writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+			writeError(w, http.StatusUnauthorized, missingAPIKeyMessage(s.cfg))
 			return
 		}
 		result := s.buildForwardResultForModel(rewrittenBody, cfg, selectedModel, req.Stream, clientKey)
-		metrics.BrickCCRequests.WithLabelValues("native", selectedModel).Inc()
+		result.AcceptedAt = acceptedAt
+		result.RoutingSource = "native"
+		if writeDirectRoutingResult(w, result) {
+			return
+		}
+		metrics.BrickRequests.WithLabelValues("native", selectedModel).Inc()
 		w.Header().Set(headers.VSRSelectedModel, selectedModel)
-		s.forwardToBackend(w, r, result, "brick")
+		s.forwardToBackend(w, r, result, responseModel)
 		return
 	}
 
-	// Validate model == "brick"
-	if req.Model != "brick" {
+	// Accept the configured deployment name and the legacy Brick alias.
+	autoModel := cfg.AutoModelName
+	if autoModel == "" {
+		autoModel = "brick"
+	}
+	if req.Model != "brick" && req.Model != autoModel {
 		writeError(w, http.StatusBadRequest,
-			fmt.Sprintf("Model '%s' is not supported. Use 'brick' as the model name.", req.Model))
+			fmt.Sprintf("Model '%s' is not supported. Use '%s' as the model name.", req.Model, autoModel))
 		return
 	}
 
-	// API key must come from the client's Authorization header
-	apiKey := extractClientAPIKey(r)
-	if apiKey == "" {
-		writeError(w, http.StatusUnauthorized, "missing API key: provide Authorization Bearer token")
+	// Resolve the request credential from the configured proxy boundary or from
+	// Authorization for direct deployments.
+	apiKey, authErr := s.resolveClientAPIKey(r)
+	if authErr != nil {
+		writeError(w, http.StatusUnauthorized, authErr.Error())
 		return
 	}
+	if apiKey == "" {
+		writeError(w, http.StatusUnauthorized, missingAPIKeyMessage(s.cfg))
+		return
+	}
+
+	r = r.WithContext(config.WithClientAPIKey(r.Context(), apiKey))
 
 	// Capability-aware native passthrough: when the request carries raw image/
 	// audio AND at least one configured model can consume that modality natively
@@ -104,37 +133,49 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			brickRouter, brr := s.getBrickRouter(cfg)
 			if brr != nil {
 				logging.Errorf("Brick2 router init error: %v", brr)
-				writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", brr))
+				writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("brick router error: %v", brr))
 				return
 			}
 			routingText := extractOpenAIRoutingText(body, cfg)
 			if strings.TrimSpace(routingText) == "" {
 				routingText = multimodalRoutingPlaceholder(modality)
 			}
-			allow := intersectAllow(plan.allow, brickFixedModelAllow(cfg))
-			route, rerr := brickRouter.RouteWithCandidates(r.Context(), routingText, allow)
+			allow := plan.allow
+			routingStarted := time.Now()
+			options, oerr := requestRoutingOptions(r, body, allow)
+			if oerr != nil {
+				writeError(w, http.StatusBadRequest, oerr.Error())
+				return
+			}
+			options.KeywordText = keywordText(extractOpenAILastUserText(body))
+			route, rerr := brickRouter.RouteWithOptions(r.Context(), routingText, options)
 			if rerr != nil {
-				// Eligible set unexpectedly empty/failed: degrade gracefully to
-				// the OCR/STT preprocessing path rather than erroring the request.
-				logging.Warnf("Brick multimodal passthrough routing failed, falling back to preprocessing: %v", rerr)
+				// Inference errors never reconstruct a different routing signal.
+				writeRoutingError(w, rerr, "SystemOne routing failed")
+				return
 			} else {
 				forwardBody := rewriteModelInBody(body, route.Model)
-				effortStr := ""
-				if cfg.SkillRouter.DynamicEffort {
-					level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
-					forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
-				}
+				forwardBody = adaptClientReasoning(forwardBody, cfg, route.Model)
+				forwardBody = applyKnobEffort(forwardBody, cfg, route.Model, route.Knob)
 				forwardBody = adaptForRegoloAPI(forwardBody)
+				effortStr := requestEffort(forwardBody)
 				result := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
-				recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
+				latency := time.Since(routingStarted).Milliseconds()
+				result.AcceptedAt, result.Route, result.RoutingLatencyMS = acceptedAt, route, &latency
+				result.RoutingSource = "routed"
+				result.ReasoningMode = effortStr
+				if writeDirectRoutingResult(w, result) {
+					return
+				}
+				metrics.BrickRequests.WithLabelValues("routed", route.Model).Inc()
 				w.Header().Set(headers.VSRSelectedModel, route.Model)
 				if effortStr != "" {
 					w.Header().Set("x-brick-effort", effortStr)
 				}
 				w.Header().Set("x-brick-route-reason", "multimodal_passthrough")
-				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s image=%v audio=%v",
-					route.Model, route.Reason, modality.HasImage, modality.HasAudio)
-				s.forwardToBackend(w, r, result, "brick")
+				logging.Infof("Brick2: multimodal passthrough model=%s reason=%s rule=%s image=%v audio=%v",
+					route.Model, route.Reason, route.MatchedRule, modality.HasImage, modality.HasAudio)
+				s.forwardToBackend(w, r, result, responseModel)
 				return
 			}
 		}
@@ -167,18 +208,25 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 			forwardBody = rewriteModelInBody(preprocessResult.RewrittenBody, preprocessResult.DirectModel)
 		}
 
+		key, keyErr := cfg.ResolveUpstreamAPIKey(preprocessResult.DirectModel, apiKey)
+		if keyErr != nil {
+			writeDirectRoutingResult(w, missingProviderCredentialResult(preprocessResult.DirectModel))
+			return
+		}
 		result := &RoutingResult{
 			ForwardBody:     forwardBody,
 			ForwardEndpoint: endpoint,
 			ForwardPath:     extractPath(preprocessResult.DirectEndpoint),
 			ForwardHeaders: map[string]string{
-				"Authorization": "Bearer " + apiKey,
+				"Authorization": "Bearer " + key,
 			},
 			IsStreaming: req.Stream,
 			Model:       preprocessResult.DirectModel,
 		}
+		result.AcceptedAt = acceptedAt
+		result.RoutingSource = "native"
 		w.Header().Set(headers.VSRSelectedModel, preprocessResult.DirectModel)
-		s.forwardToBackend(w, r, result, "brick")
+		s.forwardToBackend(w, r, result, responseModel)
 		return
 	}
 
@@ -186,45 +234,48 @@ func (s *Server) handleBrickRequest(w http.ResponseWriter, r *http.Request) {
 	brickRouter, err := s.getBrickRouter(cfg)
 	if err != nil {
 		logging.Errorf("Brick2 router init error: %v", err)
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("brick router error: %v", err))
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("brick router error: %v", err))
 		return
 	}
 
 	routingText := extractOpenAIRoutingText(preprocessResult.RewrittenBody, cfg)
-	route, err := brickRouter.RouteWithCandidates(r.Context(), routingText, brickFixedModelAllow(cfg))
+	routingStarted := time.Now()
+	options, err := requestRoutingOptions(r, body, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	options.KeywordText = keywordText(extractOpenAILastUserText(body))
+	route, err := brickRouter.RouteWithOptions(r.Context(), routingText, options)
 	if err != nil {
 		logging.Errorf("Brick2 routing error: %v", err)
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("routing error: %v", err))
+		writeRoutingError(w, err, "SystemOne routing failed")
 		return
 	}
 
-	forwardBody := rewriteModelInBody(preprocessResult.RewrittenBody, route.Model)
-	effortStr := ""
-	if cfg.SkillRouter.DynamicEffort {
-		level := autonomousEffortLevel(route.TauQuery, underCapacityForModel(route, route.Model), routingPreferenceOf(cfg))
-		forwardBody, effortStr = applyBrickReasoningLevel(forwardBody, cfg, route.Model, level)
-	}
+	selectedModel := route.Model
+	forwardBody := adaptClientReasoning(rewriteModelInBody(preprocessResult.RewrittenBody, selectedModel), cfg, selectedModel)
+	forwardBody = applyKnobEffort(forwardBody, cfg, selectedModel, route.Knob)
+	effortStr := requestEffort(forwardBody)
 	forwardBody = adaptForRegoloAPI(forwardBody)
 
-	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, route.Model, req.Stream, apiKey)
-	recordBrickOpenAIRoute(cfg, route, route.Model, effortStr)
-
-	keyPrefix := apiKey
-	if len(keyPrefix) > 8 {
-		keyPrefix = keyPrefix[:8] + "..."
+	regoloResult := s.buildForwardResultForModel(forwardBody, cfg, selectedModel, req.Stream, apiKey)
+	latency := time.Since(routingStarted).Milliseconds()
+	regoloResult.AcceptedAt, regoloResult.Route, regoloResult.RoutingLatencyMS = acceptedAt, route, &latency
+	regoloResult.RoutingSource, regoloResult.ReasoningMode = "routed", effortStr
+	if writeDirectRoutingResult(w, regoloResult) {
+		return
 	}
-	w.Header().Set(headers.VSRSelectedModel, route.Model)
-	w.Header().Set("x-brick-route-reason", route.Reason)
+	metrics.BrickRequests.WithLabelValues("routed", selectedModel).Inc()
+
+	w.Header().Set(headers.VSRSelectedModel, selectedModel)
+	w.Header().Set("x-brick-route-reason", routeReasonHeader(route))
 	if effortStr != "" {
 		w.Header().Set("x-brick-effort", effortStr)
 	}
-	if route.MatchedKeyword != "" {
-		w.Header().Set("x-brick-keyword-rule", route.MatchedKeyword)
-	}
-	logging.Infof("Brick2: routed to model=%s reason=%s complexity=%s confidence=%.3f tau=%.3f effort=%s auth=%s",
-		route.Model, route.Reason, route.ComplexityLabel, route.ComplexityConfidence, route.TauQuery, effortStr, keyPrefix)
+	logging.Infof("Brick2 routed model=%s knob=%.2f reason=%s rule=%s", selectedModel, route.Knob, route.Reason, route.MatchedRule)
 
-	s.forwardToBackend(w, r, regoloResult, "brick")
+	s.forwardToBackend(w, r, regoloResult, responseModel)
 }
 
 // multimodalPlan is the decision of whether a request can be served by native
@@ -276,50 +327,40 @@ func multimodalRoutingPlaceholder(m multimodal.Modality) string {
 	}
 }
 
-func brickFixedModelAllow(cfg *config.RouterConfig) map[string]bool {
-	if cfg == nil || cfg.Brick.ModelRoutingEnabled() {
-		return nil
+// getBrickRouter lazily builds the router and retries after failures with
+// exponential backoff instead of caching the first error forever. A worker that
+// died mid-run is reloaded by the router's own classify closure; this path only
+// covers construction/initialization failures.
+func (s *Server) getBrickRouter(cfg *config.RouterConfig) (brickModelRouter, error) {
+	s.routerMu.Lock()
+	defer s.routerMu.Unlock()
+	if s.brickRouter != nil {
+		return s.brickRouter, nil
 	}
-	model := cfg.Brick.EffectiveFixedModel(cfg.BackendModels.DefaultModel)
-	return map[string]bool{model: true}
-}
-
-func intersectAllow(a, b map[string]bool) map[string]bool {
-	if a == nil {
-		return b
+	if s.brickRouterErr != nil && time.Now().Before(s.brickRouterRetryAt) {
+		return nil, s.brickRouterErr
 	}
-	if b == nil {
-		return a
-	}
-	out := make(map[string]bool)
-	for model, ok := range a {
-		if ok && b[model] {
-			out[model] = true
+	router, err := brickrouting.New(cfg)
+	if err != nil {
+		backoff := s.brickRouterBackoff
+		switch {
+		case backoff <= 0:
+			backoff = time.Second
+		case backoff < 30*time.Second:
+			backoff *= 2
 		}
+		if backoff > 30*time.Second {
+			backoff = 30 * time.Second
+		}
+		s.brickRouterErr = err
+		s.brickRouterBackoff = backoff
+		s.brickRouterRetryAt = time.Now().Add(backoff)
+		return nil, err
 	}
-	return out
-}
-
-func recordBrickOpenAIRoute(cfg *config.RouterConfig, route *brickrouting.Result, selectedModel, effortStr string) {
-	if cfg == nil || route == nil || selectedModel == "" {
-		return
-	}
-	label := route.ComplexityLabel
-	if label == "" {
-		label = "medium"
-	}
-	metrics.BrickCCRequests.WithLabelValues(label, selectedModel).Inc()
-	if cfg.SkillRouter.DynamicEffort && effortStr != "" {
-		metrics.BrickCCEffort.WithLabelValues(selectedModel, effortStr).Inc()
-		metrics.BrickCCRouting.WithLabelValues(label, effortStr, selectedModel).Inc()
-	}
-}
-
-func (s *Server) getBrickRouter(cfg *config.RouterConfig) (*brickrouting.Router, error) {
-	s.brickRouterOnce.Do(func() {
-		s.brickRouter, s.brickRouterErr = brickrouting.New(cfg)
-	})
-	return s.brickRouter, s.brickRouterErr
+	s.brickRouter = router
+	s.brickRouterErr = nil
+	s.brickRouterBackoff = 0
+	return router, nil
 }
 
 func extractOpenAIRoutingText(body []byte, cfg *config.RouterConfig) string {
@@ -337,6 +378,18 @@ func extractOpenAIText(body []byte) string {
 		return ""
 	}
 	return multimodal.ExtractText(raw.Messages)
+}
+
+// extractOpenAILastUserText returns only the latest user message for strict
+// keyword rules; system prompts and earlier turns never force a model.
+func extractOpenAILastUserText(body []byte) string {
+	var raw struct {
+		Messages []interface{} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+	return multimodal.ExtractLastUserText(raw.Messages)
 }
 
 type openAIMessageForRouting struct {
@@ -414,18 +467,22 @@ func openAIContentText(content interface{}) string {
 	}
 }
 
-// buildRegoloForwardResultWithKey creates a RoutingResult using the client-provided API key.
+// buildRegoloForwardResult creates a RoutingResult using the current user credential.
 // Legacy: forwards to the global "regoloai" provider. Kept as fallback when the
 // per-model BaseURL is not configured.
-func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.RouterConfig, isStreaming bool, apiKey string, modelName string) *RoutingResult {
+func (s *Server) buildRegoloForwardResult(body []byte, cfg *config.RouterConfig, isStreaming bool, modelName, clientKey string) *RoutingResult {
 	baseURL, _ := getRegoloProviderInfo(cfg)
+	key, err := cfg.ResolveUpstreamAPIKey(modelName, clientKey)
+	if err != nil {
+		return missingProviderCredentialResult(modelName)
+	}
 
 	return &RoutingResult{
 		ForwardBody:     body,
 		ForwardEndpoint: extractHost(baseURL),
 		ForwardPath:     extractPath(baseURL) + "/chat/completions",
 		ForwardHeaders: map[string]string{
-			"Authorization": "Bearer " + apiKey,
+			"Authorization": "Bearer " + key,
 		},
 		IsStreaming: isStreaming,
 		Model:       modelName,
@@ -435,29 +492,108 @@ func (s *Server) buildRegoloForwardResultWithKey(body []byte, cfg *config.Router
 // buildForwardResultForModel returns the forward target for the selected model.
 // Lookup order:
 //  1. If the model is in cfg.SkillRouter.Models and has BaseURL set,
-//     forward there with the per-model resolved API key (env/file/literal,
-//     falling back to the client key).
-//  2. Otherwise fall back to the legacy regoloai forward.
+//     forward there with the client key for Regolo or the configured provider key.
+//  2. Otherwise use the model_config provider profile and its authentication policy.
+//  3. Otherwise use the legacy regoloai endpoint with the required client credential.
 //
 // CustomParams from the model config are merged into the request body
 // without overwriting fields already set by the client.
 func (s *Server) buildForwardResultForModel(body []byte, cfg *config.RouterConfig, modelName string, isStreaming bool, clientKey string) *RoutingResult {
+	// model_config names are Brick's stable, internal identities. Before the
+	// request leaves Brick translate an optional provider-specific external ID
+	// (notably the legacy Regolo glm5.2-beta alias) while keeping Model below
+	// unchanged for routing headers and economics attribution.
+	externalModel := modelName
+	if _, endpointName, found, err := cfg.SelectBestEndpointWithDetailsForModel(modelName); err == nil && found {
+		externalModel = cfg.ResolveExternalModelID(modelName, endpointName)
+	}
+	forwardBody := rewriteModelInBody(body, externalModel)
 	modelCfg := findSkillRouterModel(cfg, modelName)
-	if modelCfg == nil || modelCfg.BaseURL == "" {
-		return s.buildRegoloForwardResultWithKey(body, cfg, isStreaming, clientKey, modelName)
+	if modelCfg != nil && modelCfg.BaseURL != "" {
+		mergedBody := mergeCustomParamsIntoBody(forwardBody, modelCfg.CustomParams)
+		key, err := cfg.ResolveUpstreamAPIKey(modelName, clientKey)
+		if err != nil {
+			return missingProviderCredentialResult(modelName)
+		}
+		return &RoutingResult{
+			ForwardBody:     mergedBody,
+			ForwardEndpoint: extractHost(modelCfg.BaseURL),
+			ForwardPath:     extractPath(modelCfg.BaseURL) + "/chat/completions",
+			ForwardHeaders: map[string]string{
+				"Authorization": "Bearer " + key,
+			},
+			IsStreaming: isStreaming,
+			Model:       modelName,
+		}
 	}
-	mergedBody := mergeCustomParamsIntoBody(body, modelCfg.CustomParams)
-	key := modelCfg.ResolveAPIKey(clientKey)
-	return &RoutingResult{
-		ForwardBody:     mergedBody,
-		ForwardEndpoint: extractHost(modelCfg.BaseURL),
-		ForwardPath:     extractPath(modelCfg.BaseURL) + "/chat/completions",
-		ForwardHeaders: map[string]string{
-			"Authorization": "Bearer " + key,
-		},
-		IsStreaming: isStreaming,
-		Model:       modelName,
+
+	// Profiles created before inline per-skill endpoints existed express the
+	// provider association only through model_config.preferred_endpoints. Honor
+	// that association instead of silently sending every such model to the
+	// legacy Regolo fallback. This is especially important for mixed pools.
+	if _, endpointName, found, err := cfg.SelectBestEndpointWithDetailsForModel(modelName); err == nil && found {
+		if profile, profileErr := cfg.GetProviderProfileForEndpoint(endpointName); profileErr == nil && profile != nil {
+			if path, pathErr := profile.ResolveChatPath(); pathErr == nil {
+				key, err := cfg.ResolveUpstreamAPIKey(modelName, clientKey)
+				if err != nil {
+					return missingProviderCredentialResult(modelName)
+				}
+				headerName, prefix, headerErr := profile.ResolveAuthHeader()
+				if headerErr == nil {
+					headers := make(map[string]string, len(profile.ExtraHeaders)+1)
+					for name, value := range profile.ExtraHeaders {
+						// HTTP header names are case-insensitive. A configured alias
+						// must not overwrite the resolved request credential later.
+						if key != "" && strings.EqualFold(name, headerName) {
+							continue
+						}
+						headers[name] = value
+					}
+					if key != "" {
+						if prefix != "" {
+							headers[headerName] = prefix + " " + key
+						} else {
+							headers[headerName] = key
+						}
+					}
+					return &RoutingResult{
+						ForwardBody:     forwardBody,
+						ForwardEndpoint: extractHost(profile.BaseURL),
+						ForwardPath:     path,
+						ForwardHeaders:  headers,
+						IsStreaming:     isStreaming,
+						Model:           modelName,
+					}
+				}
+			}
+		}
 	}
+
+	if _, configured := cfg.ModelConfig[modelName]; !configured && modelCfg == nil {
+		return missingProviderCredentialResult(modelName)
+	}
+	return s.buildRegoloForwardResult(forwardBody, cfg, isStreaming, modelName, clientKey)
+}
+
+func missingProviderCredentialResult(model string) *RoutingResult {
+	body, _ := json.Marshal(ErrorResponse{Error: ErrorDetail{
+		Message: fmt.Sprintf("configured credential source is missing for provider-backed model %q", model),
+		Type:    "upstream_configuration_error", Code: http.StatusBadGateway,
+	}})
+	return &RoutingResult{Direct: true, StatusCode: http.StatusBadGateway, Body: body,
+		Headers: map[string]string{"Content-Type": "application/json"}, Model: model}
+}
+
+func writeDirectRoutingResult(w http.ResponseWriter, result *RoutingResult) bool {
+	if result == nil || !result.Direct {
+		return false
+	}
+	for name, value := range result.Headers {
+		w.Header().Set(name, value)
+	}
+	w.WriteHeader(result.StatusCode)
+	_, _ = w.Write(result.Body)
+	return true
 }
 
 func findSkillRouterModel(cfg *config.RouterConfig, name string) *config.SkillRouterModelConfig {
@@ -575,7 +711,7 @@ func extractPath(rawURL string) string {
 	return path
 }
 
-// extractClientAPIKey extracts the Bearer token from the client's Authorization header.
+// extractClientAPIKey extracts the Bearer token from the Authorization header.
 func extractClientAPIKey(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
@@ -583,20 +719,43 @@ func extractClientAPIKey(r *http.Request) string {
 	}
 	const prefix = "Bearer "
 	if strings.HasPrefix(auth, prefix) {
-		return strings.TrimSpace(auth[len(prefix):])
+		key, _ := config.ValidateCredential(auth[len(prefix):])
+		return key
 	}
 	return ""
 }
 
-// mergeMaps merges src into dst, returning dst. src values don't overwrite existing dst values.
-func mergeMaps(dst, src map[string]string) map[string]string {
-	if dst == nil {
-		dst = make(map[string]string)
+// resolveClientAPIKey selects a request-scoped credential. When a trusted
+// proxy header is configured, either that header or Authorization may be used,
+// but conflicting values are rejected so proxy and direct credentials can
+// never be confused.
+func (s *Server) resolveClientAPIKey(r *http.Request) (string, error) {
+	authorizationKey := extractClientAPIKey(r)
+	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.TrustedProxyHeader) == "" {
+		return authorizationKey, nil
 	}
-	for k, v := range src {
-		if _, exists := dst[k]; !exists {
-			dst[k] = v
+
+	trustedValue := r.Header.Get(s.cfg.TrustedProxyHeader)
+	trustedKey := ""
+	if trustedValue != "" {
+		var err error
+		trustedKey, err = config.ValidateCredential(trustedValue)
+		if err != nil {
+			return "", fmt.Errorf("invalid trusted proxy credential")
 		}
 	}
-	return dst
+	if trustedKey != "" && authorizationKey != "" && trustedKey != authorizationKey {
+		return "", fmt.Errorf("conflicting request credentials")
+	}
+	if trustedKey != "" {
+		return trustedKey, nil
+	}
+	return authorizationKey, nil
+}
+
+func missingAPIKeyMessage(cfg *config.RouterConfig) string {
+	if cfg != nil && strings.TrimSpace(cfg.TrustedProxyHeader) != "" {
+		return "missing API key: provide the trusted proxy credential or an Authorization Bearer token"
+	}
+	return "missing API key: provide Authorization Bearer token"
 }

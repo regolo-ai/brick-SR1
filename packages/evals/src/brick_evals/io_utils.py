@@ -49,17 +49,17 @@ def utc_now_iso() -> str:
 
 
 def hf_token() -> str:
-    """Carica HF token dal file standard o da env."""
+    """Read the Hub token from the environment or supported token file."""
     if env := os.environ.get("HF_TOKEN"):
         return env.strip()
-    token_file = os.environ.get("HF_TOKEN_FILE", "/root/.hf_token_regolo")
+    token_file = os.environ.get("HF_TOKEN_FILE", str(Path.home() / ".hf_token_regolo"))
     if Path(token_file).exists():
         return Path(token_file).read_text().strip()
     raise RuntimeError(f"HF token not found in env HF_TOKEN nor file {token_file}")
 
 
 def _load_dotenv_once() -> None:
-    """Carica .env (repo_root) in os.environ una volta, senza override."""
+    """Load the repository .env once without overriding existing environment values."""
     if getattr(_load_dotenv_once, "_done", False):
         return
     try:
@@ -74,22 +74,20 @@ def _load_dotenv_once() -> None:
 
 
 def openrouter_key() -> str:
-    """Carica OpenRouter API key. Order: env (OPENROUTER_API_KEY|OPENROUTER_KEY) → .env → file fallback."""
+    """Read OpenRouter credentials from environment, .env or the supported fallback file."""
     _load_dotenv_once()
     for var in ("OPENROUTER_API_KEY", "OPENROUTER_KEY"):
         if v := os.environ.get(var):
             return v.strip().strip('"').strip("'")
-    key_file = os.environ.get("OPENROUTER_KEY_FILE", "/root/.openrouter_key")
+    key_file = os.environ.get("OPENROUTER_KEY_FILE", str(Path.home() / ".openrouter_key"))
     if Path(key_file).exists():
         return Path(key_file).read_text().strip().strip('"').strip("'")
-    raise RuntimeError(
-        "OpenRouter key not found. Set OPENROUTER_API_KEY in env / .env, " f"or place key in {key_file}."
-    )
+    raise RuntimeError(f"OpenRouter key not found. Set OPENROUTER_API_KEY in env / .env, or place key in {key_file}.")
 
 
 def regolo_synthetic_key() -> str:
-    """Carica Regolo synthetic API key per generazione creative_custom + LLM judge."""
-    key_file = os.environ.get("REGOLO_SYNTHETIC_KEY_FILE", "/root/.regolo_synthetic_key")
+    """Read the Regolo credential used by generation and judge tools."""
+    key_file = os.environ.get("REGOLO_SYNTHETIC_KEY_FILE", str(Path.home() / ".regolo_synthetic_key"))
     if Path(key_file).exists():
         return Path(key_file).read_text().strip()
     if env := os.environ.get("REGOLO_API_KEY"):

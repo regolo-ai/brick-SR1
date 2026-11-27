@@ -1,28 +1,16 @@
-# Lightweight task to run a generation/judge client on the cluster against the local SGLang.
-# Use envs CMD to override (e.g., python scripts/01_generate_queries.py --max 1000).
-
+# External-capacity client. Run from the repository root against an existing API.
 name: dataset-b-client
-
 resources:
-  infra: seeweb
-  accelerators: L40S:4   # share cluster with serve.yaml
-
+  cloud: seeweb
+  cpus: 2+
 workdir: .
-
 envs:
-  CMD: "python scripts/01_generate_queries.py --max 100"
-
+  GENERATION_ENDPOINT: http://localhost:30000/v1/chat/completions
 setup: |
-  set -e
-  if [ ! -d "$HOME/sgl_env" ]; then
-    sudo apt-get update -qq && sudo apt-get install -y -qq python3-pip python3-venv
-    python3 -m venv $HOME/sgl_env
-    source $HOME/sgl_env/bin/activate
-    pip install pyyaml requests datasets huggingface_hub
-  fi
-
+  set -eu
+  command -v uv
+  uv sync --frozen --package brick-training
 run: |
-  source $HOME/sgl_env/bin/activate
-  cd ~/sky_workdir
-  echo "[run] $CMD"
-  $CMD
+  set -eu
+  cd packages/training/dataset_b
+  uv run --frozen --package brick-training python scripts/01_generate_queries.py --endpoint "$GENERATION_ENDPOINT" --max 100

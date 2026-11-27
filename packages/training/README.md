@@ -1,119 +1,83 @@
-# `packages/training/`: Training the Brick classifiers
+# Capability training and Dataset B generation
 
-Two trained models power Brick's routing decision:
+This workspace retains the GPU training pipeline for the six-label ModernBERT
+capability classifier, its evaluation and export tools, and Dataset B
+generation.
+Complexity classification in the npm runtime uses a configured API. No local
+complexity training script is distributed here.
 
-1. **Capability classifier**: ModernBERT-base, 6-label sigmoid head, predicts `p(x) ∈ Δ⁶` over the 6 capability dimensions. Published as [`regolo/brick-modernbert-capability-classifier`](https://huggingface.co/regolo/brick-modernbert-capability-classifier).
-2. **Complexity classifier**: Qwen3.5-0.8B + LoRA adapter, 3-class (easy/medium/hard) predicts `τ`. Published as [`regolo/brick-complexity-2-eco`](https://huggingface.co/regolo/brick-complexity-2-eco).
+The npm installer downloads the pinned capability checkpoint. Training a new
+checkpoint is a separate experiment: it must not silently replace release
+assets. Python training uses independent sigmoid scores; the historical Candle
+runtime uses softmax normalization and 512-token truncation. This refactor
+preserves the runtime algorithm and checks it against the pre-extraction corpus.
 
-**Both models are already trained and on HF.** For day-to-day use, download them via [`packages/datasets/scripts/download_models.py`](../datasets/scripts/download_models.py). This README is for **auditing and re-training** the models.
+## Dependencies and entrypoints
 
-## What's in here
-
-```
-packages/training/
-├── dataset_b/                  # Build Dataset B (training set) from scratch
-│   ├── scripts/
-│   │   ├── 01_generate_queries.py     # synthesize candidate queries per capability dim
-│   │   ├── 02_run_judge.py            # judge each query for capability label (vLLM panel)
-│   │   ├── 03_aggregate.py            # aggregate judge votes
-│   │   ├── 04_human_eval_prep.py      # stratified subset for human validation
-│   │   ├── 05_push_hub.py             # push to massaindustries/dataset-B-modernbert-train
-│   │   ├── 06_annotate_human_eval.py
-│   │   └── 07_compute_kappa.py        # Cohen's κ on human vs panel labels
-│   ├── configs/                # judges.yaml + generation specs
-│   ├── prompts/                # query-generation prompts per dim
-│   └── sky/                    # SkyPilot YAML for cloud GPU runs
-└── modernbert/                 # Train the capability classifier (the headline model)
-    ├── scripts/
-    │   ├── train_modernbert.py        # fine-tune ModernBERT-base/large, 6-label BCE
-    │   ├── sanity_check.py            # smoke test on a fresh model+dataset
-    │   ├── select_top3.py             # pick top-3 sweep runs by human_eval Pearson
-    │   ├── push_winner.py             # push the winner to HF Hub
-    │   └── sweep_email_monitor.py     # emails progress during multi-hour sweeps
-    ├── configs/                # sweep.yaml (hyperparam grid for wandb agent)
-    ├── sky/                    # SkyPilot YAML for sweep runs
-    └── README.md               # detailed training run notes
-```
-
-## Reference run: capability classifier
-
-The winning configuration (selected against the human-eval split):
-
-| Hyperparameter | Value |
-|---|---|
-| Base model | `answerdotai/ModernBERT-base` |
-| Loss | Binary cross-entropy (multi-label, 6 outputs) |
-| Optimizer | AdamW (β₁=0.9, β₂=0.999, weight_decay=0.01) |
-| Learning rate | 5e-5, warmup 5%, linear decay |
-| Batch size | 32 (gradient accumulation 1) |
-| Epochs | 4 |
-| Max length | 1024 tokens |
-| Hardware | 4× L40S (SkyPilot, ~2 h wall clock) |
-| Result | Pearson macro = 0.87, MAE = 0.14 on `human_eval` split |
-
-The full hyperparameter sweep (search space + per-run metrics) is publicly readable on Weights & Biases:
-
-> 🔗 **W&B sweep audit**: [`wandb.ai/massa-industries/sweeps/dataset-b-modernbert/0srgzjrg`](https://wandb.ai/massa-industries/sweeps/dataset-b-modernbert/0srgzjrg)
-
-Reproduce the sweep locally:
+From the repository root:
 
 ```bash
-cd packages/training/modernbert
-uv pip install -e ../../..        # install brick-training workspace
-wandb login                       # uses your wandb token
-wandb sweep configs/sweep.yaml    # prints SWEEP_ID
-wandb agent <entity>/<project>/<SWEEP_ID>
+uv sync --frozen --all-packages
+uv run --frozen --package brick-training python packages/training/modernbert/scripts/train_modernbert.py --help
+uv run --frozen --package brick-training python packages/training/modernbert/scripts/select_top3.py --help
 ```
 
-Push winner to HF:
+`modernbert/scripts/dataset_loader.py` and `metrics.py` supply training and
+human-evaluation inputs and metrics. `sanity_check.py` and `train_modernbert.py
+--smoke --no_wandb` exercise a small training run but still require downloaded
+models and datasets. `eval_human.py`, `manual_annotate_200.py` and
+`bench_latency.py` support checkpoint evaluation. `export_for_candle.py` exports
+the selected weights for the native runtime.
+
+## Sweeps and publication
+
+Review `modernbert/configs/sweep.yaml`, then run from
+`packages/training/modernbert`:
 
 ```bash
-python scripts/select_top3.py --sweep <SWEEP_ID>
-python scripts/push_winner.py --run-id <RUN_ID> --repo regolo/brick-modernbert-capability-classifier-replicated
+uv run --frozen --package brick-training wandb sweep configs/sweep.yaml
+uv run --frozen --package brick-training wandb agent ENTITY/PROJECT/SWEEP_ID
+uv run --frozen --package brick-training python scripts/select_top3.py --project ENTITY/PROJECT --sweep SWEEP_ID
 ```
 
-## Reference run: complexity classifier
+These operations contact Weights & Biases and train on the configured dataset.
+`push_winner.py` is an explicit Hub publication entrypoint; inspect its source
+and selected checkpoint before using it. SkyPilot recipes provision external
+capacity from the repository root. The
+operator supplies uv, credentials, and an image with locked SGLang/vLLM GPU
+dependencies for serving; these recipes never install unpinned server packages.
+Existing shared GPU pools should use their scheduler instead.
 
-| Hyperparameter | Value |
-|---|---|
-| Base model | `Qwen/Qwen2.5-0.5B-Instruct` (Qwen3.5-0.8B in paper) |
-| Adapter | LoRA (r=16, α=32, dropout=0.05, target: q/k/v/o + gate/up/down) |
-| Loss | Cross-entropy (3-class) with asymmetric penalty (`λ_over=0.7`) and `label_smoothing=0.08` |
-| Optimizer | AdamW, LR=3e-4 (LoRA-only) |
-| Batch size | 64 |
-| Epochs | 3 |
-| Hardware | Single L40S (~45 min) |
+They are separate from Linux npm acceptance and are not launched by CI.
 
-Training script: `dataset_b/scripts/train_complexity_lora.py` (TODO: add separate doc; current canonical version lives under `modernbert/scripts/` for backward-compat with the published `brick-complexity-2-eco`).
+## Dataset B
 
-## Rebuild Dataset B from scratch (advanced)
-
-If you want to regenerate the training set rather than download it:
+From `packages/training/dataset_b`, use a configured OpenAI-compatible
+generation
+or judge endpoint:
 
 ```bash
-cd packages/training/dataset_b
-uv pip install -e ../../..
-# 1. Generate candidate queries per capability dim
-python scripts/01_generate_queries.py --config configs/generation_specs.yaml
-# 2. Spin up judge panel (vLLM) and label each query
-python scripts/02_run_judge.py --judges configs/judges.yaml
-# 3. Aggregate panel votes (majority + tie-break)
-python scripts/03_aggregate.py
-# 4-7. Human-eval split, push, annotate, κ
+uv run --frozen --package brick-training python scripts/01_generate_queries.py --endpoint http://localhost:30000/v1/chat/completions --max 10
+uv run --frozen --package brick-training python scripts/02_run_judge.py --name mistral --endpoint http://localhost:30000/v1/chat/completions
+uv run --frozen --package brick-training python scripts/03_aggregate.py
 ```
 
-Expect ~12 h of judge time on 4-GPU node + ~4 h human annotation for the κ split.
+Generation settings and prompts are in `configs/` and `prompts/`. Run the judge
+stage for each configured judge before aggregation. Stages 04, 06 and 07 prepare
+human annotation and agreement measurements. Stage 05 publishes the generated
+dataset. `scripts/serve_model.sh`, `scripts/run_client.sh` and `sky/` support
+external GPU
+runs;
+they are not installed with Brick.
 
-## Email notifier (optional)
+## Notifications and verification
 
-Long sweeps can email progress via Gmail SMTP. Configure `~/.gmail_app_password` and run:
+Notifications are disabled unless `BRICK_NOTIFY_FROM`, `BRICK_NOTIFY_TO` and
+`BRICK_SMTP_PASSWORD_FILE` are configured. No credentials or recipients are
+embedded in published scripts. `sweep_email_monitor.py` uses the same notifier.
 
-```bash
-python scripts/sweep_email_monitor.py --sweep <SWEEP_ID> --to you@example.com --every 30m
-```
-
-## Caveats
-
-- Training scripts are checked in as-is from the paper run; they are not packaged behind a stable Python API. Treat them as reproducible recipes, not as a library.
-- Dataset B is published with judge labels only (no judge raw chains). The judge raw outputs are too large for the Hub.
-- The Qwen complexity LoRA adapter is published merged with its base model. To fine-tune your own LoRA on top, start from `Qwen/Qwen2.5-0.5B-Instruct` and follow the recipe above.
+Offline CI checks Python syntax, lint and evaluation units. Full training,
+human annotation, remote judging and Hub publication require their external
+inputs and are not claimed by the native-runtime test results. Detailed
+historical sweep settings remain in [ModernBERT
+documentation](modernbert/README.md).

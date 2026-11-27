@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""30c - Rigenerazione fewshot quality-aware per source con score basso (T2-01).
-
-Target rev.4: AIME-2025 (2.31), LiveCodeBench-v6 (3.23), IFEval (3.97) sotto gate 4.0.
-
-Strategia generate-and-verify:
-1. Genera 12 candidati per source con prompt "expert anchor" migliorato
-2. Per ogni candidato → judge rubric 5-axes (1-5 score, qwen3.5-122b)
-3. Tieni top 5 con avg_score >= 4.0; se < 5 con avg>=4, top 5 by score (best effort)
-4. Salva file `data/fewshot_pools/<sid>.json` + lockfile SHA256
-"""
+"""Regenerate low-scoring few-shot pools. Generate twelve candidates, score five quality axes, then keep the best five meeting the 4.0 threshold, or the best available five if insufficient candidates qualify. Save each pool and its SHA256 provenance."""
 
 from __future__ import annotations
 
@@ -28,95 +19,21 @@ MIN_SCORE = 4.0
 
 SPECS_FULL = {
     "aime_2025": {
-        "system": "Sei un curatore di problemi di matematica di livello competizione AIME. Output: SOLO JSON.",
-        "generate_prompt": """Genera ESATTAMENTE 1 problema di stile AIME (American Invitational Mathematics Exam) con risposta numerica intera 0-999.
-
-REGOLE STRINGENTI:
-- Il problema DEVE avere una risposta finale unica e ben definita (NO "il problema è malposto", NO "supponiamo che")
-- Difficoltà media-alta (livello AIME è hard)
-- Reasoning step-by-step CHIARO, ogni passaggio CONFERMATO da calcoli
-- final_answer: stringa contenente SOLO un intero da 0 a 999
-
-ESEMPIO STILE TARGET (anchor reale AIME 2024):
-{
-  "question": "Find the number of ordered pairs (a,b) of positive integers with a<=b<=100 such that a*b/gcd(a,b)^2 is a perfect square.",
-  "reasoning": "Let d=gcd(a,b), a=dx, b=dy with gcd(x,y)=1. Then a*b/d^2 = xy. xy is a perfect square iff x=y (impossible since gcd=1 forces x=y=1) or x and y are themselves squares. Counting pairs with a<=b<=100: ...",
-  "final_answer": "203"
-}
-
-Argomenti possibili (scegline UNO): teoria dei numeri, combinatorica, geometria, algebra, probabilità.
-
-Output JSON object SOLO (no markdown, no commentary):
-{"question": "<problema in inglese, ~150-300 chars>", "reasoning": "<soluzione step-by-step in inglese, ~300-700 chars con calcoli espliciti>", "final_answer": "<intero 0-999 come stringa>"}
-
-JSON:""",
+        "system": "Curate AIME competition mathematics problems. Return JSON only.",
+        "generate_prompt": 'Generate exactly one AIME-style problem with a unique, well-defined integer answer from 0 to 999. Medium-high difficulty; clear step-by-step reasoning verified by calculations. Do not claim the problem is ill-posed or add assumptions. Choose number theory, combinatorics, geometry, algebra or probability. Return only question (English, 150-300 characters), reasoning (English, 300-700 characters with calculations) and final_answer (integer string). Historical style anchor:\n{\n  "question": "Find the number of ordered pairs (a,b) of positive integers with a<=b<=100 such that a*b/gcd(a,b)^2 is a perfect square.",\n  "reasoning": "Let d=gcd(a,b), a=dx, b=dy with gcd(x,y)=1. Then a*b/d^2 = xy. xy is a perfect square iff x=y (impossible since gcd=1 forces x=y=1) or x and y are themselves squares. Counting pairs with a<=b<=100: ...",\n  "final_answer": "203"\n}',
     },
     "livecodebench_v6": {
-        "system": "Sei un curatore di problemi LeetCode/competitive programming. Output: SOLO JSON.",
-        "generate_prompt": """Genera ESATTAMENTE 1 problema di programmazione competitiva stile LiveCodeBench/LeetCode.
-
-REGOLE:
-- Problema chiaro con input/output spec esplicito + esempi
-- final_answer = codice Python eseguibile e CORRETTO che risolve il problema
-- reasoning = approccio algoritmico in inglese, complessità time/space, edge cases
-- Diversifica topic: array, string, DP, greedy, graph, math, hash table, two pointers, sliding window
-
-Output JSON object SOLO:
-{"question": "<problema completo con Input/Output spec + esempi>", "reasoning": "<approccio algoritmico, complessità, edge cases>", "final_answer": "<codice Python def function_name(...) corretto, eseguibile, con docstring breve>"}
-
-JSON:""",
+        "system": "Curate LeetCode/competitive-programming problems. Return JSON only.",
+        "generate_prompt": "Generate exactly one LiveCodeBench/LeetCode-style problem. Provide explicit input/output specifications and examples. Return JSON with question, reasoning (English algorithm, time/space complexity and edge cases) and final_answer (correct executable Python function with a short docstring). Vary arrays, strings, DP, greedy, graphs, mathematics, hash tables, two pointers and sliding windows.",
     },
     "ifeval": {
-        "system": "Sei un curatore di esempi instruction-following con constraint verificabili. Output: SOLO JSON.",
-        "generate_prompt": """Genera ESATTAMENTE 1 esempio di instruction-following stile IFEval (Google).
-
-REGOLE:
-- L'istruzione contiene 1-3 CONSTRAINT VERIFICABILI (es: word count esatto, formato, capitalizzazione, no punteggiatura, lingua specifica, includere/escludere keyword, JSON output)
-- final_answer DEVE soddisfare ESATTAMENTE i constraint specificati
-- reasoning può essere vuoto (instruction following ≠ CoT)
-- Diversifica i tipi di constraint tra esempi
-
-ESEMPI di constraint validi:
-- "Rispondi in esattamente 50 parole, senza usare la lettera 'e'."
-- "Genera un JSON con 3 chiavi: 'name', 'age', 'city'. Tutti i valori in MAIUSCOLO."
-- "Scrivi una poesia di 4 versi, ogni verso inizia con la stessa lettera."
-
-Output JSON object SOLO:
-{"question": "<istruzione con constraint chiari>", "reasoning": "", "final_answer": "<risposta che soddisfa esattamente i constraint>"}
-
-JSON:""",
+        "system": "Curate instruction-following examples with verifiable constraints. Return JSON only.",
+        "generate_prompt": "Generate exactly one Google IFEval-style example with one to three verifiable constraints: exact word count, format, capitalization, no punctuation, a specified language, included/excluded keywords or JSON output. Vary constraints across examples. The final answer must satisfy every constraint exactly; reasoning can be empty. Example constraints: exactly 50 words without the letter e; JSON with name/age/city and uppercase values; a four-line poem with each line beginning with the same letter. Return only JSON fields question, reasoning and final_answer.",
     },
 }
 
 
-JUDGE_PROMPT = """Valuta la qualità di un esempio few-shot CoT per benchmark LLM.
-
-OUTPUT JSON SOLO (no markdown):
-{{
-  "format": <int 1-5>,
-  "cot_validity": <int 1-5>,
-  "answer_alignment": <int 1-5>,
-  "hallucination_inverse": <int 1-5>,
-  "sufficiency": <int 1-5>,
-  "verdict": "pass" | "fail",
-  "rationale": "<max 200 char>"
-}}
-
-Criteri (1-5, 5=eccellente):
-1. format: rispetta formato atteso del benchmark {source}?
-2. cot_validity: reasoning step-by-step è LOGICO e privo di errori?
-3. answer_alignment: la risposta finale è coerente con il reasoning?
-4. hallucination_inverse: l'esempio è privo di hallucination/info inventate (5=privo, 1=pieno)?
-5. sufficiency: l'esempio è SUFFICIENTE a guidare un modello sul task?
-
-verdict: "pass" se TUTTI gli score >=4, altrimenti "fail".
-
-=== SOURCE: {source} ===
-
-ESEMPIO:
-{ex}
-
-JSON:"""
+JUDGE_PROMPT = 'Evaluate a few-shot reasoning example for source {source}.\nReturn only JSON (no Markdown):\n{{"format": <1-5>, "cot_validity": <1-5>, "answer_alignment": <1-5>, "hallucination_inverse": <1-5>, "sufficiency": <1-5>, "verdict": "pass" | "fail", "rationale": "<at most 200 characters>"}}\nFive is excellent. Grade format compliance, logical and error-free reasoning, agreement between final answer and reasoning, absence of hallucinations (5=none, 1=many), and usefulness as a task example. Pass only if every score is at least four.\nEXAMPLE:\n{ex}\nJSON:'
 
 AXES = ["format", "cot_validity", "answer_alignment", "hallucination_inverse", "sufficiency"]
 
@@ -192,7 +109,7 @@ def main():
                 avg = 0
                 result = {"verdict": "error", "scores": {}, "rationales": str(e)[:120]}
             scored.append((avg, c, result))
-            print(f"  [judge {i+1}/{len(candidates)}] avg={avg:.2f} v={result.get('verdict')}")
+            print(f"  [judge {i + 1}/{len(candidates)}] avg={avg:.2f} v={result.get('verdict')}")
 
         # Top K_KEEP by avg
         scored.sort(key=lambda x: -x[0])

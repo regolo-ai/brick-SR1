@@ -56,7 +56,6 @@
 \usepackage{amsmath,amssymb}
 \usepackage{url}
 \usepackage{hyperref}
-\usepackage{fontawesome5}
 \usepackage{enumitem}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc,fit,backgrounds}
@@ -244,7 +243,7 @@ coding
 \end{table*}
 
 \subsection{Quality validation and oracle bound}
-The construction pipeline is validated in three tiers: deterministic schema and length checks, LLM-as-judge calibration against an audited reference subset, and a dual-reviewer manual audit on $n{=}102$ stratified samples. The manual audit yields Cohen's $\kappa$~\cite{cohen1960kappa}${=}0.761$ on a 4-class rubric and $\kappa{=}0.951$ on the binary collapse, both above the conventional substantial-agreement threshold.
+The construction pipeline is validated in three tiers: deterministic schema and length checks, LLM-as-judge calibration against an audited reference subset, and a three-reviewer manual audit on $n{=}102$ stratified samples. The three reviewers are the two authors (Francesco Massa, Marco Cristofanilli) and an LLM reviewer (Claude Sonnet 4.6) acting as an independent third rater under the same rubric.
 
 \subsection{Grading methods}\label{sec:grading}
 Dataset~A's ten scoring protocols split into two grading regimes that differ in the number of judge models involved, and a third \emph{variance-characterization} regime applied to a single protocol only. \textbf{Eight protocols are deterministic and use no judge model} (zero judges): coding (\texttt{lcb\_unit\_test}) is graded by the LiveCodeBench unit-test harness; \texttt{math\_reasoning} (\texttt{gsm8k\_final\_answer}, \texttt{math\_equiv}) by SymPy and regex matching against gold answers; \texttt{instruction\_following} (\texttt{ifeval\_constraint\_check}) by the IFEval and IFBench programmatic checkers; \texttt{mcq\_letter} by deterministic letter extraction; and \texttt{tool\_call\_match} (single- and multi-turn) by the BFCL AST/state checkers. \textbf{Two protocols use a single LLM judge} (one judge): \texttt{world\_knowledge}'s \texttt{llm\_judge\_factual} and the open-ended \texttt{rubric\_judge} (creative writing and agentic planning) are graded by \texttt{openai/gpt-5.4-mini} alone, cross-provider relative to the evaluated pool, at temperature~$0$. \textbf{One protocol additionally runs a three-judge panel} (three judges, used only for variance characterization, not for the headline accuracy numbers): the agentic planning \texttt{rubric\_judge} is also re-graded by a fixed three-judge panel (\texttt{openai/gpt-5.4-mini}, \texttt{mistralai/mistral-small-2603}, \texttt{z-ai/glm-5-turbo}), each from a family disjoint from the evaluated pool, with majority vote at temperature $0$; this panel exists to quantify judge-induced variance on the most subjective protocol and is reported in dataset~A's evaluation chapter, not used to compute the response-accuracy numbers in this paper. Throughout this paper, ``response accuracy'' for any model or router refers to the per-protocol grader of the originating protocol under the regime listed above.
@@ -388,7 +387,8 @@ Brick processes each query through a deterministic six-step pipeline:
 
 \begin{figure*}[!t]
 \centering
-\input{figures/brick_architecture.tex}
+% arXiv-safe: pre-rendered TikZ (was \input{figures/brick_architecture.tex}; source kept in figures/ for reference)
+\includegraphics{brick_architecture.pdf}
 \caption{Brick architecture. The query $x$ flows through text normalization and keyword prior injection, then branches into two parallel estimators: a ModernBERT capability distribution head producing $p(x)\!\in\!\Delta^{D-1}$, and a complexity head producing the difficulty target $\tau_q$. The routing math is decomposed into five sub-blocks: difficulty lift (raising $\tau_q$ to logit space $z_q$), per-capability requirement $r_{q,c}$ and per-model capacity $v_{m,c}$ builders, asymmetric under/over-capacity residuals $(u_{m,c}, o_{m,c})$, and the cost-penalized distance $J_m$. Three side inputs feed the math: the offline-calibrated skill matrix $S\!\in\!(0,1)^{K\!\times\!D}$ enters the capacity builder, the locked cost vector $a_m$ enters the distance \& cost combiner, and the external user-preference knob $r\!\in\![-1,1]$ is mapped via a calibrated power law to the four routing scalars $(\mu, b)$ feeding the difficulty lift and $(\beta, \lambda)$ feeding the distance \& cost block. The argmin selector returns $m^{\star}$.}
 \label{fig:brick-arch}
 \end{figure*}

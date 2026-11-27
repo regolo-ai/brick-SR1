@@ -1,48 +1,55 @@
-name: npm publish (@regolo-ai/brick)
-
+name: npm publish verified bundles
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. 2.0.0, 2.0.1-rc.1)"
-        required: true
-
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   publish:
-    name: publish to npm
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # for npm provenance (Sigstore)
+      id-token: write
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
-
-      # Install from the repo-root lockfile (npm workspaces). apps/cli has no
-      # standalone lockfile; the root package-lock.json already pins the CLI
-      # workspace, so a single `npm ci` at the root is reproducible and covers
-      # apps/cli via the workspace graph.
-      - name: npm ci
-        run: npm ci
-
-      - name: Build
-        run: npm run build:cli
-
-      - name: Verify package contents
-        working-directory: apps/cli
-        run: npm pack --dry-run
-
-      - name: Publish
-        working-directory: apps/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+          fetch-depth: 0
+      - name: Require main
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-npm'
+          path: release
+          merge-multiple: true
+      - name: Require every advertised runtime to have passed execution
+        run: |
+          version=$(node -p "require('./apps/cli/package.json').version")
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            test -f "release/regoloai-brick-runtime-${target}-${version}.tgz" || {
+              echo "Missing verified $target artifact; publication is blocked."
+              exit 1
+            }
+          done
+      - name: Assemble and publish the verified universal package
+        run: |
+          version=$(node -p "require('./apps/cli/package.json').version")
+          mkdir -p apps/cli/runtimes
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            mkdir "apps/cli/runtimes/$target"
+            tar -xzf "release/regoloai-brick-runtime-${target}-${version}.tgz" \
+              --strip-components=1 -C "apps/cli/runtimes/$target"
+          done
+          npm ci --ignore-scripts
+          npm pack ./apps/cli --pack-destination release
+          python3 scripts/check_npm_package.py "release/regoloai-brick-${version}.tgz"
+          npm publish "./release/regoloai-brick-${version}.tgz" --access public --provenance

@@ -10,7 +10,7 @@ import (
 )
 
 // TestHandleMetricsReset verifies the reset endpoint: GET is rejected, POST
-// clears the brick_cc_* counters and returns 200.
+// clears the brick routing counters and returns 200.
 func TestHandleMetricsReset(t *testing.T) {
 	srv := &Server{}
 
@@ -22,8 +22,8 @@ func TestHandleMetricsReset(t *testing.T) {
 	}
 
 	// Seed a counter, then POST to clear it.
-	metrics.BrickCCRequests.WithLabelValues("hard", "claude-opus-4-8").Inc()
-	if testutil.CollectAndCount(metrics.BrickCCRequests) == 0 {
+	metrics.BrickRequests.WithLabelValues("routed", "claude-opus-4-8").Inc()
+	if testutil.CollectAndCount(metrics.BrickRequests) == 0 {
 		t.Fatalf("expected a seeded series before reset")
 	}
 
@@ -32,7 +32,7 @@ func TestHandleMetricsReset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST should be 200, got %d", rec.Code)
 	}
-	if got := testutil.CollectAndCount(metrics.BrickCCRequests); got != 0 {
-		t.Fatalf("reset did not clear BrickCCRequests: %d series remain", got)
+	if got := testutil.CollectAndCount(metrics.BrickRequests); got != 0 {
+		t.Fatalf("reset did not clear BrickRequests: %d series remain", got)
 	}
 }

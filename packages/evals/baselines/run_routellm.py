@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""RouteLLM zero-shot run su Dataset A (5505 query).
+"""RouteLLM zero-shot run on Dataset A (5505 query).
 
 Variants:
   - binary  : weak=qwen, strong=kimi (default RouteLLM binary, exclude ds4)
-  - tournament: 2 router binari concatenati per output ternario qwen|ds4|kimi
+  - tournament: two binary routers for ternary output qwen|ds4|kimi
       stage1: qwen vs ds4 (if qwen wins -> qwen)
       stage2: ds4 vs kimi (if ds4 wins -> ds4 else kimi)
 
 Router pretrained: `bert` (no OpenAI dep). Threshold default paper: 0.11593.
-Output JSONL append-only per mail monitor.
+Append-only JSONL output for resumable evaluation.
 """
+
 from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -23,12 +23,8 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-dummy")
 from datasets import load_dataset
 from routellm.controller import Controller
 
-TOKEN_PATH = Path("/root/.hf_token_regolo")
-if TOKEN_PATH.exists():
-    os.environ["HF_TOKEN"] = TOKEN_PATH.read_text().strip()
-
 REPO = "massaindustries/dataset-A-routing"
-OUT = Path("/root/forkGO/external_comparison/predictions/routellm.jsonl")
+OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / Path("routellm.jsonl")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 ROUTER_NAME = "bert"
 THRESHOLD = 0.11593
@@ -85,7 +81,7 @@ def main():
     t0 = time.time()
     n_new = 0
     with OUT.open("a") as fout:
-        for i, row in enumerate(ds):
+        for _i, row in enumerate(ds):
             qid = row["query_id"]
             if qid in done_qids:
                 continue
@@ -119,7 +115,7 @@ def main():
                 elapsed = time.time() - t0
                 rate = n_new / max(elapsed, 1e-9)
                 eta = (len(ds) - len(done_qids) - n_new) / max(rate, 1e-9)
-                print(f"[{n_new}/{len(ds) - len(done_qids)}] rate={rate:.1f}/s, eta={eta/60:.1f}min")
+                print(f"[{n_new}/{len(ds) - len(done_qids)}] rate={rate:.1f}/s, eta={eta / 60:.1f}min")
 
     print(f"[done] processed {n_new} new rows in {(time.time() - t0) / 60:.1f} min")
 

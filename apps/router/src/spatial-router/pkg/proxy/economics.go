@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"net/http"
+	"os"
 	"sort"
+	"time"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/economics"
 )
@@ -46,6 +48,7 @@ type economicsResponse struct {
 	// when opus is not resolvable in the pricing table for the active pool, so
 	// a missing baseline is never rendered as a misleading 0%.
 	SavingsPctVsOpus *float64 `json:"savings_pct_vs_opus,omitempty"`
+	BaselineModel    string   `json:"baseline_model,omitempty"`
 	PricingAvailable bool     `json:"pricing_available"`
 	Note             string   `json:"note,omitempty"`
 }
@@ -64,24 +67,69 @@ const opusBaselineModel = "claude-opus"
 // produce a 200 response with as much information as can be computed,
 // rather than an error, since this endpoint is meant to be safely pollable
 // by the CLI at any point in the router's lifecycle.
+// pricing returns the current price table, reloading it whenever pricing.yaml
+// changes on disk. The CLI rewrites that file hourly, so pinning prices to
+// process start would leave the dashboard reporting yesterday's numbers.
+func (s *Server) pricing() (*economics.PricingTable, error) {
+	info, statErr := os.Stat(s.pricingPath)
+	s.pricingMu.RLock()
+	table, mod := s.pricingTable, s.pricingMod
+	s.pricingMu.RUnlock()
+	if table != nil && statErr == nil && info.ModTime().Equal(mod) {
+		return table, nil
+	}
+	loaded, err := economics.LoadPricingTable(s.pricingPath)
+	if err != nil {
+		// A rewrite is atomic, so this only triggers when the file is gone:
+		// keep the last known prices rather than dropping every figure.
+		if table != nil {
+			return table, nil
+		}
+		return nil, err
+	}
+	var mtime time.Time
+	if statErr == nil {
+		mtime = info.ModTime()
+	}
+	s.pricingMu.Lock()
+	s.pricingTable, s.pricingMod = loaded, mtime
+	s.pricingMu.Unlock()
+	return loaded, nil
+}
+
 func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
+	baselineModel := r.URL.Query().Get("baseline_model")
 	store := s.EconomicsStore()
 	if store == nil {
-		writeJSON(w, http.StatusOK, economicsResponse{})
+		resp := economicsResponse{}
+		if baselineModel != "" {
+			resp.BaselineModel = baselineModel
+			resp.Note = "economics store not available; token counts unavailable"
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
 	snap := store.Snapshot()
 
-	table, err := economics.LoadPricingTable(s.pricingPath)
+	table, err := s.pricing()
 	if err != nil {
-		writeJSON(w, http.StatusOK, economicsResponseTokensOnly(snap, false,
-			"pricing table not available; token counts only (run scripts/fetch_pricing.py)"))
+		resp := economicsResponseTokensOnly(snap, false,
+			"pricing table not available; token counts only (run brick profile pricing --sync)")
+		resp.BaselineModel = baselineModel
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// An explicit baseline is an absolute provider-price comparison and may be
+	// a model that has never appeared in observed traffic (Codex uses all-Sol).
+	if baselineModel != "" {
+		writeJSON(w, http.StatusOK, economicsResponseForBaseline(snap, table, baselineModel))
 		return
 	}
 
@@ -237,6 +285,77 @@ func (s *Server) handleEconomics(w http.ResponseWriter, r *http.Request) {
 		PricingAvailable:   true,
 		Note:               note,
 	})
+}
+
+func cachedInputPrice(entry economics.PriceEntry) float64 {
+	if entry.CachedInputPrice > 0 {
+		return entry.CachedInputPrice
+	}
+	return entry.InputPrice * cacheReadInputPriceMultiplier
+}
+
+// economicsResponseForBaseline compares all observed traffic with the same
+// fresh/cache/output tokens billed at one explicitly requested model. It does
+// not use the observed-model pool, so an unobserved Sol remains a valid anchor.
+func economicsResponseForBaseline(snap []economics.ModelUsage, table *economics.PricingTable, baselineModel string) economicsResponse {
+	baseline, ok := table.Price(baselineModel)
+	if !ok || baseline.InputPrice <= 0 || baseline.OutputPrice <= 0 {
+		resp := economicsResponseTokensOnly(snap, false,
+			"baseline model "+baselineModel+" has no pricing data; token counts only")
+		resp.BaselineModel = baselineModel
+		return resp
+	}
+
+	models := make([]economicsModelStats, 0, len(snap))
+	var actual, baselineCost float64
+	for _, u := range snap {
+		row := economicsModelStats{
+			Model: u.Model, Requests: u.Requests, InputTokens: u.InputTokens,
+			CacheCreationInputTokens: u.CacheCreationInputTokens,
+			CacheReadInputTokens:     u.CacheReadInputTokens, OutputTokens: u.OutputTokens,
+		}
+		entry, priced := table.Price(u.Model)
+		if !priced || entry.Currency != baseline.Currency || entry.InputPrice <= 0 || entry.OutputPrice <= 0 {
+			models = append(models, row)
+			continue
+		}
+		row.CostRatioIn = baseline.InputPrice / entry.InputPrice
+		row.CostRatioOut = baseline.OutputPrice / entry.OutputPrice
+		row.EstimatedCostUnits = float64(u.InputTokens)*entry.InputPrice +
+			float64(u.CacheCreationInputTokens)*entry.InputPrice*cacheWriteInputPriceMultiplier +
+			float64(u.CacheReadInputTokens)*cachedInputPrice(entry) +
+			float64(u.OutputTokens)*entry.OutputPrice
+		actual += row.EstimatedCostUnits
+		baselineCost += float64(u.InputTokens)*baseline.InputPrice +
+			float64(u.CacheCreationInputTokens)*baseline.InputPrice*cacheWriteInputPriceMultiplier +
+			float64(u.CacheReadInputTokens)*cachedInputPrice(baseline) +
+			float64(u.OutputTokens)*baseline.OutputPrice
+		models = append(models, row)
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].Model < models[j].Model })
+
+	// A partial comparison would be misleading: preserve every token row but
+	// clearly mark pricing unavailable if any observed traffic could not be
+	// priced in the baseline currency.
+	for _, row := range models {
+		if row.Requests > 0 && row.EstimatedCostUnits == 0 &&
+			(row.InputTokens != 0 || row.CacheCreationInputTokens != 0 || row.CacheReadInputTokens != 0 || row.OutputTokens != 0) {
+			return economicsResponse{
+				Models: models, BaselineModel: baselineModel, PricingAvailable: false,
+				Note: "one or more observed models have no compatible pricing; token counts retained",
+			}
+		}
+	}
+
+	savings := 0.0
+	if baselineCost > 0 {
+		savings = (1 - actual/baselineCost) * 100
+	}
+	return economicsResponse{
+		Models: models, MostExpensiveModel: baselineModel, BaselineModel: baselineModel,
+		ActualCostUnits: actual, BaselineCostUnits: baselineCost, SavingsPct: savings,
+		PricingAvailable: true,
+	}
 }
 
 // economicsResponseTokensOnly builds a response containing only the token

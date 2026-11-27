@@ -1,14 +1,9 @@
-"""Test rubric_judge_grader con mock judge client.
-
-`grade_rubric` è async (usa OpenRouterJudgeClient async). I test la invocano via
-`asyncio.run(...)` per non dipendere da `pytest-asyncio`.
-"""
+"""Test the asynchronous rubric grader with an injected judge client through asyncio.run."""
 
 from __future__ import annotations
 
 import asyncio
 
-import pytest
 from brick_evals.graders.rubric_judge_grader import (
     AVAILABLE,
     get_rubric,
@@ -16,7 +11,7 @@ from brick_evals.graders.rubric_judge_grader import (
     parse_decision,
 )
 
-pytestmark = pytest.mark.skipif(not AVAILABLE, reason="rubric_judge dependencies missing")
+assert AVAILABLE, "Required rubric judge dependencies are missing"
 
 
 # --- Mock judge client ----------------------------------------------------

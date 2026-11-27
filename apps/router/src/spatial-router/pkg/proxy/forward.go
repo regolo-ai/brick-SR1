@@ -23,8 +23,33 @@ const (
 // non-streaming responses and streaming SSE chunks. Only prompt/completion
 // tokens are needed for economics tracking; other usage fields are ignored.
 type openAIUsage struct {
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
+	PromptTokens        int64 `json:"prompt_tokens"`
+	CompletionTokens    int64 `json:"completion_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens int64 `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+}
+
+// splitOpenAIUsage converts OpenAI's inclusive prompt_tokens counter into the
+// store's disjoint fresh/cache-read counters. Some compatible backends have
+// emitted inconsistent details, so cached tokens are clamped to [0, prompt].
+func splitOpenAIUsage(u openAIUsage) (fresh, cached, output int64) {
+	prompt := u.PromptTokens
+	if prompt < 0 {
+		prompt = 0
+	}
+	cached = u.PromptTokensDetails.CachedTokens
+	if cached < 0 {
+		cached = 0
+	}
+	if cached > prompt {
+		cached = prompt
+	}
+	output = u.CompletionTokens
+	if output < 0 {
+		output = 0
+	}
+	return prompt - cached, cached, output
 }
 
 type openAIUsageEnvelope struct {
@@ -71,6 +96,31 @@ func (s *Server) recordEconomicsUsage(model string, promptTokens, cacheCreationT
 // the response back to the client. When maskModel is non-empty, the "model"
 // field in the JSON response body is rewritten to hide the real backend model.
 func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request, result *RoutingResult, maskModel ...string) {
+	started := result.AcceptedAt
+	if started.IsZero() {
+		started = time.Now().UTC()
+	}
+	providerStarted := time.Now()
+	finish := func(status string, cause error, input, output *int64) {
+		if s.callHistory == nil {
+			return
+		}
+		source := result.RoutingSource
+		if source == "" {
+			source = "routed"
+		}
+		reasoning := result.ReasoningMode
+		if reasoning == "" {
+			reasoning = "default"
+		}
+		finished := time.Now().UTC()
+		providerMS, overallMS := time.Since(providerStarted).Milliseconds(), finished.Sub(started).Milliseconds()
+		record := callRecord{CallID: newBrickCallID(), StartedAt: started, FinishedAt: finished, Model: result.Model, ReasoningMode: reasoning, RoutingSource: source, Status: status, Error: sanitizeCallError(cause), InputTokens: input, OutputTokens: output, RoutingLatencyMS: result.RoutingLatencyMS, ProviderLatencyMS: &providerMS, OverallLatencyMS: &overallMS}
+		applyRouteObservation(&record, result.Route)
+		if err := s.callHistory.append(record); err != nil {
+			logging.Warnf("Call history: append failed: %v", err)
+		}
+	}
 	modelMask := ""
 	if len(maskModel) > 0 {
 		modelMask = maskModel[0]
@@ -101,6 +151,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to create upstream request: %v", err))
+		finish("failed", err, nil, nil)
 		return
 	}
 
@@ -120,13 +171,11 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 		upstreamReq.Header.Set(key, value)
 	}
 
-	// Log auth header status for debugging credential propagation
-	if auth := upstreamReq.Header.Get("Authorization"); auth != "" {
-		prefix := auth
-		if len(prefix) > 20 {
-			prefix = prefix[:20] + "..."
-		}
-		logging.Infof("Forwarding with auth header: %s", prefix)
+	// Never log credentials or token prefixes: even partial API keys are
+	// sensitive and logs often leave the machine. Keep only the diagnostic
+	// fact that credential propagation succeeded.
+	if upstreamReq.Header.Get("Authorization") != "" {
+		logging.Infof("Forwarding with authorization header")
 	} else {
 		logging.Warnf("Forwarding WITHOUT auth header — upstream will likely reject")
 	}
@@ -180,6 +229,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	if lastErr != nil {
 		logging.Errorf("Upstream request failed after %d attempts: %v", upstreamMaxRetries, lastErr)
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("upstream request failed after %d attempts: %v", upstreamMaxRetries, lastErr))
+		finish("failed", lastErr, nil, nil)
 		return
 	}
 	defer upstreamResp.Body.Close()
@@ -191,10 +241,17 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 	contentType := upstreamResp.Header.Get("Content-Type")
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
+	var input, output *int64
 	if isSSE {
-		s.streamSSEResponse(w, upstreamResp, modelMask, result.Model)
+		input, output = s.streamSSEResponse(w, upstreamResp, modelMask, result.Model)
 	} else {
-		s.forwardNonStreamingResponse(w, upstreamResp, modelMask, result.Model)
+		input, output = s.forwardNonStreamingResponse(w, upstreamResp, modelMask, result.Model)
+	}
+	if upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300 {
+		finish("completed", nil, input, output)
+
+	} else {
+		finish("failed", fmt.Errorf("upstream returned status %d", upstreamResp.StatusCode), input, output)
 	}
 }
 
@@ -204,7 +261,7 @@ func (s *Server) forwardToBackend(w http.ResponseWriter, clientReq *http.Request
 // rewritten to hide the real backend model name. The model argument (the real
 // selected model) is used only to attribute token usage to the economics
 // store; it never alters what is streamed to the client.
-func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
+func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) (*int64, *int64) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -224,7 +281,7 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		logging.Errorf("ResponseWriter does not support Flusher interface")
-		return
+		return nil, nil
 	}
 
 	// Track the last usage seen across chunks; some backends emit usage in a
@@ -256,14 +313,20 @@ func (s *Server) streamSSEResponse(w http.ResponseWriter, upstreamResp *http.Res
 		logging.Errorf("Error reading upstream SSE stream: %v", err)
 	}
 
-	s.recordEconomicsUsage(model, lastUsage.PromptTokens, 0, 0, lastUsage.CompletionTokens)
+	fresh, cached, output := splitOpenAIUsage(lastUsage)
+	s.recordEconomicsUsage(model, fresh, 0, cached, output)
+	if lastUsage.PromptTokens == 0 && lastUsage.CompletionTokens == 0 {
+		return nil, nil
+	}
+	input := fresh + cached
+	return &input, &output
 }
 
 // forwardNonStreamingResponse forwards a non-streaming response from the backend.
 // When maskModel is non-empty, the "model" field in the JSON response is rewritten.
 // The model argument (the real selected model) is used only to attribute token
 // usage to the economics store; it never alters the forwarded body.
-func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) {
+func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp *http.Response, maskModel, model string) (*int64, *int64) {
 	// Copy response headers (except Content-Length, which may change after rewrite)
 	for key, values := range upstreamResp.Header {
 		if maskModel != "" && strings.EqualFold(key, "Content-Length") {
@@ -279,14 +342,22 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	if err != nil {
 		logging.Errorf("Error reading upstream response body: %v", err)
 		w.WriteHeader(upstreamResp.StatusCode)
-		return
+		return nil, nil
 	}
 
 	// Observe usage as a side-channel before any rewriting; never blocks or
 	// alters forwarding if the body has no usage field or isn't JSON.
 	var env openAIUsageEnvelope
+	var input, outputPtr *int64
 	if jsonErr := json.Unmarshal(bodyBytes, &env); jsonErr == nil {
-		s.recordEconomicsUsage(model, env.Usage.PromptTokens, 0, 0, env.Usage.CompletionTokens)
+		fresh, cached, outputTokens := splitOpenAIUsage(env.Usage)
+		s.recordEconomicsUsage(model, fresh, 0, cached, outputTokens)
+		if env.Usage.PromptTokens != 0 || env.Usage.CompletionTokens != 0 {
+			total := fresh + cached
+			input = &total
+			out := outputTokens
+			outputPtr = &out
+		}
 	}
 
 	if maskModel != "" {
@@ -297,6 +368,7 @@ func (s *Server) forwardNonStreamingResponse(w http.ResponseWriter, upstreamResp
 	if _, err := w.Write(bodyBytes); err != nil {
 		logging.Errorf("Error writing response body to client: %v", err)
 	}
+	return input, outputPtr
 }
 
 // rewriteModelInResponseBody replaces the "model" field in a JSON body with newModel.

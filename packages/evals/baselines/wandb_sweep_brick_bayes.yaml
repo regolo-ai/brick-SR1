@@ -1,4 +1,4 @@
-program: external_comparison/sweep_brick_v2_singletrial.py
+program: packages/evals/baselines/sweep_brick_v2_singletrial.py
 method: bayes
 metric:
   name: holdout_accuracy

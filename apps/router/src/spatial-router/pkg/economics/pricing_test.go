@@ -55,9 +55,6 @@ func TestLoadPricingTable_ValidFile(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected claude-haiku to be present")
 	}
-	if haiku.Provider != "anthropic" {
-		t.Errorf("Provider = %q, want %q", haiku.Provider, "anthropic")
-	}
 	if haiku.InputPrice != 1.0 {
 		t.Errorf("InputPrice = %v, want 1.0", haiku.InputPrice)
 	}
@@ -66,12 +63,6 @@ func TestLoadPricingTable_ValidFile(t *testing.T) {
 	}
 	if haiku.Currency != "USD" {
 		t.Errorf("Currency = %q, want %q", haiku.Currency, "USD")
-	}
-	if haiku.Source != "fetched" {
-		t.Errorf("Source = %q, want %q", haiku.Source, "fetched")
-	}
-	if haiku.FetchedAt != "2026-07-02T15:53:23Z" {
-		t.Errorf("FetchedAt = %q, want %q", haiku.FetchedAt, "2026-07-02T15:53:23Z")
 	}
 
 	sonnet, ok := table.Price("claude-sonnet")

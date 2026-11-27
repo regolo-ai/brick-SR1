@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HF_TOKEN_FILE = Path("/root/.hf_token_regolo")
+HF_TOKEN_FILE = Path.home() / ".hf_token_regolo"
 DEFAULT_REPO = "massaindustries/dataset-B-modernbert-train"
 
 
@@ -35,7 +35,7 @@ def main() -> int:
 
     token = os.environ.get("HF_TOKEN") or (HF_TOKEN_FILE.read_text().strip() if HF_TOKEN_FILE.exists() else None)
     if not token:
-        print("[err] no HF token; set HF_TOKEN or write /root/.hf_token_regolo", file=sys.stderr)
+        print("[err] no HF token; set HF_TOKEN or write ~/.hf_token_regolo", file=sys.stderr)
         return 2
 
     records = load_records(Path(args.input))

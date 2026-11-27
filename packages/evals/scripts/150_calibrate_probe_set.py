@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the frozen skill-probe set for `brick skills extract` and calibrate K.
+"""Build the frozen skill-probe set for `offline skill-probe calibration` and calibrate K.
 
 Inputs (offline, already in the repo):
   - per-model deterministic graded results (qwen3.5-9b, deepseek-v4-flash, kimi2.6)
@@ -13,11 +13,11 @@ Method
   3. K calibration per category: smallest K whose bootstrap 95% CIs of the
      Bayesian-smoothed accuracies separate the CLOSEST pair of models.
   4. Anchor mapping: store (probe_accuracy, paper_skill) anchors of the 3 known
-     models so `brick skills extract` can map a new model's probe accuracy onto
+     models so `offline skill-probe calibration` can map a new model's probe accuracy onto
      the paper skill-vector scale via piecewise-linear interpolation.
 
 Output
-  - apps/cli/templates/skill-probe-set.jsonl  (one question per line)
+  - packages/evals/fixtures/skill-probe-set.jsonl  (one question per line)
   - probe set header (first line) carries metadata: K per category, anchors,
     subset hash, capability order.
 
@@ -33,13 +33,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 from collections import defaultdict
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3].parent  # /root/forkGO
-SCI = REPO / "scientificv1" / "data"
-OUT = Path(__file__).resolve().parents[3] / "apps" / "cli" / "templates" / "skill-probe-set.jsonl"
+SCI = Path(os.environ.get("BRICK_SCIENTIFIC_DATA", "./scientific-data"))
+OUT = Path(__file__).resolve().parents[1] / "fixtures" / "skill-probe-set.jsonl"
 
 GRADED = {
     "qwen3.5-9b": SCI / "inference" / "qwen3.5-9b" / "individualruns" / "outputs" / "qwen35_9b_full_graded_v2.jsonl",
@@ -226,7 +226,7 @@ def main() -> None:
             "capabilities": CAPS,
             "prior_strength": PRIOR_STRENGTH,
             "categories": header_categories,
-            "note": "Frozen probe set for brick skills extract. Anchors map probe accuracy onto the paper skill scale (piecewise linear).",
+            "note": "Frozen probe set for offline skill-probe calibration. Anchors map probe accuracy onto the paper skill scale (piecewise linear).",
         },
         ensure_ascii=False,
     )

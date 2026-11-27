@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-HF_TOKEN_FILE = Path("/root/.hf_token_regolo")
+HF_TOKEN_FILE = Path.home() / ".hf_token_regolo"
 HF_TOKEN_FILE_HOME = Path.home() / ".hf_token_regolo"
 
 

@@ -1,24 +1,23 @@
 [project]
 name = "brick-training"
 version = "2.0.0"
-description = "Brick: training scripts for ModernBERT capability classifier and Qwen complexity LoRA"
+description = "Brick: training scripts for ModernBERT capability classifier"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"
 
 dependencies = [
+    "scipy>=1.13",
+    "requests>=2.32",
     "torch>=2.4",
     "transformers>=4.45",
     "datasets>=2.21",
     "accelerate>=0.34",
-    "peft>=0.13",
     "huggingface-hub>=0.25",
     "wandb>=0.18",
     "pyyaml>=6.0",
     "numpy>=1.26",
     "scikit-learn>=1.5",
-    "pandas>=2.2",
-    "tqdm>=4.66",
 ]
 
 [build-system]

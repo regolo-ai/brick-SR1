@@ -2,7 +2,7 @@ import type { CatalogProvider } from './index.js';
 
 // Anthropic Claude pool. On the Claude Code (/v1/messages) front-end the router
 // forwards via anthropic_passthrough.upstream_url, so these entries are used for
-// `brick init` skill-vector seeding and documentation rather than per-model
+// `brick profile create` skill-vector seeding and documentation rather than per-model
 // base_url forwarding. Haiku 4.5 does not support reasoning effort.
 export const anthropicCatalog: CatalogProvider = {
   id: 'anthropic',

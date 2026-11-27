@@ -3,7 +3,6 @@
 Outputs in docs/figures/:
   cost_pareto.png       Pareto front cost vs response accuracy on Dataset A
   modernbert_training.png  W&B sweep summary (loss / pearson_macro best run)
-  mom_capability_3d.png    3D capability-vector schematic (qwen, ds4, kimi, query)
   latency_cdf.png       End-to-end latency CDF: Brick vs always-{qwen,ds4,kimi}
 
 Requires: matplotlib (>=3.5), numpy, wandb (optional, fallback if no access).
@@ -203,7 +202,7 @@ def fig_modernbert_training():
             runs_data = []
     try:
         if not runs_data:
-            os.environ.setdefault("WANDB_API_KEY", Path("/root/.wandb_key").read_text().strip())
+            os.environ.setdefault("WANDB_API_KEY", (Path.home() / ".wandb_key").read_text().strip())
             import wandb
             api = wandb.Api(timeout=30)
             sweep = api.sweep(sweep_path)
@@ -304,74 +303,6 @@ def fig_modernbert_training():
     print(f"[ok] {out}  ({len(runs_data)} runs)")
 
 
-def fig_mom_capability_3d():
-    """3D capability schematic. Models in grayscale + ds4 black + query green.
-    Mini logos sit at each model vector tip."""
-    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
-    from mpl_toolkits.mplot3d.proj3d import proj_transform
-    from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-
-    fig = plt.figure(figsize=(6.8, 5.4))
-    ax = fig.add_subplot(111, projection="3d")
-    qwen  = np.array([0.40, 0.45, 0.55])
-    ds4   = np.array([0.78, 0.65, 0.40])
-    kimi  = np.array([0.95, 0.92, 0.85])
-    query = np.array([0.55, 0.82, 0.30])
-    items = [
-        (qwen,  "qwen3.5-9b",        "#9A9A9A", "qwen"),
-        (ds4,   "deepseek-v4-flash", "#4D6BFE", "ds4"),   # deepseek brand blue
-        (kimi,  "kimi2.6",           "#5A5A5A", "kimi"),
-        (query, r"query $p\,z_q$",   "#2CA02C", None),
-    ]
-    for vec, name, color, lname in items:
-        ax.quiver(0, 0, 0, vec[0], vec[1], vec[2],
-                  color=color, linewidth=1.6, arrow_length_ratio=0.07, zorder=3)
-        ax.scatter(*vec, color=color, s=55, edgecolors="black", linewidths=0.5, zorder=6)
-    # Winning distance arc (query -> ds4)
-    ax.plot([query[0], ds4[0]], [query[1], ds4[1]], [query[2], ds4[2]],
-            color="#2CA02C", linestyle="--", linewidth=1.6, zorder=4, alpha=0.85)
-    # "ds4 (winner)" label: pushed further down (smaller z) so it sits below the arc.
-    mid = (query + ds4) / 2
-    ax.text(mid[0] + 0.02, mid[1] - 0.04, mid[2] - 0.18,
-            r"$D_{\mathrm{ds4}}$ (winner)", fontsize=9, color="#1F4E79", style="italic",
-            bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=1.5), zorder=7)
-    # "query" label: placed to the LEFT of the vector tip (strong negative X offset).
-    ax.text(query[0] - 0.26, query[1] - 0.02, query[2] + 0.04,
-            r"query $p\,z_q$", fontsize=10, color="#2CA02C", weight="bold",
-            bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=1.8), zorder=7)
-    ax.set_xlabel("coding",     fontsize=10, labelpad=6)
-    ax.set_ylabel("math",       fontsize=10, labelpad=6)
-    ax.set_zlabel(r"world\_kn.", fontsize=10, labelpad=4)
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.set_zlim(0, 1)
-    ax.set_xticks([0, 0.5, 1.0]); ax.set_yticks([0, 0.5, 1.0]); ax.set_zticks([0, 0.5, 1.0])
-    ax.tick_params(labelsize=8)
-    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
-        axis.pane.set_facecolor((1, 1, 1, 0.0))
-        axis.pane.set_edgecolor((0.6, 0.6, 0.6, 0.4))
-    ax.grid(True, linestyle=":", alpha=0.35)
-    try:
-        ax.set_box_aspect((1, 1, 0.9))
-    except Exception:
-        pass
-    ax.view_init(elev=18, azim=-50)
-    # Draw, then overlay 2D logos at projected vector tips.
-    fig.canvas.draw()
-    for vec, _name, _color, lname in items:
-        if not lname:
-            continue
-        oi = _load_logo(lname, scale=1.0)
-        if oi is None:
-            continue
-        x2, y2, _ = proj_transform(vec[0], vec[1], vec[2], ax.get_proj())
-        ab = AnnotationBbox(oi, (x2, y2), xybox=(24, 12), xycoords="data",
-                            boxcoords="offset points", frameon=False, pad=0.0, zorder=10)
-        ax.add_artist(ab)
-    out = FIG / "mom_capability_3d.png"
-    fig.savefig(out, bbox_inches="tight", dpi=220)
-    plt.close(fig)
-    print(f"[ok] {out}")
-
-
 def fig_latency_cdf():
     """CDF end-to-end latency: Brick MoM vs always-X. Legend rows include the model logo."""
     samples = STATS["per_model_samples"]
@@ -447,5 +378,4 @@ def fig_latency_cdf():
 if __name__ == "__main__":
     fig_cost_pareto()
     fig_modernbert_training()
-    fig_mom_capability_3d()
     fig_latency_cdf()

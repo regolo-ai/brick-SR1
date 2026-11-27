@@ -222,7 +222,7 @@ def main() -> int:
                 rate = (written - len(done)) / max(time.time() - t0, 1)
                 eta = (total_target - written) / max(rate, 0.001)
                 print(
-                    f"[progress] {written}/{total_target} ({rate:.1f}/s, ETA {eta/60:.1f}m)",
+                    f"[progress] {written}/{total_target} ({rate:.1f}/s, ETA {eta / 60:.1f}m)",
                     file=sys.stderr,
                 )
             for ms_count, frac in milestones.items():
@@ -232,8 +232,8 @@ def main() -> int:
                     seen_ms.add(frac)
                     if args.milestone_cb:
                         os.system(
-                            f"{args.milestone_cb} 'gen_milestone_{int(frac*100)}' "
-                            f"'Generation {int(frac*100)}%: {written}/{total_target}'"
+                            f"{args.milestone_cb} 'gen_milestone_{int(frac * 100)}' "
+                            f"'Generation {int(frac * 100)}%: {written}/{total_target}'"
                         )
     print(f"[done] wrote {written} records to {out_path}", file=sys.stderr)
     return 0

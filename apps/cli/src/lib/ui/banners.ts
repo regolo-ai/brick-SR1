@@ -27,10 +27,6 @@ export function printLogo(): void {
   console.log();
 }
 
-export function header(text: string): void {
-  console.log('\n' + LEFT_PAD + ACCENT_BOLD('━━━ ' + text + ' ' + '━'.repeat(Math.max(0, 60 - text.length))));
-}
-
 /** Like console.log but with a left-padding margin from the terminal edge. */
 export function print(text: string = ''): void {
   if (!text) { console.log(); return; }
@@ -51,10 +47,4 @@ export function err(text: string): void {
 
 export function info(text: string): void {
   console.log(chalk.dim('  · ') + text);
-}
-
-export function banner(): void {
-  printLogo();
-  console.log(LEFT_PAD + ACCENT_DIM('   self-hosted spatial router gateway'));
-  console.log();
 }

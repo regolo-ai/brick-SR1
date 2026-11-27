@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-set -u
-go build ./... && go test ./...

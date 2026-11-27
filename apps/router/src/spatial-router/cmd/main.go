@@ -5,38 +5,72 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	systemone "github.com/regolo-ai/brick-SR1/systemone"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
 
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/brickrouting"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/complexityserver"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/config"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/logo"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/modeldownload"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/logging"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/metrics"
-	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/observability/tracing"
 	"github.com/regolo-ai/brick-SR1/apps/router/src/spatial-router/pkg/proxy"
 )
 
-func main() {
-	logo.PrintBrickLogo()
+var version = "development"
 
+func main() {
+	defaultConfigPath := strings.TrimSpace(os.Getenv("BRICK_CONFIG_PATH"))
+	if defaultConfigPath == "" {
+		defaultConfigPath = "config/config.yaml"
+	}
 	var (
-		configPath   = flag.String("config", "config/config.yaml", "Path to the configuration file")
+		configPath   = flag.String("config", defaultConfigPath, "Path to the configuration file")
 		port         = flag.Int("port", 8000, "Port to listen on for HTTP proxy")
 		metricsPort  = flag.Int("metrics-port", 9190, "Port for Prometheus metrics")
-		downloadOnly = flag.Bool("download-only", false, "Download required models and exit")
+		validateOnly = flag.Bool("validate-config", false, "Validate configuration without starting or contacting providers")
+		strictConfig = flag.Bool("strict-config", false, "Reject any deprecated 3.x configuration field instead of warning")
+		migratePath  = flag.String("migrate-config", "", "Write a normalized configuration to this path (or - for stdout) and exit")
+		modelCheck   = flag.String("check-model", "", "Load local model assets and verify inference, then exit")
+		modelDir     = flag.String("model-dir", "", "Absolute directory of installed model assets")
+		instanceID   = flag.String("instance-id", "", "Runtime instance identifier")
+		profile      = flag.String("profile", "", "Runtime profile name")
+		showVersion  = flag.Bool("version", false, "Print runtime version")
 		routeTest    = flag.String("route-test", "", "Route a test message and print JSON result, then exit")
 		routeCands   = flag.String("route-candidates", "", "Comma-separated model allowlist for --route-test (simulates multimodal passthrough candidate restriction)")
 	)
+	dataDir := flag.String("data-dir", "", "Persistent profile data directory")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+	if *modelCheck != "" {
+		if err := systemone.Init(*modelCheck); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		result, err := systemone.Classify("Hello.")
+		if err != nil || len(result) != 6 {
+			fmt.Fprintln(os.Stderr, "model verification failed", err)
+			os.Exit(1)
+		}
+		body, _ := json.Marshal(result)
+		fmt.Println(string(body))
+		return
+	}
+	absoluteConfig, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	*configPath = absoluteConfig
 
 	if _, err := logging.InitLoggerFromEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
@@ -46,9 +80,30 @@ func main() {
 		logging.Fatalf("Config file not found: %s", *configPath)
 	}
 
-	cfg, err := config.Parse(*configPath)
+	cfg, warnings, err := config.ParseWithOptions(*configPath, config.ParseOptions{Strict: *strictConfig})
+	for _, warning := range warnings {
+		logging.Warnf("config: %s", warning)
+	}
 	if err != nil {
 		logging.Fatalf("Failed to load config: %v", err)
+	}
+	if *migratePath != "" {
+		migrated, merr := yaml.Marshal(cfg)
+		if merr != nil {
+			logging.Fatalf("Failed to render migrated config: %v", merr)
+		}
+		if *migratePath == "-" {
+			_, merr = os.Stdout.Write(migrated)
+		} else {
+			merr = os.WriteFile(*migratePath, migrated, 0o600)
+		}
+		if merr != nil {
+			logging.Fatalf("Failed to write migrated config: %v", merr)
+		}
+		if *migratePath != "-" {
+			logging.Infof("Wrote migrated config to %s", *migratePath)
+		}
+		return
 	}
 	cfg.BrickExtension.ResolveProviderKeys()
 	if err := cfg.Brick.Validate(); err != nil {
@@ -60,36 +115,34 @@ func main() {
 	if *port == 8000 && cfg.ServerPort > 0 {
 		*port = cfg.ServerPort
 	}
-	config.Replace(cfg)
 
-	if err := ensureModelsDownloaded(cfg); err != nil {
-		logging.Fatalf("Failed to ensure models are downloaded: %v", err)
+	if *modelDir != "" {
+		if !filepath.IsAbs(*modelDir) {
+			logging.Fatalf("model-dir must be absolute")
+		}
+		cfg.SkillRouter.SystemOne.LocalPath = *modelDir
 	}
-	complexityProc, err := complexityserver.EnsureRunning(cfg.ComplexityService)
-	if err != nil {
-		logging.Warnf("ComplexityServer auto-spawn failed: %v (router will fall back to medium)", err)
+	if cfg.SkillRouter.Enabled && cfg.SkillRouter.SystemOne.LocalPath == "" {
+		logging.Fatalf("skill_router.systemone.local_path is required unless --model-dir is provided")
 	}
-	if complexityProc != nil {
-		defer complexityProc.Stop()
-	}
-	if *downloadOnly {
-		logging.Infof("Download-only mode: models downloaded successfully, exiting")
+	if *validateOnly {
 		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	initTracing(ctx, cfg)
 	startMetricsServer(cfg, *metricsPort)
-	initWindowedMetrics(cfg)
 
 	if *routeTest != "" {
 		runRouteTest(ctx, cfg, *routeTest, *routeCands)
+		systemone.Close()
 		return
 	}
 
-	proxyServer := proxy.NewServer(cfg, *configPath, *port)
+	logo.PrintBrickLogo()
+	proxyServer := proxy.NewServer(cfg, *configPath, *port, *dataDir)
+	proxyServer.SetRuntimeIdentity(*instanceID, *profile, version)
 	serverCtx, serverCancel := context.WithCancel(ctx)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -100,8 +153,12 @@ func main() {
 		serverCancel()
 	}()
 
-	if err := proxyServer.Start(serverCtx); err != nil {
-		logging.Fatalf("Proxy server error: %v", err)
+	startErr := proxyServer.Start(serverCtx)
+	// Release the inference worker explicitly: a stopped runtime must not leave
+	// a loaded model resident in memory.
+	systemone.Close()
+	if startErr != nil {
+		logging.Fatalf("Proxy server error: %v", startErr)
 	}
 }
 
@@ -118,7 +175,7 @@ func runRouteTest(ctx context.Context, cfg *config.RouterConfig, message, candid
 				allow[c] = true
 			}
 		}
-		route, err = router.RouteWithCandidates(ctx, message, allow)
+		route, err = router.RouteWithOptions(ctx, message, brickrouting.RoutingOptions{Candidates: allow})
 	} else {
 		route, err = router.Route(ctx, message)
 	}
@@ -127,36 +184,6 @@ func runRouteTest(ctx context.Context, cfg *config.RouterConfig, message, candid
 	}
 	body, _ := json.MarshalIndent(route, "", "  ")
 	fmt.Println(string(body))
-}
-
-func initTracing(ctx context.Context, cfg *config.RouterConfig) {
-	if !cfg.Observability.Tracing.Enabled {
-		return
-	}
-	tracingCfg := tracing.TracingConfig{
-		Enabled:               cfg.Observability.Tracing.Enabled,
-		Provider:              cfg.Observability.Tracing.Provider,
-		ExporterType:          cfg.Observability.Tracing.Exporter.Type,
-		ExporterEndpoint:      cfg.Observability.Tracing.Exporter.Endpoint,
-		ExporterInsecure:      cfg.Observability.Tracing.Exporter.Insecure,
-		SamplingType:          cfg.Observability.Tracing.Sampling.Type,
-		SamplingRate:          cfg.Observability.Tracing.Sampling.Rate,
-		ServiceName:           cfg.Observability.Tracing.Resource.ServiceName,
-		ServiceVersion:        cfg.Observability.Tracing.Resource.ServiceVersion,
-		DeploymentEnvironment: cfg.Observability.Tracing.Resource.DeploymentEnvironment,
-	}
-	if err := tracing.InitTracing(ctx, tracingCfg); err != nil {
-		logging.Warnf("Failed to initialize tracing: %v", err)
-		return
-	}
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := tracing.ShutdownTracing(shutdownCtx); err != nil {
-			logging.Errorf("Failed to shutdown tracing: %v", err)
-		}
-	}()
 }
 
 func startMetricsServer(cfg *config.RouterConfig, port int) {
@@ -174,43 +201,10 @@ func startMetricsServer(cfg *config.RouterConfig, port int) {
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		addr := fmt.Sprintf(":%d", port)
+		addr := fmt.Sprintf("127.0.0.1:%d", port)
 		logging.Infof("Starting metrics server on %s", addr)
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			logging.Errorf("Metrics server error: %v", err)
 		}
 	}()
-}
-
-func initWindowedMetrics(cfg *config.RouterConfig) {
-	if !cfg.Observability.Metrics.WindowedMetrics.Enabled {
-		return
-	}
-	if err := metrics.InitializeWindowedMetrics(cfg.Observability.Metrics.WindowedMetrics); err != nil {
-		logging.Warnf("Failed to initialize windowed metrics: %v", err)
-		return
-	}
-	logging.Infof("Windowed metrics initialized successfully")
-}
-
-func ensureModelsDownloaded(cfg *config.RouterConfig) error {
-	logging.Infof("Installing required models...")
-
-	specs, err := modeldownload.BuildModelSpecs(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to build model specs: %w", err)
-	}
-	if len(specs) == 0 {
-		logging.Infof("No local models configured, skipping model download")
-		return nil
-	}
-
-	if err := modeldownload.CheckHuggingFaceCLI(); err != nil {
-		return fmt.Errorf("huggingface-cli check failed: %w", err)
-	}
-	if err := modeldownload.EnsureModels(specs, modeldownload.GetDownloadConfig()); err != nil {
-		return fmt.Errorf("failed to download models: %w", err)
-	}
-	logging.Infof("All required models are ready")
-	return nil
 }

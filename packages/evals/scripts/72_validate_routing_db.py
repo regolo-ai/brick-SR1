@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""72b - Validate dataset_A_routing parquet locali (read-only).
-
-Checks:
-- 5339 righe per config
-- query_id univoche
-- per-dimension count match dataset base
-- nessuna riga con tutti i *_correct null
-- stampa win-rate stats
-
-Usage:
-    python3 scripts/72_validate_routing_db.py
-"""
+"""Read-only validation of local Dataset A routing Parquet files: row counts, unique query IDs, dimension counts and nonempty judgments. Print win-rate statistics."""
 
 from __future__ import annotations
 
@@ -120,7 +109,7 @@ def main():
 
     print("\n=== verbose: individual judges (planning ST) ===")
     verbose[(verbose["dimension"] == "planning_agentic") & (verbose["query_id"].str.startswith("q_03"))]
-    # heuristic: planning ST queries appear in graded panel; check non-null individual judges
+    # Planning single-turn queries appear in the graded panel; check individual non-null judgments.
     for m in ("qwen", "ds4", "kimi"):
         nonnull = verbose[f"{m}_judge_gpt54mini"].notna().sum()
         print(f"  {m}_judge_gpt54mini non-null: {nonnull}")

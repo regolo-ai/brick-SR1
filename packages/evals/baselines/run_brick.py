@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
-"""Brick router test su Dataset A.
+"""Measure Dataset A routing through a running Brick endpoint. The selected-model header records the decision even when the deliberately invalid upstream key causes HTTP 401. Latency includes the failed upstream round trip."""
 
-Endpoint: localhost:8001 Brick container, model=brick.
-Auth: fake key → backend OpenRouter ritorna 401, ma routing decision già fatta da Brick
-e header X-Vsr-Selected-Model è presente.
-
-Latency: client-side wall-clock (HTTP round-trip + Brick routing + tentativo backend abortito).
-"""
 from __future__ import annotations
 
 import json
@@ -16,13 +10,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-os.environ.setdefault("HF_TOKEN", Path("/root/.hf_token_regolo").read_text().strip()
-                     if Path("/root/.hf_token_regolo").exists() else "")
+os.environ.setdefault(
+    "HF_TOKEN",
+    (Path.home() / ".hf_token_regolo").read_text().strip() if (Path.home() / ".hf_token_regolo").exists() else "",
+)
 
 from datasets import load_dataset
 
 REPO = "massaindustries/dataset-A-routing"
-OUT = Path("/root/forkGO/external_comparison/predictions/brick.jsonl")
+OUT = Path(os.environ.get("BRICK_BASELINE_OUTPUT", "./baseline-output")) / "brick.jsonl"
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 BRICK_URL = "http://localhost:18000/v1/chat/completions"  # SSH tunnel → qwen-bench:18000 (GPU node)
@@ -81,7 +77,7 @@ def main():
     n_err = 0
     n_no_header = 0
     with OUT.open("a") as fout:
-        for i, row in enumerate(ds):
+        for _i, row in enumerate(ds):
             qid = row["query_id"]
             if qid in done_qids:
                 continue
@@ -107,7 +103,9 @@ def main():
                 elapsed = time.time() - t0
                 rate = n_new / max(elapsed, 1e-9)
                 remaining = (len(ds) - len(done_qids) - n_new) / max(rate, 1e-9)
-                print(f"[{n_new}/{len(ds) - len(done_qids)}] rate={rate:.2f}/s  eta={remaining/60:.1f}min  err={n_err}  no_header={n_no_header}")
+                print(
+                    f"[{n_new}/{len(ds) - len(done_qids)}] rate={rate:.2f}/s  eta={remaining / 60:.1f}min  err={n_err}  no_header={n_no_header}"
+                )
 
     print(f"[done] {n_new} rows in {(time.time() - t0) / 60:.1f} min (err={n_err} no_header={n_no_header})")
 
