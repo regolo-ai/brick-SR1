@@ -203,6 +203,23 @@ describe('OpenCode profile lifecycle', () => {
     expect(snapshotTree(realBrickHome)).toEqual(beforeRealBrick);
   });
 
+  it('reports detached when the managed plugin file is removed', async () => {
+    await harness.connectOfficialHarness('opencode', port);
+    expect(harness.harnessConnection('opencode', localBaseUrl(port)).attached).toBe(true);
+
+    // The managed config block is still present, but the plugin is gone: the
+    // harness must not claim it is attached.
+    rmSync(pluginInstall.opencodePluginPath());
+    expect(wiring.isWired(wiring.readOpencodeConfig())).toBe(true);
+    expect(harness.harnessConnection('opencode', localBaseUrl(port)).attached).toBe(false);
+
+    // Re-installing the plugin makes status attached again.
+    pluginInstall.installOpencodePlugin();
+    expect(harness.harnessConnection('opencode', localBaseUrl(port)).attached).toBe(true);
+
+    await harness.disconnectOfficialHarness('opencode');
+  });
+
   it('emits the schema v2.0 agent report after a stop', async () => {
     const { buildAgentReport, AGENT_REPORT_SCHEMA_VERSION } = await import('../status/agent-report.js');
     const { ConfigSchema } = await import('../config/schema.js');

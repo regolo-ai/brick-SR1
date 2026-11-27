@@ -121,7 +121,7 @@ export function harnessConnection(profile: string, baseUrl: string): HarnessConn
     return {
       url: normalizedUrl(wiring?.baseUrl),
       attached: !!wiring?.wired && normalizedUrl(wiring.baseUrl) === normalizedUrl(baseUrl) &&
-        isOpencodeWired(config),
+        isOpencodeWired(config) && isOpencodePluginInstalled(),
       label: 'OpenCode config',
       disconnectedLabel: 'not wired — run brick start opencode',
       unattachedLabel: 'not wired to this router',
