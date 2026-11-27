@@ -22,7 +22,7 @@ export default class Clear extends Command {
 
     // This is the destructive counterpart to `brick stop codex`: restore the
     // normal config before removing the bridge an existing thread uses.
-    if (profile === 'codex' || profile === 'claude') {
+    if (profile === 'codex' || profile === 'claude' || profile === 'opencode') {
       try {
         await disconnectOfficialHarness(profile);
       } catch (e: any) {

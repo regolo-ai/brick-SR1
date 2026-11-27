@@ -157,9 +157,28 @@ Existing Codex profiles keep their pool. `brick start codex --reset-pool`
 switches one to the default `gpt-6.1-terra`/`gpt-6-luna` pool without touching
 providers or credentials.
 
+### OpenCode in one command
+
+Install the published Brick package and start the managed profile:
+
+```bash
+npm install -g @regoloai/brick
+brick start opencode
+```
+
+`brick start opencode` creates the `opencode` profile when missing, starts the
+local router, and wires the official OpenCode client to it. Brick writes a
+managed `provider.brick` block in `~/.config/opencode/opencode.json` pointing at
+the router port, installs its OpenCode V2 plugin, and the OpenCode picker then
+shows every Brick catalog model plus the `brick` router model. Open OpenCode,
+select `brick`, and turns are routed across the pool. `brick stop opencode`
+restores the original config and removes the plugin. See
+[OpenCode with the Brick router](docs/quickstart/opencode.md) for details.
+
 The profile editor configures providers, the model pool, capability vectors,
-provider-supported thinking modes, and the routing knob. Claude and Codex profiles
-connect their official harnesses through the existing native transports.
+provider-supported thinking modes, and the routing knob. Claude, Codex, and
+OpenCode profiles connect their official harnesses through the existing native
+transports.
 
 `brick route "Write a parser" --json` runs local routing only. It returns the
 original vector, scaled vector, knob, candidate distances, selected model, and

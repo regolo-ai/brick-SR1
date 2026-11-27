@@ -8,7 +8,8 @@ import { catalog } from '../catalog/index.js';
 import { applyModelTransport,resolveModelTransport } from '../catalog/transport.js';
 import { readEnvValue,upsertEnvValues } from '../config/env-file.js';
 import { loadConfig } from '../config/load.js';
-import { paths,updateState } from '../config/paths.js';
+import { paths,profileExists,updateState } from '../config/paths.js';
+import { ensureDefaultOpencodeProfile } from './opencode-profile.js';
 import { loadSkillTable, InvalidRemoteSkillTableError, type SkillResolveOptions } from '../skills/resolver.js';
 import { resolveSkillRecord } from '../skills/aliases.js';
 import { skillVectorInOrder } from '../skills/table.js';
@@ -33,6 +34,7 @@ export async function ensureServing(
   opts: { forceRecreate?: boolean; skillSync?: boolean } = {}
 ): Promise<EnsureServingResult> {
   createRequire(import.meta.url)('../../../scripts/runtime-install.cjs').installedRuntime();
+  if (profile === 'opencode' && !profileExists(profile)) await ensureDefaultOpencodeProfile();
   const pp = paths(profile);
   try { await stat(pp.config); } catch { throw new Error(`no config at ${pp.config}. run \`brick profile create ${profile}\` first.`); }
 

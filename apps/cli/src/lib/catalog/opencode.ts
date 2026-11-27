@@ -19,7 +19,10 @@ export const BRICK_ROUTER_MODEL: CatalogModel = {
 export function opencodeModels(): CatalogModel[] {
   const models: CatalogModel[] = [BRICK_ROUTER_MODEL];
   const seen = new Set([BRICK_ROUTER_MODEL.id]);
-  for (const provider of Object.values(catalog)) {
+  // Skip our own catalog entry: the barrel (./index.js) registers it, and
+  // reading `models` here again would recurse through the lazy getter below.
+  for (const [id, provider] of Object.entries(catalog)) {
+    if (id === 'opencode') continue;
     for (const model of provider.models) {
       if (seen.has(model.id)) continue;
       seen.add(model.id);
@@ -43,4 +46,20 @@ export function opencodeCatalogForPort(port: number | string = OPENCODE_DEFAULT_
   };
 }
 
-export const opencodeCatalog: CatalogProvider = opencodeCatalogForPort();
+/**
+ * The entry registered in the catalog barrel. `models` is a lazy getter because
+ * `./index.js` imports this module while building the catalog, so the catalog
+ * import is still in its temporal dead zone when this module is evaluated.
+ */
+export const opencodeCatalog: CatalogProvider = {
+  id: 'opencode',
+  label: 'OpenCode (Brick router)',
+  type: 'openai_compatible',
+  base_url: `${localBaseUrl(OPENCODE_DEFAULT_PORT)}/v1`,
+  env_key: '',
+  optional: true,
+  get models(): CatalogModel[] {
+    return opencodeModels();
+  },
+  multimodal: {},
+};
